@@ -58,4 +58,29 @@ void main() {
       'inputstream.adaptive',
     );
   });
+
+  test('captures executebuiltin and addon settings requests', () {
+    final collector = LegacyRuntimeCollector();
+    collector.consumeStdoutLine(
+      '${LegacyRuntimeCollector.protocolPrefix}${jsonEncode({
+        'method': 'xbmc.executebuiltin',
+        'params': {
+          'function': 'Container.Refresh',
+          'wait': false,
+        },
+      })}',
+    );
+    collector.consumeStdoutLine(
+      '${LegacyRuntimeCollector.protocolPrefix}${jsonEncode({
+        'method': 'xbmcaddon.openSettings',
+        'params': {'addon_id': 'plugin.video.demo'},
+      })}',
+    );
+
+    final result = collector.build(exitCode: 0);
+    expect(
+      result.builtins,
+      ['Container.Refresh', 'Addon.OpenSettings(plugin.video.demo)'],
+    );
+  });
 }
