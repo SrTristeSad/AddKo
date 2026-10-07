@@ -33,6 +33,7 @@ Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
 - [x] bridge JSON entre Python e Flutter;
 - [x] navegação de diretórios retornados por `xbmcplugin`;
 - [x] `xbmcaddon` inicial, incluindo informações e settings persistentes;
+- [x] editor Flutter inicial para `resources/settings.xml` e `Addon.OpenSettings`;
 - [x] `xbmcplugin` inicial, incluindo `addDirectoryItem`, `addDirectoryItems`, `endOfDirectory` e `setResolvedUrl`;
 - [x] `xbmcvfs` inicial e tradução de `special://`;
 - [x] `xbmc` inicial (`log`, built-ins, `Player`, `Monitor` e superfícies básicas);
@@ -42,11 +43,14 @@ Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
 - [x] `Window`, `WindowDialog` e modelo inicial de `WindowXML`/controles traduzidos para Flutter;
 - [x] callbacks básicos de `WindowXML` trafegando pelo bridge Python ↔ Flutter;
 - [x] JSON-RPC inicial (`JSONRPC.Ping`, `JSONRPC.Version`, propriedades básicas de Application/GUI e superfícies vazias seguras para Player/Files);
+- [x] parser e execução inicial de built-ins Kodi: `RunPlugin`, `RunAddon`, `RunScript`, `Container.Update`, `Container.Refresh`, `PlayMedia`, `ActivateWindow`, `Addon.OpenSettings` e `Notification`;
+- [x] comandos de menu de contexto de `ListItem` encaminhados ao executor de built-ins;
+- [x] execução inicial de addons `xbmc.python.script` com `sys.argv` próprio;
 - [ ] CPython embarcado para Android/Android TV e demais plataformas sem Python do sistema;
-- [ ] cobertura ampla de built-ins Kodi;
+- [ ] ampliar built-ins para instalação/atualização de addons, janelas Kodi e controles de player;
 - [ ] ampliar JSON-RPC para Addons, Files, Player, Playlist, Settings e bibliotecas;
 - [ ] serviços `service.*` em segundo plano;
-- [ ] scripts `xbmc.python.script` completos;
+- [ ] ampliar suporte a `xbmc.python.script` para execução por caminho e lifecycle completo;
 - [ ] ampliar `WindowXML` para mais tipos de controle, navegação/foco e recursos de skin.
 
 ### Mídia e addons binários
