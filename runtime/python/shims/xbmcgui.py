@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from addko_bridge import emit
+from addko_bridge import emit, request
 
 NOTIFICATION_INFO = "info"
 NOTIFICATION_WARNING = "warning"
@@ -103,13 +103,7 @@ class MusicInfoTag(_InfoTag):
 
 
 class ListItem:
-    def __init__(
-        self,
-        label: str = "",
-        label2: str = "",
-        path: str = "",
-        offscreen: bool = False,
-    ) -> None:
+    def __init__(self, label: str = "", label2: str = "", path: str = "", offscreen: bool = False) -> None:
         self.label = label or ""
         self.label2 = label2 or ""
         self.path = path or ""
@@ -212,50 +206,58 @@ class ListItem:
 
 
 class Dialog:
-    def notification(
-        self,
-        heading: str,
-        message: str,
-        icon: str = NOTIFICATION_INFO,
-        time: int = 5000,
-        sound: bool = True,
-    ) -> None:
-        emit(
-            "xbmcgui.Dialog.notification",
-            heading=heading,
-            message=message,
-            icon=icon,
-            time=time,
-            sound=sound,
-        )
+    def notification(self, heading: str, message: str, icon: str = NOTIFICATION_INFO, time: int = 5000, sound: bool = True) -> None:
+        emit("xbmcgui.Dialog.notification", heading=heading, message=message, icon=icon, time=time, sound=sound)
 
     def ok(self, heading: str, message: str, *lines: str) -> bool:
-        emit(
+        return bool(request(
             "xbmcgui.Dialog.ok",
+            default=True,
             heading=heading,
             message="\n".join([message, *lines]).strip(),
-        )
-        return True
+        ))
 
     def yesno(self, heading: str, message: str, *args: Any, **kwargs: Any) -> bool:
-        emit("xbmcgui.Dialog.yesno", heading=heading, message=message)
-        return False
+        return bool(request("xbmcgui.Dialog.yesno", default=False, heading=heading, message=message))
 
     def select(self, heading: str, list: Iterable[Any], *args: Any, **kwargs: Any) -> int:
         labels = [item.getLabel() if hasattr(item, "getLabel") else str(item) for item in list]
-        emit("xbmcgui.Dialog.select", heading=heading, options=labels)
-        return -1
+        value = request("xbmcgui.Dialog.select", default=-1, heading=heading, options=labels)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return -1
 
     def contextmenu(self, list: Iterable[str]) -> int:
-        emit("xbmcgui.Dialog.contextmenu", options=[str(item) for item in list])
-        return -1
+        value = request(
+            "xbmcgui.Dialog.contextmenu",
+            default=-1,
+            options=[str(item) for item in list],
+        )
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return -1
 
     def input(self, heading: str, defaultt: str = "", type: int = INPUT_ALPHANUM, option: int = 0, *args: Any, **kwargs: Any) -> str:
-        emit("xbmcgui.Dialog.input", heading=heading, default=defaultt)
-        return defaultt
+        value = request(
+            "xbmcgui.Dialog.input",
+            default=defaultt,
+            heading=heading,
+            default_text=defaultt,
+            input_type=type,
+            option=option,
+        )
+        return defaultt if value is None else str(value)
 
     def textviewer(self, heading: str, text: str, usemono: bool = False) -> None:
-        emit("xbmcgui.Dialog.textviewer", heading=heading, text=text, usemono=usemono)
+        request(
+            "xbmcgui.Dialog.textviewer",
+            default=True,
+            heading=heading,
+            text=text,
+            usemono=usemono,
+        )
 
 
 class DialogProgress:
@@ -287,12 +289,17 @@ class Keyboard:
         self._confirmed = False
 
     def doModal(self, autoclose: int = 0) -> None:
-        emit(
+        value = request(
             "xbmcgui.Keyboard.doModal",
+            default={"confirmed": False, "text": self._text},
             heading=self._heading,
-            default=self._text,
+            default_text=self._text,
             hidden=self._hidden,
+            autoclose=autoclose,
         )
+        if isinstance(value, dict):
+            self._confirmed = bool(value.get("confirmed", False))
+            self._text = str(value.get("text", self._text))
 
     def isConfirmed(self) -> bool:
         return self._confirmed
