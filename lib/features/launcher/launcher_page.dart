@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../../core/repositories/application/repository_registry.dart';
 import '../settings/settings_page.dart';
 import '../store/store_page.dart';
 
 class LauncherPage extends StatelessWidget {
-  const LauncherPage({super.key});
+  const LauncherPage({
+    required this.repositoryRegistry,
+    super.key,
+  });
+
+  final RepositoryRegistry repositoryRegistry;
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +45,9 @@ class LauncherPage extends StatelessWidget {
                         onOpen: () {
                           Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                              builder: (_) => const StorePage(),
+                              builder: (_) => StorePage(
+                                repositoryRegistry: repositoryRegistry,
+                              ),
                             ),
                           );
                         },
