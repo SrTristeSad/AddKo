@@ -9,6 +9,7 @@ import '../../core/repositories/application/repository_registry.dart';
 import '../../core/repositories/application/repository_store_controller.dart';
 import '../../core/runtime/legacy/legacy_plugin_runtime.dart';
 import '../legacy/legacy_addon_page.dart';
+import '../legacy/legacy_flutter_ui_bridge.dart';
 import '../settings/settings_page.dart';
 import '../store/store_page.dart';
 
@@ -47,7 +48,9 @@ class LauncherPage extends StatelessWidget {
                               ? 3
                               : 2;
 
-                      final installed = addonInstallController.installedAddons;
+                      final launchable = addonInstallController.installedAddons
+                          .where((addon) => addon.manifest.isPythonPlugin)
+                          .toList(growable: false);
                       return GridView.count(
                         padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
                         crossAxisCount: crossAxisCount,
@@ -73,9 +76,9 @@ class LauncherPage extends StatelessWidget {
                               );
                             },
                           ),
-                          for (final addon in installed)
+                          for (final addon in launchable)
                             _installedAddonCard(context, addon),
-                          if (installed.isEmpty)
+                          if (launchable.isEmpty)
                             _EmptyAddonCard(
                               initializationError:
                                   addonInstallController.initializationError,
@@ -105,7 +108,6 @@ class LauncherPage extends StatelessWidget {
   Widget _installedAddonCard(BuildContext context, InstalledAddon addon) {
     final iconPath = addon.manifest.iconPath ?? 'icon.png';
     final iconFile = File(p.join(addon.installPath, iconPath));
-    final canOpen = addon.manifest.isPythonPlugin;
 
     return _LauncherCard(
       title: addon.manifest.name,
@@ -122,23 +124,14 @@ class LauncherPage extends StatelessWidget {
             )
           : null,
       onOpen: () {
-        if (!canOpen) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '${addon.manifest.name} está instalado como dependência/componente e não declara uma fonte plugin://.',
-              ),
-            ),
-          );
-          return;
-        }
-
         Navigator.of(context).push(
           MaterialPageRoute<void>(
             builder: (_) => LegacyAddonPage(
               addon: addon,
               runtime: LegacyPluginRuntime(
                 addonInstallController: addonInstallController,
+                requestHandler: (request) =>
+                    LegacyFlutterUiBridge.handle(context, request),
               ),
             ),
           ),
