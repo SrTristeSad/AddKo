@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/addons/domain/installed_addon.dart';
+import '../../core/player/playback_request.dart';
 import '../../core/runtime/legacy/legacy_plugin_item.dart';
 import '../../core/runtime/legacy/legacy_plugin_result.dart';
 import '../../core/runtime/legacy/legacy_plugin_runtime.dart';
+import '../player/player_page.dart';
 
 class LegacyAddonPage extends StatefulWidget {
   const LegacyAddonPage({
@@ -61,7 +63,7 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
 
     final resolved = result.resolvedItem;
     if (resolved != null && result.succeeded) {
-      _showPlaybackPending(resolved);
+      _openPlayback(resolved);
     }
   }
 
@@ -177,18 +179,23 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
       return;
     }
 
-    _showPlaybackPending(item);
+    _openPlayback(item);
   }
 
-  void _showPlaybackPending(LegacyPluginItem item) {
-    final target = item.path.isNotEmpty ? item.path : item.url;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          target.isEmpty
-              ? 'O addon resolveu o item, mas não informou um caminho de mídia.'
-              : 'Mídia resolvida: $target. O Player Bridge é a próxima camada a ser conectada.',
+  void _openPlayback(LegacyPluginItem item) {
+    final request = PlaybackRequest.fromLegacyItem(item);
+    if (request.uri.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('O addon não informou um caminho de mídia.'),
         ),
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PlayerPage(request: request),
       ),
     );
   }
