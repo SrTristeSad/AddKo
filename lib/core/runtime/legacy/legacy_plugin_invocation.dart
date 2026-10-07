@@ -8,6 +8,7 @@ class LegacyPluginInvocation {
     required this.query,
     required this.profilePath,
     required this.addonsRoot,
+    required this.addonDataRoot,
     required this.shimsPath,
     required this.pythonPaths,
     required this.specialPaths,
@@ -21,6 +22,7 @@ class LegacyPluginInvocation {
   final String query;
   final String profilePath;
   final String addonsRoot;
+  final String addonDataRoot;
   final String shimsPath;
   final List<String> pythonPaths;
   final Map<String, String> specialPaths;
@@ -35,6 +37,7 @@ class LegacyPluginInvocation {
       'query': query,
       'profile_path': profilePath,
       'addons_root': addonsRoot,
+      'addon_data_root': addonDataRoot,
       'shims_path': shimsPath,
       'python_paths': pythonPaths,
       'special_paths': specialPaths,
