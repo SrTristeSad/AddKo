@@ -21,7 +21,8 @@ Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
 - [x] instalação automática de dependências antes do addon principal;
 - [x] atualização/reinstalação de pacote pela Loja;
 - [x] desinstalação no Addon Manager (UI de gerenciamento ainda pendente);
-- [ ] validação de checksum de repositório/pacote;
+- [x] validação de checksum de índices de repositório (MD5/SHA-1/SHA-256, incluindo endpoints GZip);
+- [ ] checksum de pacote quando a origem fornecer digest verificável;
 - [ ] cache local dos índices sincronizados;
 
 ### Runtime legado Python
@@ -38,17 +39,22 @@ Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
 - [x] `xbmcdrm` com superfície de compatibilidade para imports;
 - [x] `xbmcgui.ListItem`, InfoTags, Dialog, Keyboard e Progress iniciais;
 - [x] bridge bidirecional para `Dialog.ok`, `yesno`, `select`, `contextmenu`, `input`, `textviewer` e `Keyboard` usando Flutter;
+- [x] `Window`, `WindowDialog` e modelo inicial de `WindowXML`/controles traduzidos para Flutter;
+- [x] callbacks básicos de `WindowXML` trafegando pelo bridge Python ↔ Flutter;
+- [x] JSON-RPC inicial (`JSONRPC.Ping`, `JSONRPC.Version`, propriedades básicas de Application/GUI e superfícies vazias seguras para Player/Files);
 - [ ] CPython embarcado para Android/Android TV e demais plataformas sem Python do sistema;
 - [ ] cobertura ampla de built-ins Kodi;
-- [ ] JSON-RPC compatível;
+- [ ] ampliar JSON-RPC para Addons, Files, Player, Playlist, Settings e bibliotecas;
 - [ ] serviços `service.*` em segundo plano;
 - [ ] scripts `xbmc.python.script` completos;
-- [ ] `Window`, `WindowDialog`, `WindowXML` e controles Kodi traduzidos para Flutter;
+- [ ] ampliar `WindowXML` para mais tipos de controle, navegação/foco e recursos de skin.
 
 ### Mídia e addons binários
 
-- [ ] Player Bridge;
-- [ ] propriedades de `ListItem` para InputStream/DRM conectadas ao player;
+- [x] Player Bridge inicial usando `media_kit`;
+- [x] reprodução direta de mídia resolvida por addons legados;
+- [x] tradução inicial de propriedades de `ListItem` para headers, MIME, legendas e metadados InputStream/DRM;
+- [ ] encaminhar propriedades InputStream/DRM para um host binário compatível;
 - [ ] Kodi Binary Addon ABI host;
 - [ ] InputStream ABI e `inputstream.adaptive`;
 - [ ] InputStream FFmpeg Direct;
