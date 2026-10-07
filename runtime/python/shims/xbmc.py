@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import json
 import time
 from typing import Any
 
-from addko_bridge import emit, special_path
+from addko_bridge import emit, request, special_path
 
 LOGDEBUG = 0
 LOGINFO = 1
@@ -38,21 +37,12 @@ def executebuiltin(function: str, wait: bool = False) -> None:
 
 
 def executeJSONRPC(jsonrpccommand: str) -> str:
-    emit("xbmc.executeJSONRPC", request=jsonrpccommand)
-    try:
-        request = json.loads(jsonrpccommand)
-        request_id = request.get("id", 1) if isinstance(request, dict) else 1
-    except json.JSONDecodeError:
-        request_id = 1
-    return json.dumps(
-        {
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "error": {
-                "code": -32601,
-                "message": "JSON-RPC method not implemented by AddKo yet",
-            },
-        }
+    return str(
+        request(
+            "xbmc.executeJSONRPC",
+            default='{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"AddKo bridge unavailable"}}',
+            request=jsonrpccommand,
+        )
     )
 
 

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../core/runtime/legacy/kodi_json_rpc_compat.dart';
 import '../../core/runtime/legacy/legacy_runtime_request.dart';
 import 'legacy_window_xml_dialog.dart';
 
 class LegacyFlutterUiBridge {
   const LegacyFlutterUiBridge._();
+
+  static const KodiJsonRpcCompat _jsonRpc = KodiJsonRpcCompat();
 
   static Future<Object?> handle(
     BuildContext context,
@@ -15,6 +18,8 @@ class LegacyFlutterUiBridge {
     }
 
     switch (request.method) {
+      case 'xbmc.executeJSONRPC':
+        return _jsonRpc.handle(_string(request, 'request'));
       case 'xbmcgui.Dialog.ok':
         await showDialog<void>(
           context: context,
