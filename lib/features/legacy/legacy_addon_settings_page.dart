@@ -245,7 +245,7 @@ class _LegacyAddonSettingsPageState extends State<LegacyAddonSettingsPage> {
           ? value
           : null;
       return DropdownButtonFormField<String>(
-        value: selected,
+        initialValue: selected,
         decoration: InputDecoration(
           labelText: definition.label,
           helperText: definition.id,
