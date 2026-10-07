@@ -97,12 +97,30 @@ class Monitor:
         self._abort = False
 
     def abortRequested(self) -> bool:
+        remote = request(
+            "xbmc.Monitor.abortRequested",
+            default=None,
+        )
+        if remote is not None:
+            self._abort = bool(remote)
         return self._abort
 
     def waitForAbort(self, timeout: float = -1) -> bool:
+        if self.abortRequested():
+            return True
+
+        remote = request(
+            "xbmc.Monitor.waitForAbort",
+            default=None,
+            timeout=timeout,
+        )
+        if remote is not None:
+            self._abort = bool(remote)
+            return self._abort
+
         if timeout is not None and timeout > 0:
             time.sleep(timeout)
-        return self._abort
+        return self.abortRequested()
 
     def onSettingsChanged(self) -> None:
         pass
