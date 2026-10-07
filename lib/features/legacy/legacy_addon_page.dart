@@ -165,16 +165,18 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
       case 'notification':
         final heading = command.argument(0)?.trim() ?? 'AddKo';
         final message = command.argument(1)?.trim() ?? '';
-        final rawDuration = int.tryParse(command.argument(2)?.trim() ?? '');
-        final duration = Duration(
-          milliseconds: (rawDuration ?? 3000).clamp(800, 30000),
-        );
+        final rawDuration = int.tryParse(command.argument(2)?.trim() ?? '') ?? 3000;
+        final durationMs = rawDuration < 800
+            ? 800
+            : rawDuration > 30000
+                ? 30000
+                : rawDuration;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               message.isEmpty ? heading : '$heading\n$message',
             ),
-            duration: duration,
+            duration: Duration(milliseconds: durationMs),
           ),
         );
         return;
