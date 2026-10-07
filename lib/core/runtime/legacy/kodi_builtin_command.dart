@@ -60,7 +60,7 @@ class KodiBuiltinCommand {
         escaped = false;
         continue;
       }
-      if (char == r'\') {
+      if (char == '\\') {
         escaped = true;
         continue;
       }
@@ -109,7 +109,7 @@ class KodiBuiltinCommand {
         escaped = false;
         continue;
       }
-      if (char == r'\') {
+      if (char == '\\') {
         buffer.write(char);
         escaped = true;
         continue;
