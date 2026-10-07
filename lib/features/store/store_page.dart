@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/addons/application/addon_install_controller.dart';
 import '../../core/repositories/application/repository_registry.dart';
 import '../../core/repositories/application/repository_store_controller.dart';
 import '../../core/repositories/domain/repository_source.dart';
@@ -11,11 +12,13 @@ class StorePage extends StatefulWidget {
   const StorePage({
     required this.repositoryRegistry,
     required this.repositoryStoreController,
+    required this.addonInstallController,
     super.key,
   });
 
   final RepositoryRegistry repositoryRegistry;
   final RepositoryStoreController repositoryStoreController;
+  final AddonInstallController addonInstallController;
 
   @override
   State<StorePage> createState() => _StorePageState();
@@ -100,6 +103,10 @@ class _StorePageState extends State<StorePage> {
                           MaterialPageRoute<void>(
                             builder: (_) => RepositoryCatalogPage(
                               catalog: state.catalog!,
+                              repositoryStoreController:
+                                  widget.repositoryStoreController,
+                              addonInstallController:
+                                  widget.addonInstallController,
                             ),
                           ),
                         );
