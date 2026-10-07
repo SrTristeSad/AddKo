@@ -1,17 +1,46 @@
 from __future__ import annotations
 
+import itertools
 import json
 import os
+import sys
+import threading
 from pathlib import Path
 from typing import Any
 
 PROTOCOL_PREFIX = "ADDKO_RPC "
 _context_cache: dict[str, Any] | None = None
+_request_ids = itertools.count(1)
+_request_lock = threading.Lock()
 
 
 def emit(method: str, **params: Any) -> None:
     message = {"method": method, "params": params}
     print(PROTOCOL_PREFIX + json.dumps(message, ensure_ascii=False), flush=True)
+
+
+def request(method: str, default: Any = None, **params: Any) -> Any:
+    with _request_lock:
+        request_id = next(_request_ids)
+        message = {
+            "method": method,
+            "params": params,
+            "request_id": request_id,
+            "expects_response": True,
+            "default": default,
+        }
+        print(PROTOCOL_PREFIX + json.dumps(message, ensure_ascii=False), flush=True)
+
+        response_line = sys.stdin.readline()
+        if not response_line:
+            return default
+        try:
+            response = json.loads(response_line)
+        except json.JSONDecodeError:
+            return default
+        if response.get("request_id") != request_id:
+            return default
+        return response.get("result", default)
 
 
 def context() -> dict[str, Any]:
