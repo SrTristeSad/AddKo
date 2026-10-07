@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 
 import '../../repositories/domain/repository_catalog.dart';
@@ -51,6 +49,15 @@ class AddonInstallController extends ChangeNotifier {
       _initializationError = error.toString();
     }
     notifyListeners();
+  }
+
+  Future<DirectoryInfo> directories() async {
+    final addonsRoot = await _directories.addonsRoot();
+    final addonDataRoot = await _directories.addonDataRoot();
+    return DirectoryInfo(
+      addonsRootPath: addonsRoot.path,
+      addonDataRootPath: addonDataRoot.path,
+    );
   }
 
   AddonInstallPlan buildPlan({
@@ -127,4 +134,14 @@ class AddonInstallController extends ChangeNotifier {
     }
     super.dispose();
   }
+}
+
+class DirectoryInfo {
+  const DirectoryInfo({
+    required this.addonsRootPath,
+    required this.addonDataRootPath,
+  });
+
+  final String addonsRootPath;
+  final String addonDataRootPath;
 }
