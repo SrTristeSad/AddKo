@@ -3,7 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/addons/domain/installed_addon.dart';
+import '../../core/addons/domain/kodi_version.dart';
 import '../../core/player/playback_request.dart';
+import '../../core/repositories/application/repository_registry.dart';
+import '../../core/repositories/application/repository_store_controller.dart';
+import '../../core/repositories/domain/repository_catalog.dart';
 import '../../core/runtime/legacy/kodi_builtin_command.dart';
 import '../../core/runtime/legacy/legacy_plugin_item.dart';
 import '../../core/runtime/legacy/legacy_plugin_result.dart';
@@ -15,11 +19,15 @@ class LegacyAddonPage extends StatefulWidget {
   const LegacyAddonPage({
     required this.addon,
     required this.runtime,
+    required this.repositoryRegistry,
+    required this.repositoryStoreController,
     super.key,
   });
 
   final InstalledAddon addon;
   final LegacyPluginRuntime runtime;
+  final RepositoryRegistry repositoryRegistry;
+  final RepositoryStoreController repositoryStoreController;
 
   @override
   State<LegacyAddonPage> createState() => _LegacyAddonPageState();
@@ -162,6 +170,18 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
       case 'addon.opensettings':
         await _openAddonSettings(command.argument(0)?.trim());
         return;
+      case 'installaddon':
+        final addonId = command.argument(0)?.trim();
+        if (addonId != null && addonId.isNotEmpty) {
+          await _installAddonFromRepositories(addonId);
+        }
+        return;
+      case 'updateaddonrepos':
+        await _updateAddonRepositories();
+        return;
+      case 'updatelocaladdons':
+        await _refreshLocalAddons();
+        return;
       case 'notification':
         final heading = command.argument(0)?.trim() ?? 'AddKo';
         final message = command.argument(1)?.trim() ?? '';
@@ -183,6 +203,108 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
       default:
         debugPrint('AddKo: Kodi built-in ainda não implementado: ${command.raw}');
     }
+  }
+
+  Future<void> _installAddonFromRepositories(String addonId) async {
+    try {
+      await widget.repositoryRegistry.initialize();
+      await widget.runtime.addonInstallController.initialize();
+
+      var candidate = _bestAvailableAddon(addonId);
+      if (candidate == null) {
+        await widget.repositoryStoreController.synchronizeAll(
+          widget.repositoryRegistry.sources,
+        );
+        candidate = _bestAvailableAddon(addonId);
+      }
+
+      if (!mounted) return;
+      if (candidate == null) {
+        _showMessage('Addon não encontrado nos repositórios ativos: $addonId');
+        return;
+      }
+
+      final plan = await widget.runtime.addonInstallController.install(
+        addon: candidate,
+        catalogs: widget.repositoryStoreController.catalogs,
+      );
+      if (!mounted) return;
+
+      if (!plan.canInstall) {
+        final detail = plan.issues.map((issue) => issue.toString()).join('\n');
+        _showMessage(
+          detail.isEmpty
+              ? 'Não foi possível instalar $addonId.'
+              : 'Não foi possível instalar $addonId:\n$detail',
+        );
+        return;
+      }
+
+      _showMessage('${candidate.manifest.name} instalado pela Loja do AddKo.');
+    } on Object catch (error) {
+      if (!mounted) return;
+      _showMessage('Falha ao instalar $addonId: $error');
+    }
+  }
+
+  RepositoryAddonEntry? _bestAvailableAddon(String addonId) {
+    RepositoryAddonEntry? selected;
+    for (final catalog in widget.repositoryStoreController.catalogs) {
+      for (final entry in catalog.addons) {
+        if (entry.manifest.id != addonId || entry.packageUri == null) {
+          continue;
+        }
+        if (selected == null ||
+            KodiVersion(entry.manifest.version)
+                    .compareTo(KodiVersion(selected.manifest.version)) >
+                0) {
+          selected = entry;
+        }
+      }
+    }
+    return selected;
+  }
+
+  Future<void> _updateAddonRepositories() async {
+    try {
+      await widget.repositoryRegistry.initialize();
+      await widget.repositoryStoreController.synchronizeAll(
+        widget.repositoryRegistry.sources,
+      );
+      if (!mounted) return;
+
+      final failed = widget.repositoryRegistry.sources.where((source) {
+        return widget.repositoryStoreController.stateFor(source.uri).status ==
+            RepositorySyncStatus.failed;
+      }).length;
+      if (failed == 0) {
+        _showMessage('Repositórios atualizados.');
+      } else {
+        _showMessage(
+          'Repositórios atualizados com $failed falha${failed == 1 ? '' : 's'}.',
+        );
+      }
+    } on Object catch (error) {
+      if (!mounted) return;
+      _showMessage('Falha ao atualizar repositórios: $error');
+    }
+  }
+
+  Future<void> _refreshLocalAddons() async {
+    try {
+      await widget.runtime.addonInstallController.refreshInstalled();
+      if (!mounted) return;
+      _showMessage('Lista local de addons atualizada.');
+    } on Object catch (error) {
+      if (!mounted) return;
+      _showMessage('Falha ao atualizar addons locais: $error');
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   Future<void> _runPlugin(String target) async {
