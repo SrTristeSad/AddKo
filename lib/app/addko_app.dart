@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../core/repositories/application/repository_registry.dart';
+import '../core/repositories/application/repository_store_controller.dart';
 import '../core/repositories/infrastructure/shared_preferences_repository_storage.dart';
 import '../features/launcher/launcher_page.dart';
 import 'addko_theme.dart';
@@ -10,10 +11,12 @@ import 'addko_theme.dart';
 class AddKoApp extends StatefulWidget {
   const AddKoApp({
     this.repositoryRegistry,
+    this.repositoryStoreController,
     super.key,
   });
 
   final RepositoryRegistry? repositoryRegistry;
+  final RepositoryStoreController? repositoryStoreController;
 
   @override
   State<AddKoApp> createState() => _AddKoAppState();
@@ -21,7 +24,9 @@ class AddKoApp extends StatefulWidget {
 
 class _AddKoAppState extends State<AddKoApp> {
   late final RepositoryRegistry _repositoryRegistry;
+  late final RepositoryStoreController _repositoryStoreController;
   late final bool _ownsRepositoryRegistry;
+  late final bool _ownsRepositoryStoreController;
 
   @override
   void initState() {
@@ -31,6 +36,10 @@ class _AddKoAppState extends State<AddKoApp> {
         RepositoryRegistry(
           storage: const SharedPreferencesRepositoryStorage(),
         );
+
+    _ownsRepositoryStoreController = widget.repositoryStoreController == null;
+    _repositoryStoreController =
+        widget.repositoryStoreController ?? RepositoryStoreController();
 
     if (_ownsRepositoryRegistry) {
       unawaited(_initializeRepositoryRegistry());
@@ -48,6 +57,9 @@ class _AddKoAppState extends State<AddKoApp> {
 
   @override
   void dispose() {
+    if (_ownsRepositoryStoreController) {
+      _repositoryStoreController.dispose();
+    }
     if (_ownsRepositoryRegistry) {
       _repositoryRegistry.dispose();
     }
@@ -60,7 +72,10 @@ class _AddKoAppState extends State<AddKoApp> {
       title: 'AddKo',
       debugShowCheckedModeBanner: false,
       theme: buildAddKoTheme(),
-      home: LauncherPage(repositoryRegistry: _repositoryRegistry),
+      home: LauncherPage(
+        repositoryRegistry: _repositoryRegistry,
+        repositoryStoreController: _repositoryStoreController,
+      ),
     );
   }
 }
