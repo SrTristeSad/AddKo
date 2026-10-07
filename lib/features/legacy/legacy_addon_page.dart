@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 
 import '../../core/addons/domain/installed_addon.dart';
 import '../../core/player/playback_request.dart';
+import '../../core/runtime/legacy/kodi_builtin_command.dart';
 import '../../core/runtime/legacy/legacy_plugin_item.dart';
 import '../../core/runtime/legacy/legacy_plugin_result.dart';
 import '../../core/runtime/legacy/legacy_plugin_runtime.dart';
 import '../player/player_page.dart';
+import 'legacy_addon_settings_page.dart';
 
 class LegacyAddonPage extends StatefulWidget {
   const LegacyAddonPage({
@@ -61,10 +63,181 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
       _result = result;
     });
 
-    final resolved = result.resolvedItem;
-    if (resolved != null && result.succeeded) {
-      _openPlayback(resolved);
+    await _processResultActions(result);
+  }
+
+  Future<void> _processResultActions(LegacyPluginResult result) async {
+    if (!result.succeeded || !mounted) {
+      return;
     }
+
+    final resolved = result.resolvedItem;
+    if (resolved != null) {
+      _openPlayback(resolved);
+      return;
+    }
+
+    for (final rawCommand in result.builtins) {
+      if (!mounted) return;
+      await _executeBuiltin(KodiBuiltinCommand.parse(rawCommand));
+    }
+  }
+
+  Future<void> _executeBuiltin(KodiBuiltinCommand command) async {
+    if (command.isEmpty || !mounted) return;
+
+    switch (command.normalizedName) {
+      case 'runplugin':
+        final target = command.argument(0)?.trim();
+        if (target != null && target.startsWith('plugin://')) {
+          await _runPlugin(target);
+        }
+        return;
+      case 'runaddon':
+        final addonId = command.argument(0)?.trim();
+        if (addonId == null || addonId.isEmpty) return;
+        final addon = widget.runtime.addonInstallController.installedById(addonId);
+        if (addon?.manifest.isPythonPlugin == true) {
+          await _open('plugin://$addonId/');
+        } else if (addon?.manifest.isPythonScript == true) {
+          await _runScript(addonId, const []);
+        }
+        return;
+      case 'runscript':
+        final target = command.argument(0)?.trim();
+        if (target == null || target.isEmpty) return;
+        if (target.startsWith('plugin://')) {
+          await _runPlugin(target);
+          return;
+        }
+        await _runScript(
+          target,
+          command.arguments.skip(1).toList(growable: false),
+        );
+        return;
+      case 'container.update':
+        final target = command.argument(0)?.trim();
+        if (target == null || !target.startsWith('plugin://')) return;
+        final replace = command.arguments.skip(1).any(
+              (value) => value.trim().toLowerCase() == 'replace',
+            );
+        await _open(target, pushHistory: !replace);
+        return;
+      case 'container.refresh':
+        final current = _currentUrl;
+        if (current != null) {
+          await _open(current, pushHistory: false);
+        }
+        return;
+      case 'playmedia':
+        final target = command.argument(0)?.trim();
+        if (target == null || target.isEmpty) return;
+        if (target.startsWith('plugin://')) {
+          await _runPlugin(target);
+        } else {
+          _openPlayback(
+            LegacyPluginItem(
+              label: command.argument(1)?.trim() ?? '',
+              path: target,
+              url: target,
+              isFolder: false,
+            ),
+          );
+        }
+        return;
+      case 'activatewindow':
+        final pluginTarget = command.arguments
+            .map((value) => value.trim())
+            .where((value) => value.startsWith('plugin://'))
+            .firstOrNull;
+        if (pluginTarget != null) {
+          await _open(pluginTarget);
+          return;
+        }
+        final window = command.argument(0)?.trim().toLowerCase();
+        if (window == 'home') {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+        return;
+      case 'addon.opensettings':
+        await _openAddonSettings(command.argument(0)?.trim());
+        return;
+      case 'notification':
+        final heading = command.argument(0)?.trim() ?? 'AddKo';
+        final message = command.argument(1)?.trim() ?? '';
+        final rawDuration = int.tryParse(command.argument(2)?.trim() ?? '');
+        final duration = Duration(
+          milliseconds: (rawDuration ?? 3000).clamp(800, 30000),
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              message.isEmpty ? heading : '$heading\n$message',
+            ),
+            duration: duration,
+          ),
+        );
+        return;
+      default:
+        debugPrint('AddKo: Kodi built-in ainda não implementado: ${command.raw}');
+    }
+  }
+
+  Future<void> _runPlugin(String target) async {
+    final result = await widget.runtime.invokeUrl(target);
+    if (!mounted) return;
+    if (!result.succeeded) {
+      _showRuntimeCommandError(result);
+      return;
+    }
+    await _processResultActions(result);
+  }
+
+  Future<void> _runScript(String addonId, List<String> arguments) async {
+    final result = await widget.runtime.invokeScriptAddon(
+      addonId,
+      arguments: arguments,
+    );
+    if (!mounted) return;
+    if (!result.succeeded) {
+      _showRuntimeCommandError(result);
+      return;
+    }
+    await _processResultActions(result);
+  }
+
+  void _showRuntimeCommandError(LegacyPluginResult result) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result.errorMessage ?? 'Falha ao executar comando do addon.',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openAddonSettings(String? requestedAddonId) async {
+    final addonId = requestedAddonId?.isNotEmpty == true
+        ? requestedAddonId!
+        : widget.addon.manifest.id;
+    final addon = widget.runtime.addonInstallController.installedById(addonId);
+    if (addon == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Addon não instalado: $addonId')),
+      );
+      return;
+    }
+
+    final directories = await widget.runtime.addonInstallController.directories();
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => LegacyAddonSettingsPage(
+          addon: addon,
+          addonDataRootPath: directories.addonDataRootPath,
+        ),
+      ),
+    );
   }
 
   Future<bool> _goBack() async {
@@ -103,6 +276,11 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
           ),
           title: Text(title),
           actions: [
+            IconButton(
+              tooltip: 'Configurações do addon',
+              onPressed: () => unawaited(_openAddonSettings(null)),
+              icon: const Icon(Icons.tune_rounded),
+            ),
             IconButton(
               tooltip: 'Atualizar',
               onPressed: _currentUrl == null || _loading
@@ -157,6 +335,8 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
             return _LegacyItemTile(
               item: item,
               onTap: () => _activate(item),
+              onContextCommand: (command) =>
+                  unawaited(_executeBuiltin(KodiBuiltinCommand.parse(command))),
             );
           },
         ),
@@ -205,10 +385,12 @@ class _LegacyItemTile extends StatelessWidget {
   const _LegacyItemTile({
     required this.item,
     required this.onTap,
+    required this.onContextCommand,
   });
 
   final LegacyPluginItem item;
   final VoidCallback onTap;
+  final ValueChanged<String> onContextCommand;
 
   @override
   Widget build(BuildContext context) {
@@ -240,9 +422,23 @@ class _LegacyItemTile extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-      trailing: Icon(
-        item.isFolder ? Icons.chevron_right_rounded : Icons.play_arrow_rounded,
-      ),
+      trailing: item.contextMenu.isEmpty
+          ? Icon(
+              item.isFolder
+                  ? Icons.chevron_right_rounded
+                  : Icons.play_arrow_rounded,
+            )
+          : PopupMenuButton<String>(
+              tooltip: 'Opções',
+              onSelected: onContextCommand,
+              itemBuilder: (_) => [
+                for (final action in item.contextMenu)
+                  PopupMenuItem<String>(
+                    value: action.command,
+                    child: Text(action.label),
+                  ),
+              ],
+            ),
       onTap: onTap,
     );
   }
@@ -338,5 +534,12 @@ class _RuntimeError extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+extension _FirstOrNull<T> on Iterable<T> {
+  T? get firstOrNull {
+    final iterator = this.iterator;
+    return iterator.moveNext() ? iterator.current : null;
   }
 }
