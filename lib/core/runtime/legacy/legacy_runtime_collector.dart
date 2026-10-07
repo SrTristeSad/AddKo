@@ -51,6 +51,7 @@ class LegacyRuntimeCollector {
           itemJson['is_folder'] = map['is_folder'] == true;
           _items.add(LegacyPluginItem.fromJson(itemJson));
         }
+        break;
       case 'xbmcplugin.addDirectoryItems':
         final rawItems = map['items'];
         if (rawItems is List) {
@@ -69,10 +70,13 @@ class LegacyRuntimeCollector {
             _items.add(LegacyPluginItem.fromJson(itemJson));
           }
         }
+        break;
       case 'xbmcplugin.setContent':
         _contentType = map['content']?.toString();
+        break;
       case 'xbmcplugin.setPluginCategory':
         _category = map['category']?.toString();
+        break;
       case 'xbmcplugin.setResolvedUrl':
         _succeeded = map['succeeded'] != false;
         final rawItem = map['item'];
@@ -81,11 +85,13 @@ class LegacyRuntimeCollector {
             Map<String, Object?>.from(rawItem),
           );
         }
+        break;
       case 'xbmc.log':
         final message = map['message']?.toString();
         if (message != null && message.isNotEmpty) {
           _logs.add(message);
         }
+        break;
       case 'invocation.error':
         _succeeded = false;
         _errorMessage = map['message']?.toString() ?? 'Unknown Python error';
@@ -93,6 +99,9 @@ class LegacyRuntimeCollector {
         if (traceback != null && traceback.isNotEmpty) {
           _logs.add(traceback);
         }
+        break;
+      default:
+        break;
     }
   }
 
