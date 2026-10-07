@@ -13,6 +13,15 @@ class RepositoryStoreController extends ChangeNotifier {
   final bool _ownsClient;
   final Map<Uri, RepositorySyncState> _states = {};
 
+  Iterable<RepositoryCatalog> get catalogs sync* {
+    for (final state in _states.values) {
+      final catalog = state.catalog;
+      if (catalog != null) {
+        yield catalog;
+      }
+    }
+  }
+
   RepositorySyncState stateFor(Uri uri) {
     return _states[uri] ?? const RepositorySyncState.idle();
   }
