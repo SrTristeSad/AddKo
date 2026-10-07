@@ -9,6 +9,7 @@ class LegacyPluginResult {
     this.category,
     this.resolvedItem,
     this.errorMessage,
+    this.builtins = const [],
   });
 
   final List<LegacyPluginItem> items;
@@ -18,4 +19,5 @@ class LegacyPluginResult {
   final String? category;
   final LegacyPluginItem? resolvedItem;
   final String? errorMessage;
+  final List<String> builtins;
 }
