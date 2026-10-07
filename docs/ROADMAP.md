@@ -7,7 +7,8 @@ Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
 ### Fundação
 
 - [x] shell Flutter e launcher em cards;
-- [x] entrada para Loja;
+- [x] acesso visual à Loja no dock inferior do launcher;
+- [x] dock inferior com ações visuais de Sair, Loja e Configurações;
 - [x] cadastro e persistência de URL de repositório;
 - [x] parser de `addon.xml`;
 - [x] parser de descritor `xbmc.addon.repository`;
@@ -33,7 +34,6 @@ Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
 - [x] bridge JSON entre Python e Flutter;
 - [x] navegação de diretórios retornados por `xbmcplugin`;
 - [x] `xbmcaddon` inicial, incluindo informações e settings persistentes;
-- [x] editor Flutter inicial para `resources/settings.xml` e `Addon.OpenSettings`;
 - [x] `xbmcplugin` inicial, incluindo `addDirectoryItem`, `addDirectoryItems`, `endOfDirectory` e `setResolvedUrl`;
 - [x] `xbmcvfs` inicial e tradução de `special://`;
 - [x] `xbmc` inicial (`log`, built-ins, `Player`, `Monitor` e superfícies básicas);
@@ -43,14 +43,14 @@ Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
 - [x] `Window`, `WindowDialog` e modelo inicial de `WindowXML`/controles traduzidos para Flutter;
 - [x] callbacks básicos de `WindowXML` trafegando pelo bridge Python ↔ Flutter;
 - [x] JSON-RPC inicial (`JSONRPC.Ping`, `JSONRPC.Version`, propriedades básicas de Application/GUI e superfícies vazias seguras para Player/Files);
-- [x] parser e execução inicial de built-ins Kodi: `RunPlugin`, `RunAddon`, `RunScript`, `Container.Update`, `Container.Refresh`, `PlayMedia`, `ActivateWindow`, `Addon.OpenSettings` e `Notification`;
-- [x] comandos de menu de contexto de `ListItem` encaminhados ao executor de built-ins;
-- [x] execução inicial de addons `xbmc.python.script` com `sys.argv` próprio;
+- [x] built-ins de navegação e execução: `RunPlugin`, `RunAddon`, `RunScript`, `Container.Update`, `Container.Refresh`, `PlayMedia`, `ActivateWindow`, `Addon.OpenSettings` e `Notification`;
+- [x] built-ins ligados à Loja/Add-on Manager: `InstallAddon`, `UpdateAddonRepos` e `UpdateLocalAddons`;
+- [x] `InstallAddon` procura o pacote nos repositórios ativos e usa o resolvedor recursivo de dependências do AddKo;
 - [ ] CPython embarcado para Android/Android TV e demais plataformas sem Python do sistema;
-- [ ] ampliar built-ins para instalação/atualização de addons, janelas Kodi e controles de player;
+- [ ] ampliar os built-ins restantes do Kodi conforme addons reais exigirem;
 - [ ] ampliar JSON-RPC para Addons, Files, Player, Playlist, Settings e bibliotecas;
-- [ ] serviços `service.*` em segundo plano;
-- [ ] ampliar suporte a `xbmc.python.script` para execução por caminho e lifecycle completo;
+- [ ] serviços `xbmc.service` em segundo plano com supervisor e encerramento limpo via `Monitor`;
+- [ ] ampliar suporte a scripts Python e demais extension points usados por addons reais;
 - [ ] ampliar `WindowXML` para mais tipos de controle, navegação/foco e recursos de skin.
 
 ### Mídia e addons binários
@@ -71,6 +71,8 @@ Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
 O usuário registra a URL de um repositório. O AddKo aceita um descriptor `xbmc.addon.repository` ou um índice `addons.xml`/`addons.xml.gz`, sincroniza os metadados, apresenta os addons pelas categorias Kodi e usa o mesmo Addon Manager para baixar o pacote e resolver dependências automaticamente.
 
 Dependências como `script.module.*`, `inputstream.*` e outros addons não aparecem como cards comuns no launcher apenas por estarem instaladas. O launcher é voltado aos addons executáveis pelo usuário.
+
+A Loja também é o backend dos built-ins legados de instalação. Quando um addon antigo chama `InstallAddon`, `UpdateAddonRepos` ou `UpdateLocalAddons`, o AddKo encaminha a ação para os mesmos controllers usados pela interface da Loja.
 
 ## Plugin v2
 
