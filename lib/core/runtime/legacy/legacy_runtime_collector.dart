@@ -8,6 +8,7 @@ class LegacyRuntimeCollector {
 
   final List<LegacyPluginItem> _items = [];
   final List<String> _logs = [];
+  final List<String> _builtins = [];
   String? _contentType;
   String? _category;
   LegacyPluginItem? _resolvedItem;
@@ -86,6 +87,18 @@ class LegacyRuntimeCollector {
           );
         }
         break;
+      case 'xbmc.executebuiltin':
+        final function = map['function']?.toString().trim();
+        if (function != null && function.isNotEmpty) {
+          _builtins.add(function);
+        }
+        break;
+      case 'xbmcaddon.openSettings':
+        final addonId = map['addon_id']?.toString().trim();
+        if (addonId != null && addonId.isNotEmpty) {
+          _builtins.add('Addon.OpenSettings($addonId)');
+        }
+        break;
       case 'xbmc.log':
         final message = map['message']?.toString();
         if (message != null && message.isNotEmpty) {
@@ -127,6 +140,7 @@ class LegacyRuntimeCollector {
       category: _category,
       resolvedItem: _resolvedItem,
       errorMessage: error,
+      builtins: List.unmodifiable(_builtins),
     );
   }
 }
