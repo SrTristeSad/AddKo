@@ -7,6 +7,8 @@ import '../../core/addons/application/addon_install_controller.dart';
 import '../../core/addons/domain/installed_addon.dart';
 import '../../core/repositories/application/repository_registry.dart';
 import '../../core/repositories/application/repository_store_controller.dart';
+import '../../core/runtime/legacy/legacy_plugin_runtime.dart';
+import '../legacy/legacy_addon_page.dart';
 import '../settings/settings_page.dart';
 import '../store/store_page.dart';
 
@@ -103,6 +105,7 @@ class LauncherPage extends StatelessWidget {
   Widget _installedAddonCard(BuildContext context, InstalledAddon addon) {
     final iconPath = addon.manifest.iconPath ?? 'icon.png';
     final iconFile = File(p.join(addon.installPath, iconPath));
+    final canOpen = addon.manifest.isPythonPlugin;
 
     return _LauncherCard(
       title: addon.manifest.name,
@@ -119,10 +122,24 @@ class LauncherPage extends StatelessWidget {
             )
           : null,
       onOpen: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${addon.manifest.name} está instalado. A execução Python/xbmc é a próxima etapa do runtime legado.',
+        if (!canOpen) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '${addon.manifest.name} está instalado como dependência/componente e não declara uma fonte plugin://.',
+              ),
+            ),
+          );
+          return;
+        }
+
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => LegacyAddonPage(
+              addon: addon,
+              runtime: LegacyPluginRuntime(
+                addonInstallController: addonInstallController,
+              ),
             ),
           ),
         );
