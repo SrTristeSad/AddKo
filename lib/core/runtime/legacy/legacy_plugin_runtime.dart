@@ -7,18 +7,21 @@ import '../../addons/domain/installed_addon.dart';
 import '../plugin_uri.dart';
 import 'legacy_plugin_invocation.dart';
 import 'legacy_plugin_result.dart';
+import 'legacy_runtime_request.dart';
 import 'process_python_executor.dart';
 import 'python_runtime_bundle.dart';
 
 class LegacyPluginRuntime {
   LegacyPluginRuntime({
     required this.addonInstallController,
+    this.requestHandler,
     PythonRuntimeBundle? runtimeBundle,
     PythonExecutableResolver? pythonResolver,
   })  : _runtimeBundle = runtimeBundle ?? PythonRuntimeBundle(),
         _pythonResolver = pythonResolver ?? const PythonExecutableResolver();
 
   final AddonInstallController addonInstallController;
+  final LegacyRuntimeRequestHandler? requestHandler;
   final PythonRuntimeBundle _runtimeBundle;
   final PythonExecutableResolver _pythonResolver;
 
@@ -91,6 +94,7 @@ class LegacyPluginRuntime {
     final executor = ProcessPythonExecutor(
       pythonExecutable: python,
       workerScriptPath: runtimeFiles.workerPath,
+      requestHandler: requestHandler,
     );
     return executor.invoke(invocation);
   }
