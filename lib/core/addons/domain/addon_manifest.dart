@@ -36,6 +36,10 @@ class AddonManifest {
         (extension) => extension.point == 'xbmc.python.script',
       );
 
+  bool get isPythonService => extensions.any(
+        (extension) => extension.point == 'xbmc.service',
+      );
+
   String? get pythonEntrypoint {
     for (final extension in extensions) {
       if (extension.point == 'xbmc.python.pluginsource') {
@@ -49,6 +53,24 @@ class AddonManifest {
     for (final extension in extensions) {
       if (extension.point == 'xbmc.python.script') {
         return extension.library;
+      }
+    }
+    return null;
+  }
+
+  String? get pythonServiceEntrypoint {
+    for (final extension in extensions) {
+      if (extension.point == 'xbmc.service') {
+        return extension.library;
+      }
+    }
+    return null;
+  }
+
+  String? get pythonServiceStartMode {
+    for (final extension in extensions) {
+      if (extension.point == 'xbmc.service') {
+        return extension.attributes['start'];
       }
     }
     return null;
