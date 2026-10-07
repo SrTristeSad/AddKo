@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -18,6 +19,7 @@ class Addon:
         self._profile.mkdir(parents=True, exist_ok=True)
         self._manifest = self._load_manifest()
         self._settings_file = self._profile / "settings.json"
+        self._localized_strings: dict[int, str] | None = None
 
     def _load_manifest(self) -> ET.Element:
         source = self._path / "addon.xml"
@@ -51,6 +53,11 @@ class Addon:
         return values.get(key, "")
 
     def getLocalizedString(self, id: int) -> str:
+        if self._localized_strings is None:
+            self._localized_strings = self._load_localized_strings()
+        value = self._localized_strings.get(int(id))
+        if value is not None:
+            return value
         emit("xbmcaddon.getLocalizedString", addon_id=self._id, string_id=id)
         return str(id)
 
@@ -142,6 +149,119 @@ class Addon:
                 if default is not None and default.text is not None:
                     return default.text
         return None
+
+    def _load_localized_strings(self) -> dict[int, str]:
+        language_root = self._path / "resources" / "language"
+        if not language_root.is_dir():
+            return {}
+
+        preferred = [
+            "resource.language.pt_br",
+            "Portuguese (Brazil)",
+            "Portuguese",
+            "resource.language.en_gb",
+            "English",
+        ]
+        directories = {child.name.lower(): child for child in language_root.iterdir() if child.is_dir()}
+        ordered: list[Path] = []
+        for name in preferred:
+            match = directories.get(name.lower())
+            if match is not None and match not in ordered:
+                ordered.append(match)
+        for child in directories.values():
+            if child not in ordered:
+                ordered.append(child)
+
+        merged: dict[int, str] = {}
+        # Load fallbacks first and preferred languages last so preferred values win.
+        for directory in reversed(ordered):
+            po = directory / "strings.po"
+            xml = directory / "strings.xml"
+            if po.is_file():
+                merged.update(self._parse_po(po))
+            elif xml.is_file():
+                merged.update(self._parse_legacy_strings_xml(xml))
+        return merged
+
+    def _parse_po(self, source: Path) -> dict[int, str]:
+        try:
+            lines = source.read_text(encoding="utf-8-sig").splitlines()
+        except OSError:
+            return {}
+
+        result: dict[int, str] = {}
+        context_id: int | None = None
+        msgid_parts: list[str] = []
+        msgstr_parts: list[str] = []
+        field: str | None = None
+
+        def finish() -> None:
+            nonlocal context_id, msgid_parts, msgstr_parts, field
+            if context_id is not None:
+                translated = "".join(msgstr_parts)
+                fallback = "".join(msgid_parts)
+                value = translated if translated else fallback
+                if value:
+                    result[context_id] = value
+            context_id = None
+            msgid_parts = []
+            msgstr_parts = []
+            field = None
+
+        for raw in [*lines, ""]:
+            line = raw.strip()
+            if not line:
+                finish()
+                continue
+            if line.startswith("#") and not line.startswith("msgctxt"):
+                continue
+            if line.startswith("msgctxt "):
+                finish()
+                value = self._po_value(line[len("msgctxt ") :])
+                if value.startswith("#"):
+                    try:
+                        context_id = int(value[1:])
+                    except ValueError:
+                        context_id = None
+                field = "context"
+            elif line.startswith("msgid "):
+                msgid_parts = [self._po_value(line[len("msgid ") :])]
+                field = "msgid"
+            elif line.startswith("msgstr "):
+                msgstr_parts = [self._po_value(line[len("msgstr ") :])]
+                field = "msgstr"
+            elif line.startswith('"'):
+                value = self._po_value(line)
+                if field == "msgid":
+                    msgid_parts.append(value)
+                elif field == "msgstr":
+                    msgstr_parts.append(value)
+        return result
+
+    def _po_value(self, value: str) -> str:
+        try:
+            decoded = ast.literal_eval(value)
+            return decoded if isinstance(decoded, str) else str(decoded)
+        except (SyntaxError, ValueError):
+            return value.strip().strip('"')
+
+    def _parse_legacy_strings_xml(self, source: Path) -> dict[int, str]:
+        try:
+            root = ET.parse(source).getroot()
+        except (OSError, ET.ParseError):
+            return {}
+        result: dict[int, str] = {}
+        for node in root.iter("string"):
+            raw_id = node.attrib.get("id")
+            if raw_id is None:
+                continue
+            try:
+                string_id = int(raw_id)
+            except ValueError:
+                continue
+            if node.text:
+                result[string_id] = node.text
+        return result
 
     def _metadata_text(self, metadata: ET.Element | None, name: str) -> str:
         if metadata is None:
