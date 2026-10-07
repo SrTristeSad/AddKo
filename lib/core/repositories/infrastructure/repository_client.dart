@@ -57,7 +57,7 @@ class RepositoryClient {
 
         if (rootName == 'addon') {
           final descriptor = descriptorParser.parse(xml);
-          return _loadDescriptor(source, descriptor);
+          return await _loadDescriptor(source, descriptor);
         }
 
         lastError = RepositorySyncException(
@@ -126,7 +126,7 @@ class RepositoryClient {
       );
     }
 
-    var bytes = response.bodyBytes;
+    List<int> bytes = response.bodyBytes;
     if (_looksLikeGzip(bytes)) {
       try {
         bytes = gzip.decode(bytes);
