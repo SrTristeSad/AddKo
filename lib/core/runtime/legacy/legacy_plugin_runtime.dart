@@ -53,6 +53,48 @@ class LegacyPluginRuntime {
       );
     }
 
+    return _invokeAddon(
+      addon: addon,
+      entrypoint: entrypoint,
+      invocationUrl: rawPluginUrl,
+      query: _queryFor(rawPluginUrl),
+    );
+  }
+
+  Future<LegacyPluginResult> invokeScriptAddon(
+    String addonId, {
+    List<String> arguments = const [],
+  }) async {
+    await addonInstallController.initialize();
+    final addon = addonInstallController.installedById(addonId);
+    if (addon == null) {
+      return _failure('Addon $addonId não está instalado.');
+    }
+
+    final entrypoint = addon.manifest.pythonScriptEntrypoint;
+    if (entrypoint == null || entrypoint.trim().isEmpty) {
+      return _failure(
+        '${addon.manifest.name} não declara xbmc.python.script.',
+      );
+    }
+
+    final entrypointPath = p.normalize(p.join(addon.installPath, entrypoint));
+    return _invokeAddon(
+      addon: addon,
+      entrypoint: entrypoint,
+      invocationUrl: 'script://$addonId',
+      query: '',
+      argv: [entrypointPath, ...arguments],
+    );
+  }
+
+  Future<LegacyPluginResult> _invokeAddon({
+    required InstalledAddon addon,
+    required String entrypoint,
+    required String invocationUrl,
+    required String query,
+    List<String>? argv,
+  }) async {
     final python = await _pythonResolver.resolve();
     if (python == null) {
       return _failure(
@@ -75,9 +117,9 @@ class LegacyPluginRuntime {
       addonId: addon.manifest.id,
       addonPath: addon.installPath,
       entrypointPath: p.normalize(p.join(addon.installPath, entrypoint)),
-      pluginUrl: rawPluginUrl,
+      pluginUrl: invocationUrl,
       handle: _nextHandle++,
-      query: _queryFor(rawPluginUrl),
+      query: query,
       profilePath: profilePath,
       addonsRoot: directories.addonsRootPath,
       addonDataRoot: directories.addonDataRootPath,
@@ -89,6 +131,7 @@ class LegacyPluginRuntime {
         'special://userdata': supportRoot,
         'special://temp': tempPath,
       },
+      argv: argv,
     );
 
     final executor = ProcessPythonExecutor(
