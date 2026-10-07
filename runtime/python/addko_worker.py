@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """AddKo legacy Kodi addon worker.
 
-The worker executes one Kodi-style Python plugin invocation. Kodi compatibility
-modules live in runtime/python/shims and emit JSON-line events back to Dart.
+The worker executes one Kodi-style Python plugin or script invocation. Kodi
+compatibility modules live in runtime/python/shims and emit JSON-line events
+back to Dart.
 """
 
 from __future__ import annotations
@@ -42,10 +43,14 @@ def main() -> int:
         if value and value not in sys.path:
             sys.path.insert(0, value)
 
-    plugin_url = context["plugin_url"]
-    plugin_handle = str(context["handle"])
-    query = context.get("query", "")
-    sys.argv = [plugin_url, plugin_handle, query]
+    custom_argv = context.get("argv")
+    if isinstance(custom_argv, list):
+        sys.argv = [str(value) for value in custom_argv]
+    else:
+        plugin_url = context["plugin_url"]
+        plugin_handle = str(context["handle"])
+        query = context.get("query", "")
+        sys.argv = [plugin_url, plugin_handle, query]
 
     entrypoint = Path(context["entrypoint_path"]).resolve()
     addon_root = Path(context["addon_path"]).resolve()
