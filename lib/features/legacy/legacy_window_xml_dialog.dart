@@ -174,13 +174,19 @@ List<Widget> _renderControl(
       );
       break;
     case 'progress':
-      final percent = _number(control['percent'], 0).toDouble().clamp(0, 100);
+      final percent = _number(control['percent'], 0)
+          .toDouble()
+          .clamp(0.0, 100.0)
+          .toDouble();
       child = Center(
-        child: LinearProgressIndicator(value: percent / 100),
+        child: LinearProgressIndicator(value: percent / 100.0),
       );
       break;
     case 'slider':
-      final percent = _number(control['percent'], 0).toDouble().clamp(0, 100);
+      final percent = _number(control['percent'], 0)
+          .toDouble()
+          .clamp(0.0, 100.0)
+          .toDouble();
       child = Slider(
         value: percent,
         min: 0,
