@@ -23,3 +23,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - runtime/python/addko_worker.py
+    - runtime/python/shims/
