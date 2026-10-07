@@ -1,0 +1,43 @@
+class LegacyPluginInvocation {
+  const LegacyPluginInvocation({
+    required this.addonId,
+    required this.addonPath,
+    required this.entrypointPath,
+    required this.pluginUrl,
+    required this.handle,
+    required this.query,
+    required this.profilePath,
+    required this.addonsRoot,
+    required this.shimsPath,
+    required this.pythonPaths,
+    required this.specialPaths,
+  });
+
+  final String addonId;
+  final String addonPath;
+  final String entrypointPath;
+  final String pluginUrl;
+  final int handle;
+  final String query;
+  final String profilePath;
+  final String addonsRoot;
+  final String shimsPath;
+  final List<String> pythonPaths;
+  final Map<String, String> specialPaths;
+
+  Map<String, Object?> toJson() {
+    return {
+      'addon_id': addonId,
+      'addon_path': addonPath,
+      'entrypoint_path': entrypointPath,
+      'plugin_url': pluginUrl,
+      'handle': handle,
+      'query': query,
+      'profile_path': profilePath,
+      'addons_root': addonsRoot,
+      'shims_path': shimsPath,
+      'python_paths': pythonPaths,
+      'special_paths': specialPaths,
+    };
+  }
+}
