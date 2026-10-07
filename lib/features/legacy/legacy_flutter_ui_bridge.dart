@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/runtime/legacy/legacy_runtime_request.dart';
+import 'legacy_window_xml_dialog.dart';
 
 class LegacyFlutterUiBridge {
   const LegacyFlutterUiBridge._();
@@ -99,6 +100,8 @@ class LegacyFlutterUiBridge {
           ),
         );
         return true;
+      case 'xbmcgui.WindowXML.doModal':
+        return showLegacyWindowXml(context, request);
       default:
         return request.defaultValue;
     }
