@@ -57,7 +57,13 @@ class PythonRuntimeBundle {
 
     await target.parent.create(recursive: true);
     final temporary = File('${target.path}.tmp');
+    if (await temporary.exists()) {
+      await temporary.delete();
+    }
     await temporary.writeAsString(source, flush: true);
+    if (await target.exists()) {
+      await target.delete();
+    }
     await temporary.rename(target.path);
   }
 }
