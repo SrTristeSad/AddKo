@@ -32,9 +32,22 @@ class AddonManifest {
         (extension) => extension.point == 'xbmc.python.pluginsource',
       );
 
+  bool get isPythonScript => extensions.any(
+        (extension) => extension.point == 'xbmc.python.script',
+      );
+
   String? get pythonEntrypoint {
     for (final extension in extensions) {
       if (extension.point == 'xbmc.python.pluginsource') {
+        return extension.library;
+      }
+    }
+    return null;
+  }
+
+  String? get pythonScriptEntrypoint {
+    for (final extension in extensions) {
+      if (extension.point == 'xbmc.python.script') {
         return extension.library;
       }
     }
