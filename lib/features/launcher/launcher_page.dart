@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/addons/application/addon_install_controller.dart';
@@ -58,24 +59,6 @@ class LauncherPage extends StatelessWidget {
                         mainAxisSpacing: 20,
                         childAspectRatio: isLandscape ? 1.22 : 0.82,
                         children: [
-                          _LauncherCard(
-                            title: 'Loja',
-                            subtitle: 'Repositórios e addons',
-                            icon: Icons.storefront_rounded,
-                            onOpen: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => StorePage(
-                                    repositoryRegistry: repositoryRegistry,
-                                    repositoryStoreController:
-                                        repositoryStoreController,
-                                    addonInstallController:
-                                        addonInstallController,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
                           for (final addon in launchable)
                             _installedAddonCard(context, addon),
                           if (launchable.isEmpty)
@@ -91,6 +74,8 @@ class LauncherPage extends StatelessWidget {
               ),
             ),
             _BottomBar(
+              onExit: _exitApp,
+              onStore: () => _openStore(context),
               onSettings: () {
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(
@@ -103,6 +88,26 @@ class LauncherPage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _openStore(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => StorePage(
+          repositoryRegistry: repositoryRegistry,
+          repositoryStoreController: repositoryStoreController,
+          addonInstallController: addonInstallController,
+        ),
+      ),
+    );
+  }
+
+  void _exitApp() {
+    if (Platform.isAndroid) {
+      SystemNavigator.pop();
+      return;
+    }
+    exit(0);
   }
 
   Widget _installedAddonCard(BuildContext context, InstalledAddon addon) {
@@ -133,6 +138,8 @@ class LauncherPage extends StatelessWidget {
                 requestHandler: (request) =>
                     LegacyFlutterUiBridge.handle(context, request),
               ),
+              repositoryRegistry: repositoryRegistry,
+              repositoryStoreController: repositoryStoreController,
             ),
           ),
         );
@@ -307,7 +314,7 @@ class _EmptyAddonCard extends StatelessWidget {
             Text(
               hasError
                   ? initializationError!
-                  : 'Use a Loja para adicionar um repositório e instalar plugins.',
+                  : 'Abra a Loja no rodapé para adicionar um repositório e instalar plugins.',
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
@@ -323,14 +330,20 @@ class _EmptyAddonCard extends StatelessWidget {
 }
 
 class _BottomBar extends StatelessWidget {
-  const _BottomBar({required this.onSettings});
+  const _BottomBar({
+    required this.onExit,
+    required this.onStore,
+    required this.onSettings,
+  });
 
+  final VoidCallback onExit;
+  final VoidCallback onStore;
   final VoidCallback onSettings;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
@@ -338,18 +351,100 @@ class _BottomBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          TextButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.logout_rounded),
-            label: const Text('SAIR'),
+          _DockButton(
+            tooltip: 'Sair',
+            semanticLabel: 'Sair do AddKo',
+            icon: Icons.logout_rounded,
+            onPressed: onExit,
           ),
           const Spacer(),
-          TextButton.icon(
+          _DockButton(
+            tooltip: 'Loja',
+            semanticLabel: 'Abrir Loja',
+            icon: Icons.storefront_rounded,
+            prominent: true,
+            onPressed: onStore,
+          ),
+          const SizedBox(width: 14),
+          _DockButton(
+            tooltip: 'Configurações',
+            semanticLabel: 'Abrir Configurações',
+            icon: Icons.settings_rounded,
             onPressed: onSettings,
-            icon: const Icon(Icons.settings_rounded),
-            label: const Text('CONFIGURAÇÕES'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DockButton extends StatefulWidget {
+  const _DockButton({
+    required this.tooltip,
+    required this.semanticLabel,
+    required this.icon,
+    required this.onPressed,
+    this.prominent = false,
+  });
+
+  final String tooltip;
+  final String semanticLabel;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool prominent;
+
+  @override
+  State<_DockButton> createState() => _DockButtonState();
+}
+
+class _DockButtonState extends State<_DockButton> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final background = widget.prominent
+        ? scheme.primaryContainer
+        : scheme.surfaceContainerHighest;
+    final foreground = widget.prominent
+        ? scheme.onPrimaryContainer
+        : scheme.onSurfaceVariant;
+
+    return Focus(
+      onFocusChange: (focused) => setState(() => _focused = focused),
+      child: Semantics(
+        button: true,
+        label: widget.semanticLabel,
+        child: Tooltip(
+          message: widget.tooltip,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              color: background,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: _focused ? scheme.primary : scheme.outlineVariant,
+                width: _focused ? 2.5 : 1,
+              ),
+              boxShadow: _focused
+                  ? [
+                      BoxShadow(
+                        color: scheme.shadow.withValues(alpha: 0.2),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: IconButton(
+              tooltip: widget.tooltip,
+              onPressed: widget.onPressed,
+              icon: Icon(widget.icon, color: foreground, size: 29),
+            ),
+          ),
+        ),
       ),
     );
   }
