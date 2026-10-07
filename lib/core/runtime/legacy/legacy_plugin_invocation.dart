@@ -12,6 +12,7 @@ class LegacyPluginInvocation {
     required this.shimsPath,
     required this.pythonPaths,
     required this.specialPaths,
+    this.argv,
   });
 
   final String addonId;
@@ -26,6 +27,7 @@ class LegacyPluginInvocation {
   final String shimsPath;
   final List<String> pythonPaths;
   final Map<String, String> specialPaths;
+  final List<String>? argv;
 
   Map<String, Object?> toJson() {
     return {
@@ -41,6 +43,7 @@ class LegacyPluginInvocation {
       'shims_path': shimsPath,
       'python_paths': pythonPaths,
       'special_paths': specialPaths,
+      if (argv != null) 'argv': argv,
     };
   }
 }
