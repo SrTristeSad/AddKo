@@ -36,4 +36,18 @@ void main() {
     expect(manifest.dependencies.last.optional, isTrue);
     expect(manifest.iconPath, 'icon.png');
   });
+
+  test('recognizes xbmc.python.script entrypoints', () {
+    const xml = '''
+<addon id="script.example" name="Script Example" version="1.0.0" provider-name="AddKo">
+  <extension point="xbmc.python.script" library="service.py" />
+</addon>
+''';
+
+    final manifest = parser.parse(xml);
+
+    expect(manifest.isPythonPlugin, isFalse);
+    expect(manifest.isPythonScript, isTrue);
+    expect(manifest.pythonScriptEntrypoint, 'service.py');
+  });
 }
