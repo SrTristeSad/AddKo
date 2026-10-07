@@ -34,6 +34,8 @@ class AddonPackageInstaller {
   Future<InstalledAddon> installFromUri({
     required Uri packageUri,
     required Directory addonsRoot,
+    String? expectedAddonId,
+    String? expectedVersion,
   }) async {
     final response = await _client.get(
       packageUri,
@@ -53,12 +55,16 @@ class AddonPackageInstaller {
     return installBytes(
       bytes: response.bodyBytes,
       addonsRoot: addonsRoot,
+      expectedAddonId: expectedAddonId,
+      expectedVersion: expectedVersion,
     );
   }
 
   Future<InstalledAddon> installBytes({
     required List<int> bytes,
     required Directory addonsRoot,
+    String? expectedAddonId,
+    String? expectedVersion,
   }) async {
     if (bytes.isEmpty) {
       throw const AddonInstallException('O pacote ZIP está vazio.');
@@ -74,6 +80,17 @@ class AddonPackageInstaller {
     final manifestFile = _findManifest(archive);
     final manifestText = _decodeArchiveFile(manifestFile.file);
     final manifest = manifestParser.parse(manifestText);
+
+    if (expectedAddonId != null && manifest.id != expectedAddonId) {
+      throw AddonInstallException(
+        'O pacote baixado declara ${manifest.id}, mas era esperado $expectedAddonId.',
+      );
+    }
+    if (expectedVersion != null && manifest.version != expectedVersion) {
+      throw AddonInstallException(
+        'O pacote ${manifest.id} declara versão ${manifest.version}, mas o índice anunciou $expectedVersion.',
+      );
+    }
 
     if (!RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(manifest.id)) {
       throw AddonInstallException(
