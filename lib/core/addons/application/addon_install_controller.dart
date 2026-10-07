@@ -51,6 +51,17 @@ class AddonInstallController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> refreshInstalled() async {
+    await initialize();
+    final registry = _registry;
+    if (registry == null) {
+      throw AddonInstallException(
+        _initializationError ?? 'O registro local de addons não foi iniciado.',
+      );
+    }
+    await registry.refresh();
+  }
+
   Future<DirectoryInfo> directories() async {
     final addonsRoot = await _directories.addonsRoot();
     final addonDataRoot = await _directories.addonDataRoot();
