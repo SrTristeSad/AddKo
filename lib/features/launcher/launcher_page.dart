@@ -1,5 +1,10 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
 
+import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+
+import '../../core/addons/application/addon_install_controller.dart';
+import '../../core/addons/domain/installed_addon.dart';
 import '../../core/repositories/application/repository_registry.dart';
 import '../../core/repositories/application/repository_store_controller.dart';
 import '../settings/settings_page.dart';
@@ -9,11 +14,13 @@ class LauncherPage extends StatelessWidget {
   const LauncherPage({
     required this.repositoryRegistry,
     required this.repositoryStoreController,
+    required this.addonInstallController,
     super.key,
   });
 
   final RepositoryRegistry repositoryRegistry;
   final RepositoryStoreController repositoryStoreController;
+  final AddonInstallController addonInstallController;
 
   @override
   Widget build(BuildContext context) {
@@ -23,42 +30,57 @@ class LauncherPage extends StatelessWidget {
           children: [
             const _TopBar(),
             Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final isLandscape = constraints.maxWidth > constraints.maxHeight;
-                  final crossAxisCount = isLandscape
-                      ? constraints.maxWidth >= 1100
-                          ? 4
-                          : 3
-                      : constraints.maxWidth >= 700
-                          ? 3
-                          : 2;
+              child: AnimatedBuilder(
+                animation: addonInstallController,
+                builder: (context, _) {
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isLandscape =
+                          constraints.maxWidth > constraints.maxHeight;
+                      final crossAxisCount = isLandscape
+                          ? constraints.maxWidth >= 1100
+                              ? 4
+                              : 3
+                          : constraints.maxWidth >= 700
+                              ? 3
+                              : 2;
 
-                  return GridView.count(
-                    padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
-                    crossAxisCount: crossAxisCount,
-                    crossAxisSpacing: 20,
-                    mainAxisSpacing: 20,
-                    childAspectRatio: isLandscape ? 1.22 : 0.82,
-                    children: [
-                      _LauncherCard(
-                        title: 'Loja',
-                        subtitle: 'Repositórios e addons',
-                        icon: Icons.storefront_rounded,
-                        onOpen: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => StorePage(
-                                repositoryRegistry: repositoryRegistry,
-                                repositoryStoreController:
-                                    repositoryStoreController,
-                              ),
+                      final installed = addonInstallController.installedAddons;
+                      return GridView.count(
+                        padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
+                        crossAxisCount: crossAxisCount,
+                        crossAxisSpacing: 20,
+                        mainAxisSpacing: 20,
+                        childAspectRatio: isLandscape ? 1.22 : 0.82,
+                        children: [
+                          _LauncherCard(
+                            title: 'Loja',
+                            subtitle: 'Repositórios e addons',
+                            icon: Icons.storefront_rounded,
+                            onOpen: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => StorePage(
+                                    repositoryRegistry: repositoryRegistry,
+                                    repositoryStoreController:
+                                        repositoryStoreController,
+                                    addonInstallController:
+                                        addonInstallController,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          for (final addon in installed)
+                            _installedAddonCard(context, addon),
+                          if (installed.isEmpty)
+                            _EmptyAddonCard(
+                              initializationError:
+                                  addonInstallController.initializationError,
                             ),
-                          );
-                        },
-                      ),
-                      const _EmptyAddonCard(),
-                    ],
+                        ],
+                      );
+                    },
                   );
                 },
               ),
@@ -75,6 +97,36 @@ class LauncherPage extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _installedAddonCard(BuildContext context, InstalledAddon addon) {
+    final iconPath = addon.manifest.iconPath ?? 'icon.png';
+    final iconFile = File(p.join(addon.installPath, iconPath));
+
+    return _LauncherCard(
+      title: addon.manifest.name,
+      subtitle: '${addon.manifest.id} • v${addon.manifest.version}',
+      icon: Icons.extension_rounded,
+      artwork: iconFile.existsSync()
+          ? Image.file(
+              iconFile,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.extension_rounded,
+                size: 68,
+              ),
+            )
+          : null,
+      onOpen: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${addon.manifest.name} está instalado. A execução Python/xbmc é a próxima etapa do runtime legado.',
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -119,12 +171,14 @@ class _LauncherCard extends StatefulWidget {
     required this.subtitle,
     required this.icon,
     required this.onOpen,
+    this.artwork,
   });
 
   final String title;
   final String subtitle;
   final IconData icon;
   final VoidCallback onOpen;
+  final Widget? artwork;
 
   @override
   State<_LauncherCard> createState() => _LauncherCardState();
@@ -186,7 +240,11 @@ class _LauncherCardState extends State<_LauncherCard> {
                   ),
                   const Spacer(),
                   Center(
-                    child: Icon(widget.icon, size: 68, color: scheme.primary),
+                    child: SizedBox.square(
+                      dimension: 82,
+                      child: widget.artwork ??
+                          Icon(widget.icon, size: 68, color: scheme.primary),
+                    ),
                   ),
                   const Spacer(),
                   FilledButton.icon(
@@ -205,11 +263,14 @@ class _LauncherCardState extends State<_LauncherCard> {
 }
 
 class _EmptyAddonCard extends StatelessWidget {
-  const _EmptyAddonCard();
+  const _EmptyAddonCard({this.initializationError});
+
+  final String? initializationError;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final hasError = initializationError != null;
 
     return Card(
       shape: RoundedRectangleBorder(
@@ -222,22 +283,26 @@ class _EmptyAddonCard extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.extension_off_rounded,
+              hasError ? Icons.error_outline_rounded : Icons.extension_off_rounded,
               size: 56,
-              color: scheme.onSurfaceVariant,
+              color: hasError ? scheme.error : scheme.onSurfaceVariant,
             ),
             const SizedBox(height: 16),
             Text(
-              'Nenhum addon instalado',
+              hasError ? 'Falha ao abrir addons locais' : 'Nenhum addon instalado',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
             Text(
-              'Use a Loja para adicionar um repositório e instalar plugins.',
+              hasError
+                  ? initializationError!
+                  : 'Use a Loja para adicionar um repositório e instalar plugins.',
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
+                    color: hasError ? scheme.error : scheme.onSurfaceVariant,
                   ),
             ),
           ],
