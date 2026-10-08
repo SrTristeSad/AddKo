@@ -5,6 +5,8 @@ import 'package:ffi/ffi.dart';
 
 typedef _ProbeNative = Int32 Function();
 typedef _ProbeDart = int Function();
+typedef _ConfigureNative = Int32 Function(Pointer<Utf8> home);
+typedef _ConfigureDart = int Function(Pointer<Utf8> home);
 typedef _InitializeNative = Int32 Function();
 typedef _InitializeDart = int Function();
 typedef _IsInitializedNative = Int32 Function();
@@ -20,6 +22,9 @@ class EmbeddedPythonHost {
   EmbeddedPythonHost._(this._library)
       : _probe = _library.lookupFunction<_ProbeNative, _ProbeDart>(
           'addko_python_probe',
+        ),
+        _configure = _library.lookupFunction<_ConfigureNative, _ConfigureDart>(
+          'addko_python_configure',
         ),
         _initialize = _library.lookupFunction<_InitializeNative, _InitializeDart>(
           'addko_python_initialize',
@@ -37,17 +42,22 @@ class EmbeddedPythonHost {
         _version = _library.lookupFunction<_StringNative, _StringDart>(
           'addko_python_version',
         ),
+        _home = _library.lookupFunction<_StringNative, _StringDart>(
+          'addko_python_home',
+        ),
         _lastError = _library.lookupFunction<_StringNative, _StringDart>(
           'addko_python_last_error',
         );
 
   final DynamicLibrary _library;
   final _ProbeDart _probe;
+  final _ConfigureDart _configure;
   final _InitializeDart _initialize;
   final _IsInitializedDart _isInitialized;
   final _ExecDart _exec;
   final _ShutdownDart _shutdown;
   final _StringDart _version;
+  final _StringDart _home;
   final _StringDart _lastError;
 
   static EmbeddedPythonHost? tryOpen() {
@@ -78,16 +88,19 @@ class EmbeddedPythonHost {
 
   bool get isInitialized => _isInitialized() == 1;
 
-  String get version {
-    final pointer = _version();
-    if (pointer == nullptr) return '';
-    return pointer.toDartString();
-  }
+  String get version => _readString(_version());
 
-  String get lastError {
-    final pointer = _lastError();
-    if (pointer == nullptr) return '';
-    return pointer.toDartString();
+  String get home => _readString(_home());
+
+  String get lastError => _readString(_lastError());
+
+  int configure(String home) {
+    final pointer = home.toNativeUtf8();
+    try {
+      return _configure(pointer);
+    } finally {
+      malloc.free(pointer);
+    }
   }
 
   int initialize() => _initialize();
@@ -102,6 +115,11 @@ class EmbeddedPythonHost {
   }
 
   int shutdown() => _shutdown();
+
+  String _readString(Pointer<Utf8> pointer) {
+    if (pointer == nullptr) return '';
+    return pointer.toDartString();
+  }
 }
 
 class EmbeddedPythonProbe {
@@ -110,6 +128,7 @@ class EmbeddedPythonProbe {
     required this.pythonLibraryLoaded,
     required this.initialized,
     required this.version,
+    required this.home,
     required this.error,
   });
 
@@ -117,6 +136,7 @@ class EmbeddedPythonProbe {
   final bool pythonLibraryLoaded;
   final bool initialized;
   final String version;
+  final String home;
   final String error;
 
   factory EmbeddedPythonProbe.read() {
@@ -127,6 +147,7 @@ class EmbeddedPythonProbe {
         pythonLibraryLoaded: false,
         initialized: false,
         version: '',
+        home: '',
         error: 'Host nativo do CPython não está disponível nesta plataforma.',
       );
     }
@@ -137,6 +158,7 @@ class EmbeddedPythonProbe {
       pythonLibraryLoaded: available,
       initialized: available && host.isInitialized,
       version: available ? host.version : '',
+      home: host.home,
       error: available ? '' : host.lastError,
     );
   }
