@@ -68,8 +68,8 @@ class ServicesPage extends StatelessWidget {
                   addon: addon,
                   running: running.contains(addon.manifest.id),
                   error: errors[addon.manifest.id],
-                  onRetry: () => unawaited(
-                    serviceSupervisor.retry(addon.manifest.id),
+                  onRestart: () => unawaited(
+                    serviceSupervisor.restart(addon.manifest.id),
                   ),
                 ),
             ],
@@ -101,8 +101,16 @@ class _ServiceSummary extends StatelessWidget {
           spacing: 22,
           runSpacing: 12,
           children: [
-            _Metric(icon: Icons.settings_input_component_rounded, value: total, label: 'Instalados'),
-            _Metric(icon: Icons.play_circle_fill_rounded, value: running, label: 'Rodando'),
+            _Metric(
+              icon: Icons.settings_input_component_rounded,
+              value: total,
+              label: 'Instalados',
+            ),
+            _Metric(
+              icon: Icons.play_circle_fill_rounded,
+              value: running,
+              label: 'Rodando',
+            ),
             _Metric(
               icon: failed == 0 ? Icons.check_circle_rounded : Icons.error_rounded,
               value: failed,
@@ -156,13 +164,13 @@ class _ServiceCard extends StatelessWidget {
     required this.addon,
     required this.running,
     required this.error,
-    required this.onRetry,
+    required this.onRestart,
   });
 
   final InstalledAddon addon;
   final bool running;
   final String? error;
-  final VoidCallback onRetry;
+  final VoidCallback onRestart;
 
   @override
   Widget build(BuildContext context) {
@@ -244,12 +252,11 @@ class _ServiceCard extends StatelessWidget {
                 ],
               ),
             ),
-            if (hasError)
-              IconButton.filledTonal(
-                tooltip: 'Tentar iniciar novamente',
-                onPressed: onRetry,
-                icon: const Icon(Icons.restart_alt_rounded),
-              ),
+            IconButton.filledTonal(
+              tooltip: running ? 'Reiniciar serviço' : 'Tentar iniciar serviço',
+              onPressed: onRestart,
+              icon: const Icon(Icons.restart_alt_rounded),
+            ),
           ],
         ),
       ),
