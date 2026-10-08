@@ -57,8 +57,8 @@ void main() {
     await controller.initialize();
 
     expect(controller.requiredBy('script.module.dep'), hasLength(1));
-    expect(
-      () => controller.uninstall('script.module.dep'),
+    await expectLater(
+      controller.uninstall('script.module.dep'),
       throwsA(isA<AddonInstallException>()),
     );
     expect(await dependencyDirectory.exists(), isTrue);
