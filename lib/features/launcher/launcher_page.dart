@@ -49,7 +49,7 @@ class LauncherPage extends StatelessWidget {
                       final isLandscape =
                           constraints.maxWidth > constraints.maxHeight;
                       final crossAxisCount = isLandscape
-                          ? constraints.maxWidth >= 1100
+                          ? constraints.maxWidth >= 1700
                               ? 4
                               : 3
                           : constraints.maxWidth >= 700
@@ -57,14 +57,20 @@ class LauncherPage extends StatelessWidget {
                               : 2;
 
                       final launchable = addonInstallController.installedAddons
-                          .where((addon) => addon.manifest.isPythonPlugin)
+                          .where(
+                            (addon) =>
+                                addon.manifest.isPythonPlugin &&
+                                addonInstallController
+                                    .hasRequiredDependencies(addon),
+                          )
                           .toList(growable: false);
+
                       return GridView.count(
                         padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
                         crossAxisCount: crossAxisCount,
                         crossAxisSpacing: 20,
                         mainAxisSpacing: 20,
-                        childAspectRatio: isLandscape ? 1.22 : 0.82,
+                        childAspectRatio: isLandscape ? 1.05 : 0.78,
                         children: [
                           for (final addon in launchable)
                             _installedAddonCard(context, addon),
@@ -137,7 +143,7 @@ class LauncherPage extends StatelessWidget {
               fit: BoxFit.contain,
               errorBuilder: (_, __, ___) => const Icon(
                 Icons.extension_rounded,
-                size: 68,
+                size: 62,
               ),
             )
           : null,
@@ -184,7 +190,7 @@ class _TopBar extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            'Kodi Legacy Runtime • v0.1.2',
+            'Kodi Legacy Runtime • v0.1.3',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -232,7 +238,7 @@ class _LauncherCardState extends State<_LauncherCard> {
         ),
       },
       child: AnimatedScale(
-        scale: _focused ? 1.035 : 1,
+        scale: _focused ? 1.025 : 1,
         duration: const Duration(milliseconds: 140),
         child: Card(
           elevation: _focused ? 8 : 1,
@@ -247,7 +253,7 @@ class _LauncherCardState extends State<_LauncherCard> {
             borderRadius: BorderRadius.circular(22),
             onTap: widget.onOpen,
             child: Padding(
-              padding: const EdgeInsets.all(22),
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -259,7 +265,7 @@ class _LauncherCardState extends State<_LauncherCard> {
                           fontWeight: FontWeight.w700,
                         ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     widget.subtitle,
                     maxLines: 1,
@@ -268,19 +274,27 @@ class _LauncherCardState extends State<_LauncherCard> {
                           color: scheme.onSurfaceVariant,
                         ),
                   ),
-                  const Spacer(),
-                  Center(
-                    child: SizedBox.square(
-                      dimension: 82,
-                      child: widget.artwork ??
-                          Icon(widget.icon, size: 68, color: scheme.primary),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: 86,
+                          maxHeight: 86,
+                        ),
+                        child: widget.artwork ??
+                            Icon(widget.icon, size: 62, color: scheme.primary),
+                      ),
                     ),
                   ),
-                  const Spacer(),
-                  FilledButton.icon(
-                    onPressed: widget.onOpen,
-                    icon: const Icon(Icons.login_rounded),
-                    label: const Text('ENTRAR'),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 44,
+                    child: FilledButton.icon(
+                      onPressed: widget.onOpen,
+                      icon: const Icon(Icons.login_rounded),
+                      label: const Text('ENTRAR'),
+                    ),
                   ),
                 ],
               ),
@@ -319,7 +333,7 @@ class _EmptyAddonCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              hasError ? 'Falha ao abrir addons locais' : 'Nenhum addon instalado',
+              hasError ? 'Falha ao abrir addons locais' : 'Nenhum addon pronto',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium,
             ),
@@ -327,7 +341,7 @@ class _EmptyAddonCard extends StatelessWidget {
             Text(
               hasError
                   ? initializationError!
-                  : 'Abra a Loja no rodapé para adicionar um repositório e instalar plugins.',
+                  : 'Instale um plugin pela Loja. Addons com dependências incompletas ficam ocultos até a instalação terminar.',
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
