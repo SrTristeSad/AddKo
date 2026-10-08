@@ -103,6 +103,10 @@ class _AddKoAppState extends State<AddKoApp> {
   Future<void> _initializeLegacyRuntime() async {
     try {
       await _addonInstallController.initialize();
+      // Third-party Kodi repositories commonly omit standard script.module.*
+      // packages because Kodi resolves them through its official repository.
+      // Keep that catalog hidden but ready for dependency resolution.
+      unawaited(_repositoryStoreController.ensureKodiSystemCatalog());
       await _legacyServiceSupervisor.start();
     } catch (error, stackTrace) {
       debugPrint('Failed to initialize legacy runtime: $error');
