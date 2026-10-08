@@ -38,5 +38,12 @@ void main() {
     expect(find.byIcon(Icons.settings_rounded), findsOneWidget);
     expect(find.text('Loja'), findsNothing);
     expect(find.text('CONFIGURAÇÕES'), findsNothing);
+
+    await tester.tap(find.byIcon(Icons.settings_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Configurações'), findsOneWidget);
+    expect(find.text('Serviços'), findsOneWidget);
+    expect(find.text('Compatibilidade Kodi'), findsOneWidget);
   });
 }
