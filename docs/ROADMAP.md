@@ -21,7 +21,10 @@ Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
 - [x] resolvedor recursivo de dependências e versões;
 - [x] instalação automática de dependências antes do addon principal;
 - [x] atualização/reinstalação de pacote pela Loja;
-- [x] desinstalação no Addon Manager (UI de gerenciamento ainda pendente);
+- [x] desinstalação no Addon Manager;
+- [x] Addon Manager com busca, filtros, detalhes e acesso às configurações legadas;
+- [x] proteção contra remoção de dependência ainda usada por outro addon;
+- [x] opção de preservar ou apagar `addon_data` durante a desinstalação;
 - [x] validação de checksum de índices de repositório (MD5/SHA-1/SHA-256, incluindo endpoints GZip);
 - [ ] checksum de pacote quando a origem fornecer digest verificável;
 - [ ] cache local dos índices sincronizados;
