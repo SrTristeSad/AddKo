@@ -19,37 +19,36 @@ typedef _StringNative = Pointer<Utf8> Function();
 typedef _StringDart = Pointer<Utf8> Function();
 
 class EmbeddedPythonHost {
-  EmbeddedPythonHost._(this._library)
-      : _probe = _library.lookupFunction<_ProbeNative, _ProbeDart>(
+  EmbeddedPythonHost._(DynamicLibrary library)
+      : _probe = library.lookupFunction<_ProbeNative, _ProbeDart>(
           'addko_python_probe',
         ),
-        _configure = _library.lookupFunction<_ConfigureNative, _ConfigureDart>(
+        _configure = library.lookupFunction<_ConfigureNative, _ConfigureDart>(
           'addko_python_configure',
         ),
-        _initialize = _library.lookupFunction<_InitializeNative, _InitializeDart>(
+        _initialize = library.lookupFunction<_InitializeNative, _InitializeDart>(
           'addko_python_initialize',
         ),
-        _isInitialized = _library
+        _isInitialized = library
             .lookupFunction<_IsInitializedNative, _IsInitializedDart>(
           'addko_python_is_initialized',
         ),
-        _exec = _library.lookupFunction<_ExecNative, _ExecDart>(
+        _exec = library.lookupFunction<_ExecNative, _ExecDart>(
           'addko_python_exec',
         ),
-        _shutdown = _library.lookupFunction<_ShutdownNative, _ShutdownDart>(
+        _shutdown = library.lookupFunction<_ShutdownNative, _ShutdownDart>(
           'addko_python_shutdown',
         ),
-        _version = _library.lookupFunction<_StringNative, _StringDart>(
+        _version = library.lookupFunction<_StringNative, _StringDart>(
           'addko_python_version',
         ),
-        _home = _library.lookupFunction<_StringNative, _StringDart>(
+        _home = library.lookupFunction<_StringNative, _StringDart>(
           'addko_python_home',
         ),
-        _lastError = _library.lookupFunction<_StringNative, _StringDart>(
+        _lastError = library.lookupFunction<_StringNative, _StringDart>(
           'addko_python_last_error',
         );
 
-  final DynamicLibrary _library;
   final _ProbeDart _probe;
   final _ConfigureDart _configure;
   final _InitializeDart _initialize;
