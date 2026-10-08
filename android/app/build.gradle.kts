@@ -26,12 +26,10 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        // Python.org currently publishes official Android embeddable packages for
-        // these 64-bit ABIs. 32-bit ARM can be added later from a source build.
-        ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
-        }
-
+        // Do not set ndk.abiFilters here. Flutter's --split-per-abi configures
+        // ABI splits itself and AGP rejects using both mechanisms together.
+        // The release/test pipeline only publishes the ABIs for which AddKo
+        // currently stages CPython: arm64-v8a and x86_64.
         externalNativeBuild {
             cmake {
                 cppFlags += "-std=c++17"
