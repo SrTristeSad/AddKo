@@ -115,6 +115,16 @@ def main() -> int:
     assert xbmc.TRAY_CLOSED_NO_MEDIA == 64
     assert xbmc.TRAY_CLOSED_MEDIA_PRESENT == 96
 
+    # Old Kodi addons commonly perform these conversions without validation.
+    # An empty label therefore breaks startup immediately.
+    build_version = xbmc.getInfoLabel("System.BuildVersion")
+    assert build_version.startswith("21.")
+    assert int(build_version.split(".", 1)[0]) == 21
+    assert float(build_version[:4]) >= 21.0
+    assert xbmc.getInfoLabel("System.BuildVersionShort") == "21.0"
+    assert xbmc.getInfoLabel("System.BuildVersionCode") == "21.0.0"
+    assert xbmc.getCondVisibility("System.Platform.Android") is True
+
     assert xbmcplugin.SORT_METHOD_NONE == 0
     assert xbmcplugin.SORT_METHOD_UNSORTED == 40
     assert xbmcplugin.SORT_METHOD_BITRATE == 43
