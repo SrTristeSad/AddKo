@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -31,6 +32,7 @@ class RepositoryClient {
 
   static const int _maxIndexBytes = 24 * 1024 * 1024;
   static const int _maxChecksumBytes = 64 * 1024;
+  static const Duration _requestTimeout = Duration(seconds: 12);
 
   final http.Client _client;
   final bool _ownsClient;
@@ -134,13 +136,22 @@ class RepositoryClient {
   }
 
   Future<_DownloadedXml> _downloadXml(Uri uri) async {
-    final response = await _client.get(
-      uri,
-      headers: const {
-        'Accept': 'application/xml,text/xml,application/gzip,*/*',
-        'User-Agent': 'AddKo/0.1.0',
-      },
-    );
+    late http.Response response;
+    try {
+      response = await _client
+          .get(
+            uri,
+            headers: const {
+              'Accept': 'application/xml,text/xml,application/gzip,*/*',
+              'User-Agent': 'AddKo/0.1.0',
+            },
+          )
+          .timeout(_requestTimeout);
+    } on TimeoutException {
+      throw RepositorySyncException(
+        'Tempo esgotado ao acessar $uri (${_requestTimeout.inSeconds}s).',
+      );
+    }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw RepositorySyncException(
@@ -177,13 +188,22 @@ class RepositoryClient {
   }
 
   Future<String> _downloadChecksum(Uri uri) async {
-    final response = await _client.get(
-      uri,
-      headers: const {
-        'Accept': 'text/plain,*/*',
-        'User-Agent': 'AddKo/0.1.0',
-      },
-    );
+    late http.Response response;
+    try {
+      response = await _client
+          .get(
+            uri,
+            headers: const {
+              'Accept': 'text/plain,*/*',
+              'User-Agent': 'AddKo/0.1.0',
+            },
+          )
+          .timeout(_requestTimeout);
+    } on TimeoutException {
+      throw RepositorySyncException(
+        'Tempo esgotado ao acessar checksum $uri (${_requestTimeout.inSeconds}s).',
+      );
+    }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw RepositorySyncException(
@@ -213,6 +233,14 @@ class RepositoryClient {
     }
 
     add(source);
+
+    final lowerPath = source.path.toLowerCase();
+    final looksLikeDirectFile = lowerPath.endsWith('.xml') ||
+        lowerPath.endsWith('.xml.gz') ||
+        lowerPath.endsWith('.gz');
+    if (looksLikeDirectFile) {
+      return result;
+    }
 
     final directory = source.path.endsWith('/')
         ? source
