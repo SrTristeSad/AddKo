@@ -106,14 +106,19 @@ class RepositoryCatalogPage extends StatelessWidget {
     var label = 'Instalar';
     var icon = Icons.download_rounded;
     if (installed != null) {
-      final current = KodiVersion(installed.manifest.version);
-      final available = KodiVersion(addon.manifest.version);
-      if (current.compareTo(available) < 0) {
-        label = 'Atualizar';
-        icon = Icons.system_update_alt_rounded;
+      if (!addonInstallController.hasRequiredDependencies(installed)) {
+        label = 'Corrigir';
+        icon = Icons.build_circle_outlined;
       } else {
-        label = 'Reinstalar';
-        icon = Icons.refresh_rounded;
+        final current = KodiVersion(installed.manifest.version);
+        final available = KodiVersion(addon.manifest.version);
+        if (current.compareTo(available) < 0) {
+          label = 'Atualizar';
+          icon = Icons.system_update_alt_rounded;
+        } else {
+          label = 'Reinstalar';
+          icon = Icons.refresh_rounded;
+        }
       }
     }
 
@@ -145,40 +150,50 @@ class RepositoryCatalogPage extends StatelessWidget {
     }
 
     final dependencies = plan.installOrder
-        .where((entry) => entry.manifest.id != addon.manifest.id)
+        .where(
+          (entry) =>
+              entry.manifest.id.toLowerCase() != addon.manifest.id.toLowerCase(),
+        )
         .toList(growable: false);
 
     final confirmed = await showDialog<bool>(
           context: context,
           builder: (dialogContext) {
+            final maxContentHeight =
+                MediaQuery.sizeOf(dialogContext).height * 0.48;
             return AlertDialog(
               title: KodiText('Instalar ${addon.manifest.name}?'),
               content: SizedBox(
-                width: 560,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('${addon.manifest.id} • v${addon.manifest.version}'),
-                    const SizedBox(height: 12),
-                    if (dependencies.isEmpty)
-                      const Text(
-                        'Nenhuma dependência adicional precisa ser instalada.',
-                      )
-                    else ...[
-                      Text(
-                        '${dependencies.length} dependência(s) serão instaladas automaticamente:',
-                      ),
-                      const SizedBox(height: 8),
-                      for (final dependency in dependencies)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: KodiText(
-                            '• ${dependency.manifest.name} (${dependency.manifest.id}) v${dependency.manifest.version}',
+                width: 620,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: maxContentHeight),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${addon.manifest.id} • v${addon.manifest.version}'),
+                        const SizedBox(height: 12),
+                        if (dependencies.isEmpty)
+                          const Text(
+                            'Nenhuma dependência adicional precisa ser instalada.',
+                          )
+                        else ...[
+                          Text(
+                            '${dependencies.length} dependência(s) serão instaladas automaticamente:',
                           ),
-                        ),
-                    ],
-                  ],
+                          const SizedBox(height: 8),
+                          for (final dependency in dependencies)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: KodiText(
+                                '• ${dependency.manifest.name} (${dependency.manifest.id}) v${dependency.manifest.version}',
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
               actions: [
@@ -242,22 +257,31 @@ class RepositoryCatalogPage extends StatelessWidget {
     return showDialog<void>(
       context: context,
       builder: (dialogContext) {
+        final maxContentHeight =
+            MediaQuery.sizeOf(dialogContext).height * 0.48;
         return AlertDialog(
           title: KodiText('Não foi possível instalar ${addon.manifest.name}'),
           content: SizedBox(
-            width: 580,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Dependências ou pacotes necessários estão ausentes:'),
-                const SizedBox(height: 10),
-                for (final issue in plan.issues)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Text('• ${issue.addonId}: ${issue.message}'),
-                  ),
-              ],
+            width: 620,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxContentHeight),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Dependências ou pacotes necessários estão ausentes:',
+                    ),
+                    const SizedBox(height: 10),
+                    for (final issue in plan.issues)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text('• ${issue.addonId}: ${issue.message}'),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
           actions: [
