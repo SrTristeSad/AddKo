@@ -90,19 +90,55 @@ class AddonInstallController extends ChangeNotifier {
     required Iterable<RepositoryCatalog> catalogs,
   }) async {
     await initialize();
-    final registry = _registry;
-    if (registry == null) {
-      throw AddonInstallException(
-        _initializationError ?? 'O registro local de addons não foi iniciado.',
-      );
-    }
+    final registry = _requireRegistry();
 
     final plan = buildPlan(addon: addon, catalogs: catalogs);
     if (!plan.canInstall) {
       return plan;
     }
 
-    final root = registry.addonsRoot;
+    await _installPlan(plan, registry);
+    return plan;
+  }
+
+  Future<LocalPackageInstallResult> installLocalPackage({
+    required List<int> bytes,
+    required Iterable<RepositoryCatalog> catalogs,
+  }) async {
+    await initialize();
+    final registry = _requireRegistry();
+
+    final installed = await _installer.installBytes(
+      bytes: bytes,
+      addonsRoot: registry.addonsRoot,
+    );
+    await registry.refresh();
+
+    final root = RepositoryAddonEntry(
+      manifest: installed.manifest,
+      category: RepositoryAddonCategory.other,
+    );
+    final dependencyPlan = dependencyResolver.resolve(
+      root: root,
+      catalogs: catalogs,
+      installedAddons: installedAddons,
+      installRoot: false,
+    );
+
+    if (dependencyPlan.canInstall) {
+      await _installPlan(dependencyPlan, registry);
+    }
+
+    return LocalPackageInstallResult(
+      addon: registry.byId(installed.manifest.id) ?? installed,
+      dependencyPlan: dependencyPlan,
+    );
+  }
+
+  Future<void> _installPlan(
+    AddonInstallPlan plan,
+    InstalledAddonRegistry registry,
+  ) async {
     try {
       for (final entry in plan.installOrder) {
         final packageUri = entry.packageUri!;
@@ -111,7 +147,7 @@ class AddonInstallController extends ChangeNotifier {
 
         await _installer.installFromUri(
           packageUri: packageUri,
-          addonsRoot: root,
+          addonsRoot: registry.addonsRoot,
           expectedAddonId: entry.manifest.id,
           expectedVersion: entry.manifest.version,
         );
@@ -123,8 +159,16 @@ class AddonInstallController extends ChangeNotifier {
       }
       notifyListeners();
     }
+  }
 
-    return plan;
+  InstalledAddonRegistry _requireRegistry() {
+    final registry = _registry;
+    if (registry == null) {
+      throw AddonInstallException(
+        _initializationError ?? 'O registro local de addons não foi iniciado.',
+      );
+    }
+    return registry;
   }
 
   List<InstalledAddon> requiredBy(String addonId) {
@@ -133,8 +177,11 @@ class AddonInstallController extends ChangeNotifier {
         (dependency) => !dependency.optional && dependency.id == addonId,
       );
     }).toList(growable: false)
-      ..sort((left, right) =>
-          left.manifest.name.toLowerCase().compareTo(right.manifest.name.toLowerCase()));
+      ..sort(
+        (left, right) => left.manifest.name
+            .toLowerCase()
+            .compareTo(right.manifest.name.toLowerCase()),
+      );
     return dependents;
   }
 
@@ -144,12 +191,7 @@ class AddonInstallController extends ChangeNotifier {
     bool force = false,
   }) async {
     await initialize();
-    final registry = _registry;
-    if (registry == null) {
-      throw AddonInstallException(
-        _initializationError ?? 'O registro local de addons não foi iniciado.',
-      );
-    }
+    final registry = _requireRegistry();
 
     final addon = registry.byId(addonId);
     if (addon == null) {
@@ -195,6 +237,18 @@ class AddonInstallController extends ChangeNotifier {
     }
     super.dispose();
   }
+}
+
+class LocalPackageInstallResult {
+  const LocalPackageInstallResult({
+    required this.addon,
+    required this.dependencyPlan,
+  });
+
+  final InstalledAddon addon;
+  final AddonInstallPlan dependencyPlan;
+
+  bool get dependenciesResolved => dependencyPlan.canInstall;
 }
 
 class DirectoryInfo {
