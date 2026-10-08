@@ -18,11 +18,15 @@ Thumbs.db
 
 # Generated platform build files
 android/.gradle/
+android/local.properties/
 android/local.properties
 ios/Pods/
 macos/Pods/
 linux/flutter/ephemeral/
 windows/flutter/ephemeral/
+
+# Build/download caches
+.cache/addko-python/
 
 # Runtime data
 .addko/
