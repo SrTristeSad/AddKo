@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/addons/application/addon_install_controller.dart';
 import '../../core/runtime/legacy/legacy_service_supervisor.dart';
+import 'compatibility_page.dart';
 import 'services_page.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -51,10 +52,17 @@ class SettingsPage extends StatelessWidget {
             title: 'Player',
             subtitle: 'Reprodução, áudio, legendas e decodificação.',
           ),
-          const _SettingsTile(
+          _SettingsTile(
             icon: Icons.history_rounded,
             title: 'Compatibilidade Kodi',
-            subtitle: 'Estado do runtime legado e APIs xbmc.',
+            subtitle: 'Runtime legado, host nativo e estado do CPython embarcado.',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const CompatibilityPage(),
+                ),
+              );
+            },
           ),
         ],
       ),
