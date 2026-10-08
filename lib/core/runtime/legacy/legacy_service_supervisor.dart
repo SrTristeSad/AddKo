@@ -7,20 +7,31 @@ import 'package:path/path.dart' as p;
 
 import '../../addons/application/addon_install_controller.dart';
 import '../../addons/domain/installed_addon.dart';
+import 'kodi_json_rpc_compat.dart';
 import 'legacy_runtime_collector.dart';
 import 'legacy_runtime_request.dart';
 import 'process_python_executor.dart';
 import 'python_runtime_bundle.dart';
 
+typedef LegacyServiceEventHandler = FutureOr<void> Function(
+  String addonId,
+  String method,
+  Map<String, Object?> params,
+);
+
 class LegacyServiceSupervisor extends ChangeNotifier {
   LegacyServiceSupervisor({
     required this.addonInstallController,
+    this.eventHandler,
     PythonRuntimeBundle? runtimeBundle,
     PythonExecutableResolver? pythonResolver,
   })  : _runtimeBundle = runtimeBundle ?? PythonRuntimeBundle(),
         _pythonResolver = pythonResolver ?? const PythonExecutableResolver();
 
+  static const KodiJsonRpcCompat _jsonRpc = KodiJsonRpcCompat();
+
   final AddonInstallController addonInstallController;
+  final LegacyServiceEventHandler? eventHandler;
   final PythonRuntimeBundle _runtimeBundle;
   final PythonExecutableResolver _pythonResolver;
 
@@ -107,6 +118,24 @@ class LegacyServiceSupervisor extends ChangeNotifier {
   Future<void> retry(String addonId) async {
     _failedVersions.remove(addonId);
     _errors.remove(addonId);
+    _notifyListenersSafely();
+    await reconcile();
+  }
+
+  Future<void> restart(String addonId) async {
+    if (_disposed) {
+      return;
+    }
+
+    _failedVersions.remove(addonId);
+    _errors.remove(addonId);
+    final running = _running[addonId];
+    if (running != null) {
+      await _stopRunning(running);
+      if (identical(_running[addonId], running)) {
+        _running.remove(addonId);
+      }
+    }
     _notifyListenersSafely();
     await reconcile();
   }
@@ -244,6 +273,9 @@ class LegacyServiceSupervisor extends ChangeNotifier {
         case 'xbmc.Monitor.waitForAbort':
           result = await _waitForAbort(running, request);
           break;
+        case 'xbmc.executeJSONRPC':
+          result = _jsonRpc.handle(request.params['request']?.toString() ?? '');
+          break;
         default:
           break;
       }
@@ -287,18 +319,37 @@ class LegacyServiceSupervisor extends ChangeNotifier {
         if (message != null && message.isNotEmpty) {
           debugPrint('[AddKo service ${running.addonId}] $message');
         }
-      } else if (method == 'invocation.error') {
+        return;
+      }
+
+      if (method == 'invocation.error') {
         final message = values['message']?.toString() ?? 'Falha no serviço.';
         _errors[running.addonId] = message;
         _notifyListenersSafely();
-      } else if (method == 'xbmc.executebuiltin') {
+        return;
+      }
+
+      final handler = eventHandler;
+      if (handler != null) {
+        await Future<void>.sync(
+          () => handler(running.addonId, method, values),
+        );
+        return;
+      }
+
+      if (method == 'xbmc.executebuiltin') {
         final function = values['function']?.toString() ?? '';
         debugPrint(
-          '[AddKo service ${running.addonId}] built-in pendente no background: $function',
+          '[AddKo service ${running.addonId}] built-in sem host: $function',
         );
       }
     } on FormatException {
       debugPrint('[AddKo service ${running.addonId}] protocolo inválido: $payload');
+    } on Object catch (error, stackTrace) {
+      debugPrint(
+        '[AddKo service ${running.addonId}] falha ao encaminhar evento: $error',
+      );
+      debugPrintStack(stackTrace: stackTrace);
     }
   }
 
