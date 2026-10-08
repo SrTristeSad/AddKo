@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import shutil
 import tarfile
 import urllib.request
@@ -19,6 +18,7 @@ from pathlib import Path
 PYTHON_VERSION = "3.14.8"
 PYTHON_MINOR = "3.14"
 BASE_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}"
+CPYTHON_RAW_BASE = f"https://raw.githubusercontent.com/python/cpython/v{PYTHON_VERSION}/Lib"
 
 RUNTIMES = {
     "arm64-v8a": {
@@ -30,6 +30,16 @@ RUNTIMES = {
         "sha256": "58eb3b2d76ef57e076985a0a6b093cf08906d65ea4ab78cccc6d894d4250c972",
     },
 }
+
+# Some official Android embeddable archives have historically omitted pure
+# Python package children even though their parent package is present. CPython
+# 3.13+ implements zipfile.Path through zipfile._path, and importlib.resources
+# can import it indirectly. Keep these files synchronized from the exact
+# CPython tag used by the runtime when the archive does not contain them.
+REQUIRED_STDLIB_FILES = (
+    "zipfile/_path/__init__.py",
+    "zipfile/_path/glob.py",
+)
 
 
 def repo_root() -> Path:
@@ -69,6 +79,20 @@ def download(url: str, destination: Path, expected_sha256: str) -> None:
     temporary.replace(destination)
 
 
+def download_text(url: str, destination: Path) -> None:
+    """Fetch a missing pure-Python stdlib file from the matching CPython tag."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "AddKo-build/0.1 (+https://github.com/SrTristeSad/AddKo)"},
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        data = response.read()
+    if not data or b"404: Not Found" in data[:64]:
+        raise RuntimeError(f"Failed to restore CPython stdlib file from {url}")
+    destination.write_bytes(data)
+
+
 def safe_extract(archive: Path, destination: Path) -> None:
     marker = destination / ".addko-extracted"
     if marker.exists():
@@ -104,6 +128,26 @@ def locate_prefix(extracted: Path) -> Path:
     return matches[0]
 
 
+def ensure_required_stdlib(stdlib_root: Path) -> None:
+    for relative in REQUIRED_STDLIB_FILES:
+        target = stdlib_root / relative
+        if target.is_file() and target.stat().st_size > 0:
+            continue
+        print(f"[AddKo] restoring missing CPython stdlib file: {relative}")
+        download_text(f"{CPYTHON_RAW_BASE}/{relative}", target)
+
+    missing = [
+        relative
+        for relative in REQUIRED_STDLIB_FILES
+        if not (stdlib_root / relative).is_file()
+    ]
+    if missing:
+        raise RuntimeError(
+            "CPython Android runtime is missing required stdlib files: "
+            + ", ".join(missing)
+        )
+
+
 def copy_tree_for_assets(source: Path, destination: Path) -> None:
     if destination.exists():
         shutil.rmtree(destination)
@@ -124,7 +168,11 @@ def copy_tree_for_assets(source: Path, destination: Path) -> None:
 def stage_abi(prefix: Path, abi: str, output_root: Path) -> None:
     asset_prefix = output_root / "assets" / "addko_python" / PYTHON_VERSION / abi / "prefix"
     stdlib_source = prefix / "lib" / f"python{PYTHON_MINOR}"
+    ensure_required_stdlib(stdlib_source)
     copy_tree_for_assets(stdlib_source, asset_prefix / "lib" / f"python{PYTHON_MINOR}")
+
+    staged_stdlib = asset_prefix / "lib" / f"python{PYTHON_MINOR}"
+    ensure_required_stdlib(staged_stdlib)
 
     jni_dir = output_root / "jniLibs" / abi
     if jni_dir.exists():
