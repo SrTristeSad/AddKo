@@ -1,5 +1,6 @@
 import '../domain/addon_dependency.dart';
 import '../domain/installed_addon.dart';
+import '../domain/kodi_host_capabilities.dart';
 import '../domain/kodi_version.dart';
 import '../../repositories/domain/repository_catalog.dart';
 
@@ -68,7 +69,22 @@ class AddonDependencyResolver {
       }
 
       for (final dependency in entry.manifest.dependencies) {
-        if (dependency.optional || _isHostCapability(dependency.id)) {
+        if (dependency.optional) {
+          continue;
+        }
+
+        final hostVersion = KodiHostCapabilities.versionFor(dependency.id);
+        if (hostVersion != null) {
+          if (!KodiVersion(hostVersion).isAtLeast(dependency.version)) {
+            issues.add(
+              AddonDependencyIssue(
+                addonId: dependency.id,
+                message: dependency.version == null
+                    ? 'A capacidade do núcleo Kodi não está disponível.'
+                    : 'O addon exige ${dependency.version}, mas o núcleo AddKo/Kodi Omega fornece $hostVersion.',
+              ),
+            );
+          }
           continue;
         }
 
@@ -88,8 +104,8 @@ class AddonDependencyResolver {
             AddonDependencyIssue(
               addonId: dependency.id,
               message: dependency.version == null
-                  ? 'Dependência obrigatória não encontrada nos repositórios ativos.'
-                  : 'Versão ${dependency.version} ou superior não encontrada nos repositórios ativos.',
+                  ? 'Dependência obrigatória não encontrada nos repositórios disponíveis.'
+                  : 'Versão ${dependency.version} ou superior não encontrada nos repositórios disponíveis.',
             ),
           );
           continue;
@@ -156,9 +172,5 @@ class AddonDependencyResolver {
     }
 
     return selected;
-  }
-
-  bool _isHostCapability(String addonId) {
-    return addonId.startsWith('xbmc.') || addonId.startsWith('kodi.');
   }
 }
