@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/runtime/legacy/android_python_runtime.dart';
 import '../../core/runtime/legacy/embedded_python_host.dart';
+import '../../core/runtime/legacy/embedded_python_self_test.dart';
 
 class CompatibilityPage extends StatefulWidget {
   const CompatibilityPage({super.key});
@@ -16,8 +17,10 @@ class CompatibilityPage extends StatefulWidget {
 class _CompatibilityPageState extends State<CompatibilityPage> {
   EmbeddedPythonProbe _probe = EmbeddedPythonProbe.read();
   AndroidPythonRuntimeInfo? _androidRuntime;
+  EmbeddedPythonSelfTestResult? _selfTest;
   String? _prepareError;
   bool _preparing = false;
+  bool _testing = false;
 
   @override
   void initState() {
@@ -44,18 +47,29 @@ class _CompatibilityPageState extends State<CompatibilityPage> {
       if (!mounted) return;
       setState(() => _prepareError = error.toString());
     } finally {
-      if (mounted) {
-        setState(() => _preparing = false);
-      }
+      if (mounted) setState(() => _preparing = false);
     }
   }
 
   Future<void> _refresh() async {
-    if (Platform.isAndroid) {
-      await _prepareAndroidRuntime();
-    }
+    if (Platform.isAndroid) await _prepareAndroidRuntime();
     if (!mounted) return;
     setState(() => _probe = EmbeddedPythonProbe.read());
+  }
+
+  Future<void> _runSelfTest() async {
+    if (_testing) return;
+    setState(() {
+      _testing = true;
+      _selfTest = null;
+    });
+    final result = await runEmbeddedPythonSelfTest();
+    if (!mounted) return;
+    setState(() {
+      _testing = false;
+      _selfTest = result;
+      _probe = EmbeddedPythonProbe.read();
+    });
   }
 
   @override
@@ -118,6 +132,63 @@ class _CompatibilityPageState extends State<CompatibilityPage> {
                 ? 'O interpretador está ativo${_probe.home.isEmpty ? '.' : ' em ${_probe.home}.'}'
                 : 'O interpretador será inicializado no primeiro addon executado.',
           ),
+          if (Platform.isAndroid)
+            Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.science_rounded),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Teste real do runtime',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        FilledButton.icon(
+                          onPressed: _testing ? null : () => unawaited(_runSelfTest()),
+                          icon: _testing
+                              ? const SizedBox.square(
+                                  dimension: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.play_arrow_rounded),
+                          label: const Text('TESTAR'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _selfTest == null
+                          ? 'Executa um subinterpretador e importa módulos nativos e padrão usados por addons.'
+                          : '${_selfTest!.passed ? 'OK' : 'FALHOU'} • ${_selfTest!.message}',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: _selfTest == null
+                                ? scheme.onSurfaceVariant
+                                : _selfTest!.passed
+                                    ? scheme.primary
+                                    : scheme.error,
+                          ),
+                    ),
+                    if (_selfTest?.version.isNotEmpty == true ||
+                        _selfTest?.abi.isNotEmpty == true) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        '${_selfTest!.version} • ${_selfTest!.abi}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           if (_probe.error.trim().isNotEmpty)
             Card(
               margin: const EdgeInsets.only(top: 6),
