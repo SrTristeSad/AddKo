@@ -86,7 +86,8 @@ class AddonPackageInstaller {
     final manifestText = _decodeArchiveFile(manifestFile.file);
     final manifest = manifestParser.parse(manifestText);
 
-    if (expectedAddonId != null && manifest.id != expectedAddonId) {
+    if (expectedAddonId != null &&
+        manifest.id.toLowerCase() != expectedAddonId.toLowerCase()) {
       throw AddonInstallException(
         'O pacote baixado declara ${manifest.id}, mas era esperado $expectedAddonId.',
       );
@@ -138,13 +139,23 @@ class AddonPackageInstaller {
         );
       }
 
-      final hasExisting = await target.exists();
-      if (hasExisting) {
-        await target.rename(backup.path);
-      }
+      await _moveExistingAside(target, backup);
 
       try {
         await staging.rename(target.path);
+      } on FileSystemException catch (error) {
+        // Android can report ENOENT if another install from an older build was
+        // still finishing. Re-check the filesystem before deciding whether the
+        // replacement really failed.
+        if (await target.exists()) {
+          await target.delete(recursive: true);
+          await staging.rename(target.path);
+        } else {
+          if (await backup.exists()) {
+            await backup.rename(target.path);
+          }
+          rethrow;
+        }
       } on Object {
         if (await backup.exists() && !await target.exists()) {
           await backup.rename(target.path);
@@ -171,6 +182,26 @@ class AddonPackageInstaller {
       if (await backup.exists() && await target.exists()) {
         await backup.delete(recursive: true);
       }
+    }
+  }
+
+  Future<void> _moveExistingAside(
+    Directory target,
+    Directory backup,
+  ) async {
+    if (!await target.exists()) {
+      return;
+    }
+
+    try {
+      await target.rename(backup.path);
+    } on FileSystemException {
+      // exists() and rename() are separate syscalls. If the directory vanished
+      // between them, another operation already removed it and we can proceed.
+      if (!await target.exists()) {
+        return;
+      }
+      rethrow;
     }
   }
 
