@@ -22,7 +22,7 @@ void main() {
     expect(spans.single.style?.color, const Color(0xffffa500));
   });
 
-  testWidgets('KodiText does not expose markup as visible text', (tester) async {
+  testWidgets('KodiText renders the label without exposing markup', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -31,8 +31,12 @@ void main() {
       ),
     );
 
-    expect(find.textContaining('[COLOR'), findsNothing);
-    expect(find.textContaining('[B]'), findsNothing);
-    expect(find.text('Vikings'), findsOneWidget);
+    final richFinder = find.descendant(
+      of: find.byType(KodiText),
+      matching: find.byType(RichText),
+    );
+    expect(richFinder, findsOneWidget);
+    final richText = tester.widget<RichText>(richFinder);
+    expect(richText.text.toPlainText(), 'Vikings');
   });
 }
