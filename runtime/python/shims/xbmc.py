@@ -92,6 +92,38 @@ def validatePath(path: str) -> str:
     return special_path(path)
 
 
+class Keyboard:
+    """Compatibility wrapper for the historical xbmc.Keyboard API.
+
+    Kodi exposes Keyboard both through xbmc.Keyboard and xbmcgui.Keyboard in
+    legacy Python addons. Keep the implementation in xbmcgui and delegate here
+    so old addons such as IPTV clients continue to work unchanged.
+    """
+
+    def __init__(self, default: str = "", heading: str = "", hidden: bool = False) -> None:
+        from xbmcgui import Keyboard as GuiKeyboard
+
+        self._keyboard = GuiKeyboard(default, heading, hidden)
+
+    def doModal(self, autoclose: int = 0) -> None:
+        self._keyboard.doModal(autoclose)
+
+    def isConfirmed(self) -> bool:
+        return self._keyboard.isConfirmed()
+
+    def getText(self) -> str:
+        return self._keyboard.getText()
+
+    def setDefault(self, value: str) -> None:
+        self._keyboard.setDefault(value)
+
+    def setHeading(self, value: str) -> None:
+        self._keyboard.setHeading(value)
+
+    def setHiddenInput(self, value: bool) -> None:
+        self._keyboard.setHiddenInput(value)
+
+
 class Monitor:
     def __init__(self) -> None:
         self._abort = False
