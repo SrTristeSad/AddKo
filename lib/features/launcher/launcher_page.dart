@@ -10,6 +10,7 @@ import '../../core/addons/domain/installed_addon.dart';
 import '../../core/repositories/application/repository_registry.dart';
 import '../../core/repositories/application/repository_store_controller.dart';
 import '../../core/runtime/legacy/legacy_plugin_runtime.dart';
+import '../../core/runtime/legacy/legacy_service_supervisor.dart';
 import '../legacy/legacy_addon_page.dart';
 import '../legacy/legacy_flutter_ui_bridge.dart';
 import '../settings/settings_page.dart';
@@ -20,6 +21,7 @@ class LauncherPage extends StatelessWidget {
     required this.repositoryRegistry,
     required this.repositoryStoreController,
     required this.addonInstallController,
+    required this.serviceSupervisor,
     this.onExitRequested,
     super.key,
   });
@@ -27,6 +29,7 @@ class LauncherPage extends StatelessWidget {
   final RepositoryRegistry repositoryRegistry;
   final RepositoryStoreController repositoryStoreController;
   final AddonInstallController addonInstallController;
+  final LegacyServiceSupervisor serviceSupervisor;
   final Future<void> Function()? onExitRequested;
 
   @override
@@ -82,7 +85,10 @@ class LauncherPage extends StatelessWidget {
               onSettings: () {
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(
-                    builder: (_) => const SettingsPage(),
+                    builder: (_) => SettingsPage(
+                      addonInstallController: addonInstallController,
+                      serviceSupervisor: serviceSupervisor,
+                    ),
                   ),
                 );
               },
