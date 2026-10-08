@@ -1,11 +1,15 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../../core/addons/application/addon_install_controller.dart';
 import '../../core/repositories/application/repository_registry.dart';
 import '../../core/repositories/application/repository_store_controller.dart';
 import '../../core/repositories/domain/repository_source.dart';
+import '../../core/repositories/infrastructure/repository_descriptor_parser.dart';
 import 'repository_catalog_page.dart';
 
 class StorePage extends StatefulWidget {
@@ -25,7 +29,14 @@ class StorePage extends StatefulWidget {
 }
 
 class _StorePageState extends State<StorePage> {
+  static const XTypeGroup _zipTypeGroup = XTypeGroup(
+    label: 'Kodi addon ZIP',
+    extensions: <String>['zip'],
+    mimeTypes: <String>['application/zip', 'application/x-zip-compressed'],
+  );
+
   bool _syncScheduled = false;
+  bool _installingZip = false;
 
   @override
   void initState() {
@@ -73,6 +84,16 @@ class _StorePageState extends State<StorePage> {
       appBar: AppBar(
         title: const Text('Loja'),
         actions: [
+          IconButton(
+            tooltip: 'Instalar addon por ZIP',
+            onPressed: _installingZip ? null : () => unawaited(_installZip()),
+            icon: _installingZip
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.folder_zip_rounded),
+          ),
           IconButton(
             tooltip: 'Atualizar todos',
             onPressed: () => unawaited(
@@ -142,6 +163,123 @@ class _StorePageState extends State<StorePage> {
     );
   }
 
+  Future<void> _installZip() async {
+    final selected = await openFile(
+      acceptedTypeGroups: const <XTypeGroup>[_zipTypeGroup],
+    );
+    if (selected == null || !mounted) {
+      return;
+    }
+
+    setState(() => _installingZip = true);
+    try {
+      final bytes = await selected.readAsBytes();
+      final result = await widget.addonInstallController.installLocalPackage(
+        bytes: bytes,
+        catalogs: widget.repositoryStoreController.catalogs,
+      );
+
+      var repositoryRegistered = false;
+      if (result.addon.manifest.isRepository) {
+        repositoryRegistered = await _registerRepositoryAddon(result.addon.installPath);
+      }
+
+      if (!mounted) return;
+      if (!result.dependenciesResolved) {
+        await _showDependencyIssues(
+          addonName: result.addon.manifest.name,
+          issues: result.dependencyPlan.issues
+              .map((issue) => '${issue.addonId}: ${issue.message}')
+              .toList(growable: false),
+        );
+        return;
+      }
+
+      final repositorySuffix = repositoryRegistered
+          ? ' O repositório também foi adicionado à Loja.'
+          : '';
+      _showMessage(
+        '${result.addon.manifest.name} instalado com sucesso.$repositorySuffix',
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      _showError('Falha ao instalar o ZIP: $error');
+    } finally {
+      if (mounted) {
+        setState(() => _installingZip = false);
+      }
+    }
+  }
+
+  Future<bool> _registerRepositoryAddon(String installPath) async {
+    final manifestFile = File(p.join(installPath, 'addon.xml'));
+    if (!await manifestFile.exists()) {
+      return false;
+    }
+
+    final descriptor = const RepositoryDescriptorParser().parse(
+      await manifestFile.readAsString(),
+    );
+    var added = false;
+    for (final endpoint in descriptor.endpoints) {
+      final alreadyRegistered = widget.repositoryRegistry.sources.any(
+        (source) => source.uri == endpoint.infoUri,
+      );
+      if (alreadyRegistered) {
+        continue;
+      }
+      await widget.repositoryRegistry.addResolvedEndpoint(
+        infoUri: endpoint.infoUri,
+        packageBaseUri: endpoint.dataUri,
+        checksumUri: endpoint.checksumUri,
+        name: descriptor.name,
+      );
+      added = true;
+    }
+    return added;
+  }
+
+  Future<void> _showDependencyIssues({
+    required String addonName,
+    required List<String> issues,
+  }) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('$addonName foi instalado, mas precisa de dependências'),
+        content: SizedBox(
+          width: 620,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'O ZIP foi instalado, porém estas dependências obrigatórias não foram encontradas nos repositórios ativos:',
+              ),
+              const SizedBox(height: 12),
+              for (final issue in issues)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text('• $issue'),
+                ),
+              const SizedBox(height: 8),
+              const Text(
+                'Adicione ou atualize o repositório que fornece essas dependências e reinstale o addon.',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _remove(RepositorySource repository) async {
     await widget.repositoryRegistry.remove(repository.uri);
     widget.repositoryStoreController.forget(repository.uri);
@@ -171,6 +309,17 @@ class _StorePageState extends State<StorePage> {
     }
   }
 
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -178,6 +327,7 @@ class _StorePageState extends State<StorePage> {
         SnackBar(
           content: Text(message),
           behavior: SnackBarBehavior.floating,
+          backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
   }
@@ -292,7 +442,7 @@ class _EmptyStore extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Text(
-                'Adicione o endereço de um repositório. A Loja sincroniza o índice e exibe os addons separados pelos tipos publicados pelo ecossistema Kodi.',
+                'Adicione a URL de um repositório ou use o ícone de ZIP na barra superior para instalar um addon/repository Kodi local.',
                 style: Theme.of(context).textTheme.bodyLarge,
                 textAlign: TextAlign.center,
               ),
