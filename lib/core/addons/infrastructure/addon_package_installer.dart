@@ -69,6 +69,11 @@ class AddonPackageInstaller {
     if (bytes.isEmpty) {
       throw const AddonInstallException('O pacote ZIP está vazio.');
     }
+    if (bytes.length > _maxDownloadBytes) {
+      throw const AddonInstallException(
+        'O pacote ZIP ultrapassa o limite de 256 MB.',
+      );
+    }
 
     final Archive archive;
     try {
@@ -251,6 +256,7 @@ class AddonPackageInstaller {
     if (segments.any((segment) => segment == '..' || segment.isEmpty)) {
       return null;
     }
+
     return p.joinAll(segments);
   }
 
