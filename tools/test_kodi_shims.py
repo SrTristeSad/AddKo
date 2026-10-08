@@ -8,6 +8,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+# This script intentionally runs without a Flutter/AddKo RPC host. A stale
+# environment variable from a previous development session would make the shim
+# bridge think stdin is connected to AddKo and block waiting for a response.
+os.environ.pop("ADDKO_CONTEXT_FILE", None)
+
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "runtime" / "python"
 SHIMS = RUNTIME / "shims"
