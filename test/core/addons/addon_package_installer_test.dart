@@ -99,6 +99,31 @@ void main() {
       throwsA(isA<AddonInstallException>()),
     );
   });
+
+  test('rejects a ZIP containing multiple top-level addons', () async {
+    final root = await Directory.systemTemp.createTemp('addko-installer-');
+    addTearDown(() => root.delete(recursive: true));
+
+    final installer = AddonPackageInstaller();
+    addTearDown(installer.close);
+
+    await expectLater(
+      installer.installBytes(
+        bytes: _zip({
+          'plugin.video.one/addon.xml': _manifest('plugin.video.one', '1.0.0'),
+          'plugin.video.two/addon.xml': _manifest('plugin.video.two', '1.0.0'),
+        }),
+        addonsRoot: root,
+      ),
+      throwsA(
+        isA<AddonInstallException>().having(
+          (error) => error.message,
+          'message',
+          contains('mais de um addon.xml principal'),
+        ),
+      ),
+    );
+  });
 }
 
 List<int> _zip(Map<String, String> files) {
