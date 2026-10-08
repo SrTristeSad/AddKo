@@ -20,6 +20,17 @@ def emit(method: str, **params: Any) -> None:
 
 
 def request(method: str, default: Any = None, **params: Any) -> Any:
+    # A real AddKo/Kodi addon invocation always has ADDKO_CONTEXT_FILE set by
+    # addko_worker.py before the xbmc* compatibility modules are used. The
+    # standalone smoke test imports those same modules directly, without a host
+    # process on stdin. In that mode a synchronous RPC would block forever on
+    # sys.stdin.readline(). Return the Kodi-shaped fallback immediately instead.
+    #
+    # This keeps the production bridge synchronous while making the shim suite
+    # safe to run from build_android.bat, CI and ordinary `python` invocations.
+    if not os.environ.get("ADDKO_CONTEXT_FILE"):
+        return default
+
     with _request_lock:
         request_id = next(_request_ids)
         message = {
