@@ -38,7 +38,9 @@ class _AddonManagerPageState extends State<AddonManagerPage> {
     try {
       await widget.addonInstallController.refreshInstalled();
     } on Object catch (error) {
-      if (mounted) _showMessage('Falha ao atualizar a lista: $error', error: true);
+      if (mounted) {
+        _showMessage('Falha ao atualizar a lista: $error', isError: true);
+      }
     } finally {
       if (mounted) setState(() => _refreshing = false);
     }
@@ -54,8 +56,11 @@ class _AddonManagerPageState extends State<AddonManagerPage> {
           manifest.id.toLowerCase().contains(query) ||
           manifest.providerName.toLowerCase().contains(query);
     }).toList(growable: false)
-      ..sort((a, b) =>
-          a.manifest.name.toLowerCase().compareTo(b.manifest.name.toLowerCase()));
+      ..sort(
+        (left, right) => left.manifest.name
+            .toLowerCase()
+            .compareTo(right.manifest.name.toLowerCase()),
+      );
     return addons;
   }
 
@@ -83,7 +88,6 @@ class _AddonManagerPageState extends State<AddonManagerPage> {
         builder: (context, _) {
           final all = widget.addonInstallController.installedAddons;
           final visible = _visibleAddons();
-
           return Column(
             children: [
               Padding(
@@ -181,16 +185,7 @@ class _AddonManagerPageState extends State<AddonManagerPage> {
               )
             : PopupMenuButton<_AddonAction>(
                 tooltip: 'Ações do addon',
-                onSelected: (action) {
-                  switch (action) {
-                    case _AddonAction.details:
-                      _showDetails(addon);
-                    case _AddonAction.settings:
-                      unawaited(_openSettings(addon));
-                    case _AddonAction.uninstall:
-                      unawaited(_requestUninstall(addon));
-                  }
-                },
+                onSelected: (action) => _performAction(action, addon),
                 itemBuilder: (context) => [
                   const PopupMenuItem(
                     value: _AddonAction.details,
@@ -224,16 +219,33 @@ class _AddonManagerPageState extends State<AddonManagerPage> {
     );
   }
 
+  void _performAction(_AddonAction action, InstalledAddon addon) {
+    switch (action) {
+      case _AddonAction.details:
+        _showDetails(addon);
+        return;
+      case _AddonAction.settings:
+        unawaited(_openSettings(addon));
+        return;
+      case _AddonAction.uninstall:
+        unawaited(_requestUninstall(addon));
+        return;
+    }
+  }
+
   bool _hasSettings(InstalledAddon addon) {
-    return File(p.join(addon.installPath, 'resources', 'settings.xml')).existsSync() ||
-        File(
-          p.join(
-            addon.installPath,
-            'resources',
-            'settings',
-            'settings.xml',
-          ),
-        ).existsSync();
+    final current = File(
+      p.join(addon.installPath, 'resources', 'settings.xml'),
+    );
+    final newer = File(
+      p.join(
+        addon.installPath,
+        'resources',
+        'settings',
+        'settings.xml',
+      ),
+    );
+    return current.existsSync() || newer.existsSync();
   }
 
   Future<void> _openSettings(InstalledAddon addon) async {
@@ -262,10 +274,9 @@ class _AddonManagerPageState extends State<AddonManagerPage> {
       isScrollControlled: true,
       builder: (sheetContext) {
         return SafeArea(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
+          child: FractionallySizedBox(
+            heightFactor: 0.8,
             child: ListView(
-              shrinkWrap: true,
               padding: const EdgeInsets.fromLTRB(24, 4, 24, 30),
               children: [
                 Text(
@@ -289,8 +300,10 @@ class _AddonManagerPageState extends State<AddonManagerPage> {
                   _DetailRow(
                     label: 'Dependências',
                     value: dependencies
-                        .map((dependency) =>
-                            '${dependency.id}${dependency.version == null ? '' : ' >= ${dependency.version}'}')
+                        .map(
+                          (dependency) =>
+                              '${dependency.id}${dependency.version == null ? '' : ' >= ${dependency.version}'}',
+                        )
                         .join('\n'),
                   ),
                 if (requiredBy.isNotEmpty)
@@ -327,7 +340,9 @@ class _AddonManagerPageState extends State<AddonManagerPage> {
                 for (final dependent in dependents)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
-                    child: Text('• ${dependent.manifest.name} (${dependent.manifest.id})'),
+                    child: Text(
+                      '• ${dependent.manifest.name} (${dependent.manifest.id})',
+                    ),
                   ),
                 const SizedBox(height: 10),
                 const Text('Desinstale esses addons primeiro.'),
@@ -399,13 +414,15 @@ class _AddonManagerPageState extends State<AddonManagerPage> {
       );
       if (mounted) _showMessage('${manifest.name} desinstalado.');
     } on Object catch (error) {
-      if (mounted) _showMessage('Falha ao desinstalar: $error', error: true);
+      if (mounted) {
+        _showMessage('Falha ao desinstalar: $error', isError: true);
+      }
     } finally {
       if (mounted) setState(() => _removing.remove(manifest.id));
     }
   }
 
-  void _showMessage(String message, {bool error = false}) {
+  void _showMessage(String message, {bool isError = false}) {
     final messenger = ScaffoldMessenger.of(context);
     messenger
       ..hideCurrentSnackBar()
@@ -413,6 +430,8 @@ class _AddonManagerPageState extends State<AddonManagerPage> {
         SnackBar(
           content: Text(message),
           behavior: SnackBarBehavior.floating,
+          backgroundColor:
+              isError ? Theme.of(context).colorScheme.error : null,
         ),
       );
   }
@@ -423,8 +442,9 @@ class _AddonManagerPageState extends State<AddonManagerPage> {
     if (manifest.isPythonService) return 'Serviço em segundo plano';
     if (manifest.isRepository) return 'Repositório';
     if (manifest.isPythonScript) return 'Script Python';
-    if (manifest.extensions.any((extension) =>
-        extension.point.toLowerCase().contains('inputstream'))) {
+    if (manifest.extensions.any(
+      (extension) => extension.point.toLowerCase().contains('inputstream'),
+    )) {
       return 'InputStream';
     }
     if (manifest.extensions.any(
@@ -439,12 +459,17 @@ class _AddonManagerPageState extends State<AddonManagerPage> {
   IconData _iconFor(InstalledAddon addon) {
     final manifest = addon.manifest;
     if (manifest.isPythonPlugin) return Icons.play_circle_outline_rounded;
-    if (manifest.isPythonService) return Icons.settings_input_component_rounded;
+    if (manifest.isPythonService) {
+      return Icons.settings_input_component_rounded;
+    }
     if (manifest.isRepository) return Icons.account_tree_rounded;
     if (manifest.isPythonScript) return Icons.code_rounded;
-    if (manifest.id.startsWith('script.module.')) return Icons.inventory_2_outlined;
-    if (manifest.extensions.any((extension) =>
-        extension.point.toLowerCase().contains('inputstream'))) {
+    if (manifest.id.startsWith('script.module.')) {
+      return Icons.inventory_2_outlined;
+    }
+    if (manifest.extensions.any(
+      (extension) => extension.point.toLowerCase().contains('inputstream'),
+    )) {
       return Icons.stream_rounded;
     }
     if (manifest.extensions.any(
