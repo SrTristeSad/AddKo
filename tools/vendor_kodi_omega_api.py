@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Vendor the exact Kodi Omega legacy Python API source used by AddKo.
+"""Vendor the exact Kodi Omega API/ABI source used by AddKo.
 
 This tool is intentionally separate from the normal Android build. It is used
-when updating AddKo's compatibility layer so API names/signatures/constants are
-copied from Kodi instead of being guessed or recreated from memory.
+when updating AddKo's compatibility layer so API names, signatures, constants
+and binary add-on ABI structures come from Kodi Omega instead of being guessed.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ KODI_REPOSITORY = "https://raw.githubusercontent.com/xbmc/xbmc"
 KODI_COMMIT = "f8815ee40f49a700c047982d752be4b2a61420e2"
 
 FILES = (
+    # Python/SWIG API surface.
     "xbmc/interfaces/swig/AddonModuleXbmc.i",
     "xbmc/interfaces/swig/AddonModuleXbmcaddon.i",
     "xbmc/interfaces/swig/AddonModuleXbmcgui.i",
@@ -39,6 +40,22 @@ FILES = (
     "xbmc/interfaces/legacy/Control.h",
     "xbmc/interfaces/legacy/File.h",
     "xbmc/interfaces/legacy/Stat.h",
+
+    # Kodi binary add-on ABI. These are the interfaces that dependencies named
+    # kodi.binary.global.* and kodi.binary.instance.* refer to.
+    "xbmc/addons/kodi-dev-kit/include/kodi/versions.h",
+    "xbmc/addons/kodi-dev-kit/include/kodi/AddonBase.h",
+    "xbmc/addons/kodi-dev-kit/include/kodi/General.h",
+    "xbmc/addons/kodi-dev-kit/include/kodi/Filesystem.h",
+    "xbmc/addons/kodi-dev-kit/include/kodi/Network.h",
+    "xbmc/addons/kodi-dev-kit/include/kodi/c-api/addon_base.h",
+    "xbmc/addons/kodi-dev-kit/include/kodi/c-api/filesystem.h",
+    "xbmc/addons/kodi-dev-kit/include/kodi/c-api/network.h",
+    "xbmc/addons/kodi-dev-kit/include/kodi/c-api/addon-instance/inputstream.h",
+    "xbmc/addons/kodi-dev-kit/include/kodi/c-api/addon-instance/vfs.h",
+    "xbmc/addons/kodi-dev-kit/include/kodi/addon-instance/Inputstream.h",
+    "xbmc/addons/kodi-dev-kit/include/kodi/addon-instance/VFS.h",
+    "xbmc/addons/binary-addons/DllAddon.h",
 )
 
 
@@ -84,7 +101,7 @@ def main() -> int:
         json.dumps(manifest, indent=2, sort_keys=True),
         encoding="utf-8",
     )
-    print(f"[AddKo] Kodi Omega API snapshot written to {destination_root}")
+    print(f"[AddKo] Kodi Omega API/ABI snapshot written to {destination_root}")
     return 0
 
 
