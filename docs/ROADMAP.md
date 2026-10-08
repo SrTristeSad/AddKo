@@ -46,10 +46,15 @@ Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
 - [x] built-ins de navegação e execução: `RunPlugin`, `RunAddon`, `RunScript`, `Container.Update`, `Container.Refresh`, `PlayMedia`, `ActivateWindow`, `Addon.OpenSettings` e `Notification`;
 - [x] built-ins ligados à Loja/Add-on Manager: `InstallAddon`, `UpdateAddonRepos` e `UpdateLocalAddons`;
 - [x] `InstallAddon` procura o pacote nos repositórios ativos e usa o resolvedor recursivo de dependências do AddKo;
+- [x] reconhecimento de `xbmc.service` e seu entrypoint em `addon.xml`;
+- [x] supervisor inicial de serviços Python em processos de segundo plano;
+- [x] `xbmc.Monitor.abortRequested()` e `waitForAbort()` conectados ao supervisor para encerramento limpo;
+- [x] serviços instalados/inseridos ou atualizados são reconciliados automaticamente pelo supervisor;
+- [ ] encaminhar built-ins, Player e demais eventos emitidos por `xbmc.service` para os controllers globais do app;
+- [ ] painel de estado/log/reinício dos serviços em Configurações;
 - [ ] CPython embarcado para Android/Android TV e demais plataformas sem Python do sistema;
 - [ ] ampliar os built-ins restantes do Kodi conforme addons reais exigirem;
 - [ ] ampliar JSON-RPC para Addons, Files, Player, Playlist, Settings e bibliotecas;
-- [ ] serviços `xbmc.service` em segundo plano com supervisor e encerramento limpo via `Monitor`;
 - [ ] ampliar suporte a scripts Python e demais extension points usados por addons reais;
 - [ ] ampliar `WindowXML` para mais tipos de controle, navegação/foco e recursos de skin.
 
