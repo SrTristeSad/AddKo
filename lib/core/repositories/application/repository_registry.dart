@@ -38,19 +38,49 @@ class RepositoryRegistry extends ChangeNotifier {
     }
 
     final uri = Uri.tryParse(value);
-    if (uri == null ||
-        (uri.scheme != 'http' && uri.scheme != 'https') ||
-        uri.host.isEmpty) {
+    if (!_isHttpUri(uri)) {
       throw const FormatException(
         'Use uma URL HTTP ou HTTPS válida para o repositório.',
       );
     }
 
-    if (_sources.any((source) => source.uri == uri)) {
+    await _addSource(RepositorySource(uri: uri!, enabled: true));
+  }
+
+  Future<void> addResolvedEndpoint({
+    required Uri infoUri,
+    required Uri packageBaseUri,
+    Uri? checksumUri,
+    String? name,
+  }) async {
+    if (!_isHttpUri(infoUri) || !_isHttpUri(packageBaseUri)) {
+      throw const FormatException(
+        'O addon de repositório publicou um endpoint HTTP/HTTPS inválido.',
+      );
+    }
+    if (checksumUri != null && !_isHttpUri(checksumUri)) {
+      throw const FormatException(
+        'O addon de repositório publicou um checksum HTTP/HTTPS inválido.',
+      );
+    }
+
+    await _addSource(
+      RepositorySource(
+        uri: infoUri,
+        enabled: true,
+        packageBaseUri: packageBaseUri,
+        checksumUri: checksumUri,
+        name: name,
+      ),
+    );
+  }
+
+  Future<void> _addSource(RepositorySource source) async {
+    if (_sources.any((existing) => existing.uri == source.uri)) {
       throw const FormatException('Este repositório já foi adicionado.');
     }
 
-    _sources.add(RepositorySource(uri: uri, enabled: true));
+    _sources.add(source);
     await _persist();
     notifyListeners();
   }
@@ -91,5 +121,11 @@ class RepositoryRegistry extends ChangeNotifier {
       for (final source in sources)
         if (seen.add(source.uri)) source,
     ];
+  }
+
+  bool _isHttpUri(Uri? uri) {
+    return uri != null &&
+        (uri.scheme == 'http' || uri.scheme == 'https') &&
+        uri.host.isNotEmpty;
   }
 }
