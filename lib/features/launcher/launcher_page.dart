@@ -190,7 +190,7 @@ class _TopBar extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            'Kodi Omega Runtime • v0.1.8',
+            'Kodi Omega Runtime • v0.1.9',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
