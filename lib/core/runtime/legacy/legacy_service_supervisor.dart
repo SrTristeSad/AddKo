@@ -31,7 +31,7 @@ class LegacyServiceSupervisor extends ChangeNotifier {
   static const KodiJsonRpcCompat _jsonRpc = KodiJsonRpcCompat();
 
   final AddonInstallController addonInstallController;
-  final LegacyServiceEventHandler? eventHandler;
+  LegacyServiceEventHandler? eventHandler;
   final PythonRuntimeBundle _runtimeBundle;
   final PythonExecutableResolver _pythonResolver;
 
