@@ -7,7 +7,8 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
-import java.io.FileNotFoundException
+import java.io.FileOutputStream
+import java.util.zip.ZipInputStream
 
 class MainActivity : FlutterActivity() {
     companion object {
@@ -59,10 +60,7 @@ private data class PythonRuntimeInfo(
 private class PythonRuntimeInstaller(private val context: Context) {
     companion object {
         private const val VERSION = "3.14.8"
-        // Bump this whenever the stdlib/assets packaged with the same CPython
-        // version change. Otherwise an app update would keep using the runtime
-        // extracted by an older APK from Android's private files directory.
-        private const val RUNTIME_REVISION = "3"
+        private const val RUNTIME_REVISION = "4"
         private val SUPPORTED_ABIS = setOf("arm64-v8a", "x86_64")
     }
 
@@ -77,20 +75,36 @@ private class PythonRuntimeInstaller(private val context: Context) {
         val runtimeTag = "$VERSION-r$RUNTIME_REVISION"
         val runtimeRoot = File(context.filesDir, "addko-python/$runtimeTag/$abi")
         val prefix = File(runtimeRoot, "prefix")
+        val stdlib = File(prefix, "lib/python3.14")
         val marker = File(runtimeRoot, ".complete")
 
-        if (!marker.exists() || marker.readText().trim() != runtimeTag) {
+        val validExistingRuntime = marker.isFile &&
+            marker.readText().trim() == runtimeTag &&
+            File(stdlib, "zipfile/_path/__init__.py").isFile
+
+        if (!validExistingRuntime) {
             if (runtimeRoot.exists() && !runtimeRoot.deleteRecursively()) {
                 throw IllegalStateException("Não foi possível limpar $runtimeRoot")
             }
-            runtimeRoot.mkdirs()
+            if (!runtimeRoot.mkdirs() && !runtimeRoot.isDirectory) {
+                throw IllegalStateException("Não foi possível criar $runtimeRoot")
+            }
 
-            val assetRoot = "addko_python/$VERSION/$abi/prefix"
-            extractAssetTree(assetRoot, prefix)
+            val stdlibAsset = "addko_python/$VERSION/$abi/stdlib.zip"
+            extractZipAsset(stdlibAsset, stdlib)
+
+            val zipfilePath = File(stdlib, "zipfile/_path/__init__.py")
+            if (!zipfilePath.isFile) {
+                runtimeRoot.deleteRecursively()
+                throw IllegalStateException(
+                    "Runtime CPython incompleto após extrair stdlib.zip: $zipfilePath"
+                )
+            }
+
             marker.writeText(runtimeTag)
+            cleanupOldRuntimeRevisions(runtimeTag)
         }
 
-        val stdlib = File(prefix, "lib/python3.14")
         if (!stdlib.isDirectory) {
             throw IllegalStateException("Biblioteca padrão do Python não foi extraída: $stdlib")
         }
@@ -102,39 +116,68 @@ private class PythonRuntimeInstaller(private val context: Context) {
             )
         }
 
-        // CPython on Android consults TMPDIR. Android only sets it automatically on
-        // recent releases, so provide it on every supported version.
         Os.setenv("TMPDIR", context.cacheDir.absolutePath, true)
 
         return PythonRuntimeInfo(prefix, abi, VERSION)
     }
 
-    private fun extractAssetTree(path: String, target: File) {
-        val children = context.assets.list(path)
-            ?: throw IllegalStateException("Não foi possível listar asset $path")
-
-        if (children.isNotEmpty()) {
-            if (!target.exists() && !target.mkdirs()) {
-                throw IllegalStateException("Não foi possível criar $target")
-            }
-            for (child in children) {
-                extractAssetTree("$path/$child", File(target, restoreName(child)))
-            }
-            return
+    private fun extractZipAsset(assetPath: String, destination: File) {
+        if (destination.exists() && !destination.deleteRecursively()) {
+            throw IllegalStateException("Não foi possível limpar $destination")
+        }
+        if (!destination.mkdirs() && !destination.isDirectory) {
+            throw IllegalStateException("Não foi possível criar $destination")
         }
 
-        try {
-            context.assets.open(path).use { input ->
-                target.parentFile?.mkdirs()
-                target.outputStream().use { output -> input.copyTo(output) }
+        val destinationRoot = destination.canonicalFile
+        var extractedFiles = 0
+
+        context.assets.open(assetPath).use { input ->
+            ZipInputStream(input.buffered()).use { zip ->
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    val target = File(destinationRoot, entry.name).canonicalFile
+                    val rootPath = destinationRoot.path + File.separator
+                    if (target != destinationRoot && !target.path.startsWith(rootPath)) {
+                        throw IllegalStateException("Entrada insegura em $assetPath: ${entry.name}")
+                    }
+
+                    if (entry.isDirectory) {
+                        if (!target.mkdirs() && !target.isDirectory) {
+                            throw IllegalStateException("Não foi possível criar $target")
+                        }
+                    } else {
+                        target.parentFile?.let { parent ->
+                            if (!parent.mkdirs() && !parent.isDirectory) {
+                                throw IllegalStateException("Não foi possível criar $parent")
+                            }
+                        }
+                        FileOutputStream(target).use { output ->
+                            zip.copyTo(output)
+                        }
+                        extractedFiles += 1
+                    }
+                    zip.closeEntry()
+                }
             }
-        } catch (error: FileNotFoundException) {
-            throw IllegalStateException("Asset do CPython ausente: $path", error)
+        }
+
+        if (extractedFiles == 0) {
+            throw IllegalStateException("Asset CPython vazio ou inválido: $assetPath")
         }
     }
 
-    // The staging script mirrors CPython's official Android workaround: files
-    // ending in .gz or '-' receive an extra trailing dash before APK packaging.
-    private fun restoreName(name: String): String =
-        if (name.endsWith("-")) name.dropLast(1) else name
+    private fun cleanupOldRuntimeRevisions(currentTag: String) {
+        val pythonRoot = File(context.filesDir, "addko-python")
+        val current = File(pythonRoot, currentTag).canonicalFile
+        pythonRoot.listFiles()?.forEach { candidate ->
+            try {
+                if (candidate.canonicalFile != current) {
+                    candidate.deleteRecursively()
+                }
+            } catch (_: Throwable) {
+                // Cleanup is best-effort and must never invalidate a working runtime.
+            }
+        }
+    }
 }
