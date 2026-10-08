@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
+import '../../core/runtime/legacy/android_python_runtime.dart';
 import '../../core/runtime/legacy/embedded_python_host.dart';
 
 class CompatibilityPage extends StatefulWidget {
@@ -10,9 +14,47 @@ class CompatibilityPage extends StatefulWidget {
 }
 
 class _CompatibilityPageState extends State<CompatibilityPage> {
-  late EmbeddedPythonProbe _probe = EmbeddedPythonProbe.read();
+  EmbeddedPythonProbe _probe = EmbeddedPythonProbe.read();
+  AndroidPythonRuntimeInfo? _androidRuntime;
+  String? _prepareError;
+  bool _preparing = false;
 
-  void _refresh() {
+  @override
+  void initState() {
+    super.initState();
+    if (Platform.isAndroid) {
+      unawaited(_prepareAndroidRuntime());
+    }
+  }
+
+  Future<void> _prepareAndroidRuntime() async {
+    if (_preparing) return;
+    setState(() {
+      _preparing = true;
+      _prepareError = null;
+    });
+    try {
+      final info = await AndroidPythonRuntime.prepare();
+      if (!mounted) return;
+      setState(() {
+        _androidRuntime = info;
+        _probe = EmbeddedPythonProbe.read();
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() => _prepareError = error.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _preparing = false);
+      }
+    }
+  }
+
+  Future<void> _refresh() async {
+    if (Platform.isAndroid) {
+      await _prepareAndroidRuntime();
+    }
+    if (!mounted) return;
     setState(() => _probe = EmbeddedPythonProbe.read());
   }
 
@@ -25,8 +67,13 @@ class _CompatibilityPageState extends State<CompatibilityPage> {
         actions: [
           IconButton(
             tooltip: 'Verificar novamente',
-            onPressed: _refresh,
-            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _preparing ? null : () => unawaited(_refresh()),
+            icon: _preparing
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh_rounded),
           ),
           const SizedBox(width: 8),
         ],
@@ -42,13 +89,25 @@ class _CompatibilityPageState extends State<CompatibilityPage> {
                 ? 'libaddko_python_host carregada.'
                 : 'A biblioteca nativa ainda não está disponível nesta plataforma/build.',
           ),
+          if (Platform.isAndroid)
+            _StatusCard(
+              icon: Icons.folder_zip_rounded,
+              title: 'Runtime Android extraído',
+              ok: _androidRuntime != null,
+              neutralWhenFalse: _preparing,
+              detail: _androidRuntime != null
+                  ? 'Python ${_androidRuntime!.version} • ${_androidRuntime!.abi}\n${_androidRuntime!.home}'
+                  : _preparing
+                      ? 'Preparando a biblioteca padrão do CPython...'
+                      : (_prepareError ?? 'Runtime ainda não preparado.'),
+            ),
           _StatusCard(
             icon: Icons.code_rounded,
             title: 'CPython embarcado',
             ok: _probe.pythonLibraryLoaded,
             detail: _probe.pythonLibraryLoaded
                 ? (_probe.version.isEmpty ? 'CPython encontrado.' : _probe.version)
-                : 'Aguardando libpython por ABI dentro do pacote Android.',
+                : 'libpython não foi encontrada para a ABI atual.',
           ),
           _StatusCard(
             icon: Icons.play_circle_outline_rounded,
@@ -56,8 +115,8 @@ class _CompatibilityPageState extends State<CompatibilityPage> {
             ok: _probe.initialized,
             neutralWhenFalse: true,
             detail: _probe.initialized
-                ? 'O interpretador está ativo.'
-                : 'O interpretador será inicializado quando o executor Android estiver conectado.',
+                ? 'O interpretador está ativo${_probe.home.isEmpty ? '.' : ' em ${_probe.home}.'}'
+                : 'O interpretador será inicializado no primeiro addon executado.',
           ),
           if (_probe.error.trim().isNotEmpty)
             Card(
@@ -67,7 +126,10 @@ class _CompatibilityPageState extends State<CompatibilityPage> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.info_outline_rounded, color: scheme.onSurfaceVariant),
+                    Icon(
+                      Icons.info_outline_rounded,
+                      color: scheme.onSurfaceVariant,
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: SelectableText(
