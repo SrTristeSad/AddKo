@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:addko/core/repositories/application/repository_registry.dart';
 import 'package:addko/core/repositories/domain/repository_source.dart';
 import 'package:addko/core/repositories/domain/repository_storage.dart';
@@ -45,6 +47,47 @@ void main() {
     expect(storage.saved.single.enabled, isTrue);
   });
 
+  test('mutation waits for initialization instead of losing a new source', () async {
+    final gate = Completer<void>();
+    final storage = _DelayedRepositoryStorage(gate);
+    final registry = RepositoryRegistry(storage: storage);
+    addTearDown(registry.dispose);
+
+    final initializing = registry.initialize();
+    final adding = registry.addUrl('https://new.example/repository/');
+    await Future<void>.delayed(Duration.zero);
+    expect(registry.sources, isEmpty);
+
+    gate.complete();
+    await Future.wait([initializing, adding]);
+
+    expect(registry.sources.map((source) => source.uri.toString()), contains(
+      'https://new.example/repository/',
+    ));
+    expect(storage.saved, hasLength(2));
+  });
+
+  test('failed persistence does not corrupt in-memory sources', () async {
+    final storage = _FailingRepositoryStorage([
+      RepositorySource(
+        uri: Uri.parse('https://existing.example/repo/'),
+        enabled: true,
+      ),
+    ]);
+    final registry = RepositoryRegistry(storage: storage);
+    addTearDown(registry.dispose);
+    await registry.initialize();
+
+    storage.failWrites = true;
+    await expectLater(
+      registry.addUrl('https://new.example/repo/'),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(registry.sources, hasLength(1));
+    expect(registry.sources.single.uri.host, 'existing.example');
+  });
+
   test('persists resolved endpoints from repository addon packages', () async {
     final storage = _MemoryRepositoryStorage([]);
     final registry = RepositoryRegistry(storage: storage);
@@ -87,5 +130,43 @@ class _MemoryRepositoryStorage implements RepositoryStorage {
   @override
   Future<void> save(List<RepositorySource> sources) async {
     saved = List.of(sources);
+  }
+}
+
+class _DelayedRepositoryStorage implements RepositoryStorage {
+  _DelayedRepositoryStorage(this.gate)
+      : saved = [
+          RepositorySource(
+            uri: Uri.parse('https://existing.example/repo/'),
+            enabled: true,
+          ),
+        ];
+
+  final Completer<void> gate;
+  List<RepositorySource> saved;
+
+  @override
+  Future<List<RepositorySource>> load() async {
+    await gate.future;
+    return List.of(saved);
+  }
+
+  @override
+  Future<void> save(List<RepositorySource> sources) async {
+    saved = List.of(sources);
+  }
+}
+
+class _FailingRepositoryStorage extends _MemoryRepositoryStorage {
+  _FailingRepositoryStorage(super.saved);
+
+  bool failWrites = false;
+
+  @override
+  Future<void> save(List<RepositorySource> sources) async {
+    if (failWrites) {
+      throw StateError('simulated write failure');
+    }
+    await super.save(sources);
   }
 }
