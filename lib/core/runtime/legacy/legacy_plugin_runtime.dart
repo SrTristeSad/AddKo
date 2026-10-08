@@ -46,6 +46,11 @@ class LegacyPluginRuntime {
     if (addon == null) {
       return _failure('Addon ${pluginUri.addonId} não está instalado.');
     }
+    if (!addonInstallController.hasRequiredDependencies(addon)) {
+      return _failure(
+        '${addon.manifest.name} está instalado, mas possui dependências obrigatórias incompletas. Abra a Loja e use Corrigir.',
+      );
+    }
 
     final entrypoint = addon.manifest.pythonEntrypoint;
     if (entrypoint == null || entrypoint.trim().isEmpty) {
@@ -70,6 +75,11 @@ class LegacyPluginRuntime {
     final addon = addonInstallController.installedById(addonId);
     if (addon == null) {
       return _failure('Addon $addonId não está instalado.');
+    }
+    if (!addonInstallController.hasRequiredDependencies(addon)) {
+      return _failure(
+        '${addon.manifest.name} possui dependências obrigatórias incompletas.',
+      );
     }
 
     final entrypoint = addon.manifest.pythonScriptEntrypoint;
@@ -96,6 +106,13 @@ class LegacyPluginRuntime {
     required String query,
     List<String>? argv,
   }) async {
+    final entrypointPath = p.normalize(p.join(addon.installPath, entrypoint));
+    if (!await File(entrypointPath).exists()) {
+      return _failure(
+        '${addon.manifest.name} declara o arquivo Python "$entrypoint", mas ele não existe no pacote instalado.',
+      );
+    }
+
     final runtimeFiles = await _runtimeBundle.materialize();
     final directories = await addonInstallController.directories();
     final supportRoot = p.dirname(directories.addonsRootPath);
@@ -108,7 +125,7 @@ class LegacyPluginRuntime {
     final invocation = LegacyPluginInvocation(
       addonId: addon.manifest.id,
       addonPath: addon.installPath,
-      entrypointPath: p.normalize(p.join(addon.installPath, entrypoint)),
+      entrypointPath: entrypointPath,
       pluginUrl: invocationUrl,
       handle: _nextHandle++,
       query: query,
@@ -155,14 +172,14 @@ class LegacyPluginRuntime {
     final visited = <String>{};
 
     void collect(InstalledAddon current) {
-      if (!visited.add(current.manifest.id)) {
+      if (!visited.add(current.manifest.id.toLowerCase())) {
         return;
       }
 
       for (final dependency in current.manifest.dependencies) {
         if (dependency.optional ||
-            dependency.id.startsWith('xbmc.') ||
-            dependency.id.startsWith('kodi.')) {
+            dependency.id.toLowerCase().startsWith('xbmc.') ||
+            dependency.id.toLowerCase().startsWith('kodi.')) {
           continue;
         }
         final installed = addonInstallController.installedById(dependency.id);
@@ -177,8 +194,11 @@ class LegacyPluginRuntime {
           }
           final library = extension.library?.trim();
           if (library != null && library.isNotEmpty) {
-            result.add(p.normalize(p.join(installed.installPath, library)));
-            addedLibrary = true;
+            final libraryPath = p.normalize(p.join(installed.installPath, library));
+            if (FileSystemEntity.typeSync(libraryPath) != FileSystemEntityType.notFound) {
+              result.add(libraryPath);
+              addedLibrary = true;
+            }
           }
         }
         if (!addedLibrary) {
@@ -192,8 +212,8 @@ class LegacyPluginRuntime {
   }
 
   String _queryFor(String rawPluginUrl) {
-    final uri = Uri.parse(rawPluginUrl);
-    return uri.hasQuery ? '?${uri.query}' : '';
+    final queryIndex = rawPluginUrl.indexOf('?');
+    return queryIndex == -1 ? '' : rawPluginUrl.substring(queryIndex);
   }
 
   LegacyPluginResult _failure(String message) {
