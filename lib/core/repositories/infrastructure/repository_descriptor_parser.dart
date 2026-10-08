@@ -82,6 +82,9 @@ class RepositoryDescriptorParser {
           minimumVersion: _nullableTrimmed(
             directory.getAttribute('minversion'),
           ),
+          maximumVersion: _nullableTrimmed(
+            directory.getAttribute('maxversion'),
+          ),
         ),
       );
     }
