@@ -12,6 +12,16 @@ def translatePath(path: str) -> str:
     return special_path(path)
 
 
+def makeLegalFilename(filename: str) -> str:
+    # Preserve directory separators but replace characters that are illegal on
+    # common local filesystems. Kodi's exact result is platform-specific; this
+    # keeps addon-generated filenames safe on Android/Linux/Windows.
+    translated = translatePath(filename)
+    drive, tail = os.path.splitdrive(translated)
+    safe = ''.join('_' if char in '<>:"|?*' else char for char in tail)
+    return drive + safe
+
+
 def exists(path: str) -> bool:
     return Path(translatePath(path)).exists()
 
@@ -100,23 +110,33 @@ class File:
         target = Path(self.filepath)
         if any(flag in self.mode for flag in ("w", "a", "+")):
             target.parent.mkdir(parents=True, exist_ok=True)
-        self._handle = open(target, self.mode + ("b" if "b" not in self.mode else ""))
 
-    def read(self, numBytes: int = 0) -> bytes:
-        if numBytes and numBytes > 0:
-            return self._handle.read(numBytes)
-        return self._handle.read()
+        binary_mode = self.mode if "b" in self.mode else f"{self.mode}b"
+        self._handle = open(target, binary_mode)
+
+    def read(self, numBytes: int = 0) -> str:
+        data = self.readBytes(numBytes)
+        return data.decode("utf-8", errors="replace")
 
     def readBytes(self, numBytes: int = 0) -> bytes:
-        return self.read(numBytes)
+        if numBytes and numBytes > 0:
+            data = self._handle.read(numBytes)
+        else:
+            data = self._handle.read()
+        return bytes(data)
+
+    def readLine(self) -> str:
+        data = self._handle.readline()
+        return bytes(data).decode("utf-8", errors="replace")
 
     def write(self, buffer: Any) -> bool:
         try:
             if isinstance(buffer, str):
                 buffer = buffer.encode("utf-8")
             self._handle.write(buffer)
+            self._handle.flush()
             return True
-        except OSError:
+        except (OSError, TypeError):
             return False
 
     def size(self) -> int:
@@ -127,6 +147,9 @@ class File:
 
     def seek(self, seekBytes: int, iWhence: int = 0) -> int:
         return self._handle.seek(seekBytes, iWhence)
+
+    def isOpen(self) -> bool:
+        return not self._handle.closed
 
     def close(self) -> None:
         if not self._handle.closed:
@@ -144,17 +167,32 @@ class Stat:
         self._path = translatePath(path)
         self._stat = os.stat(self._path)
 
-    def st_size(self) -> int:
-        return self._stat.st_size
+    def st_dev(self) -> int:
+        return int(self._stat.st_dev)
+
+    def st_ino(self) -> int:
+        return int(self._stat.st_ino)
 
     def st_mode(self) -> int:
-        return self._stat.st_mode
+        return int(self._stat.st_mode)
+
+    def st_nlink(self) -> int:
+        return int(self._stat.st_nlink)
+
+    def st_uid(self) -> int:
+        return int(getattr(self._stat, "st_uid", 0))
+
+    def st_gid(self) -> int:
+        return int(getattr(self._stat, "st_gid", 0))
+
+    def st_size(self) -> int:
+        return int(self._stat.st_size)
+
+    def st_atime(self) -> int:
+        return int(self._stat.st_atime)
 
     def st_mtime(self) -> int:
         return int(self._stat.st_mtime)
 
     def st_ctime(self) -> int:
         return int(self._stat.st_ctime)
-
-    def st_atime(self) -> int:
-        return int(self._stat.st_atime)
