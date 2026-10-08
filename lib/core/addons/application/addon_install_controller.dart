@@ -29,9 +29,10 @@ class AddonInstallController extends ChangeNotifier {
 
   InstalledAddonRegistry? _registry;
   Future<void>? _initialization;
-  Future<void> _installTail = Future<void>.value();
+  Future<void> _mutationTail = Future<void>.value();
   final Set<String> _installing = {};
   String? _initializationError;
+  bool _disposed = false;
 
   bool get initialized => _registry?.initialized ?? false;
   String? get initializationError => _initializationError;
@@ -41,27 +42,41 @@ class AddonInstallController extends ChangeNotifier {
   bool isInstalling(String addonId) => _installing.contains(addonId.toLowerCase());
 
   bool hasRequiredDependencies(InstalledAddon addon) {
-    for (final dependency in addon.manifest.dependencies) {
-      if (dependency.optional) {
-        continue;
-      }
+    return _hasRequiredDependencies(addon, <String>{});
+  }
 
-      final hostVersion = KodiHostCapabilities.versionFor(dependency.id);
-      if (hostVersion != null) {
-        if (!KodiVersion(hostVersion).isAtLeast(dependency.version)) {
+  bool _hasRequiredDependencies(InstalledAddon addon, Set<String> visiting) {
+    final addonKey = addon.manifest.id.toLowerCase();
+    if (!visiting.add(addonKey)) {
+      return true;
+    }
+
+    try {
+      for (final dependency in addon.manifest.dependencies) {
+        if (dependency.optional) {
+          continue;
+        }
+
+        final hostVersion = KodiHostCapabilities.versionFor(dependency.id);
+        if (hostVersion != null) {
+          if (!KodiVersion(hostVersion).isAtLeast(dependency.version)) {
+            return false;
+          }
+          continue;
+        }
+
+        final installedDependency = installedById(dependency.id);
+        if (installedDependency == null ||
+            !KodiVersion(installedDependency.manifest.version)
+                .isAtLeast(dependency.version) ||
+            !_hasRequiredDependencies(installedDependency, visiting)) {
           return false;
         }
-        continue;
       }
-
-      final installedDependency = installedById(dependency.id);
-      if (installedDependency == null ||
-          !KodiVersion(installedDependency.manifest.version)
-              .isAtLeast(dependency.version)) {
-        return false;
-      }
+      return true;
+    } finally {
+      visiting.remove(addonKey);
     }
-    return true;
   }
 
   Future<void> initialize() {
@@ -79,18 +94,14 @@ class AddonInstallController extends ChangeNotifier {
     } on Object catch (error) {
       _initializationError = error.toString();
     }
-    notifyListeners();
+    _notifySafely();
   }
 
   Future<void> refreshInstalled() async {
     await initialize();
-    final registry = _registry;
-    if (registry == null) {
-      throw AddonInstallException(
-        _initializationError ?? 'O registro local de addons não foi iniciado.',
-      );
-    }
-    await registry.refresh();
+    await _runExclusive(() async {
+      await _requireRegistry().refresh();
+    });
   }
 
   Future<DirectoryInfo> directories() async {
@@ -118,18 +129,13 @@ class AddonInstallController extends ChangeNotifier {
     required Iterable<RepositoryCatalog> catalogs,
   }) async {
     await initialize();
-    return _runInstallExclusive(() async {
+    return _runExclusive(() async {
       final registry = _requireRegistry();
       await registry.refresh();
-
-      // Rebuild inside the exclusive section. A second tap can otherwise use a
-      // stale dependency plan while the first install is still modifying the
-      // addons directory.
       final plan = buildPlan(addon: addon, catalogs: catalogs);
       if (!plan.canInstall) {
         return plan;
       }
-
       await _installPlan(plan, registry);
       await registry.refresh();
       return plan;
@@ -141,10 +147,9 @@ class AddonInstallController extends ChangeNotifier {
     required Iterable<RepositoryCatalog> catalogs,
   }) async {
     await initialize();
-    return _runInstallExclusive(() async {
+    return _runExclusive(() async {
       final registry = _requireRegistry();
       await registry.refresh();
-
       final installed = await _installer.installBytes(
         bytes: bytes,
         addonsRoot: registry.addonsRoot,
@@ -161,12 +166,10 @@ class AddonInstallController extends ChangeNotifier {
         installedAddons: installedAddons,
         installRoot: false,
       );
-
       if (dependencyPlan.canInstall) {
         await _installPlan(dependencyPlan, registry);
         await registry.refresh();
       }
-
       return LocalPackageInstallResult(
         addon: registry.byId(installed.manifest.id) ?? installed,
         dependencyPlan: dependencyPlan,
@@ -174,9 +177,13 @@ class AddonInstallController extends ChangeNotifier {
     });
   }
 
-  Future<T> _runInstallExclusive<T>(Future<T> Function() action) {
+  Future<T> _runExclusive<T>(Future<T> Function() action) {
     final completer = Completer<T>();
-    _installTail = _installTail.catchError((Object _) {}).then((_) async {
+    _mutationTail = _mutationTail.catchError((Object _) {}).then((_) async {
+      if (_disposed) {
+        completer.completeError(StateError('AddonInstallController foi encerrado.'));
+        return;
+      }
       try {
         completer.complete(await action());
       } on Object catch (error, stackTrace) {
@@ -197,8 +204,7 @@ class AddonInstallController extends ChangeNotifier {
         final key = entry.manifest.id.toLowerCase();
         touched.add(key);
         _installing.add(key);
-        notifyListeners();
-
+        _notifySafely();
         await _installer.installFromUri(
           packageUri: packageUri,
           addonsRoot: registry.addonsRoot,
@@ -209,7 +215,7 @@ class AddonInstallController extends ChangeNotifier {
       }
     } finally {
       _installing.removeAll(touched);
-      notifyListeners();
+      _notifySafely();
     }
   }
 
@@ -245,49 +251,53 @@ class AddonInstallController extends ChangeNotifier {
     bool force = false,
   }) async {
     await initialize();
-    final registry = _requireRegistry();
-
-    final addon = registry.byId(addonId);
-    if (addon == null) {
-      return;
-    }
-
-    final dependents = requiredBy(addon.manifest.id);
-    if (!force && dependents.isNotEmpty) {
-      final names = dependents
-          .map((dependent) => dependent.manifest.name)
-          .take(4)
-          .join(', ');
-      final more = dependents.length > 4 ? ' e mais ${dependents.length - 4}' : '';
-      throw AddonInstallException(
-        '${addon.manifest.name} é necessário para: $names$more. Remova esses addons primeiro.',
-      );
-    }
-
-    await registry.remove(addon.manifest.id);
-
-    if (removeData) {
-      final addonDataRoot = await _directories.addonDataRoot();
-      final dataDirectory = Directory(p.join(addonDataRoot.path, addon.manifest.id));
-      if (await dataDirectory.exists()) {
-        await dataDirectory.delete(recursive: true);
+    await _runExclusive(() async {
+      final registry = _requireRegistry();
+      await registry.refresh();
+      final addon = registry.byId(addonId);
+      if (addon == null) {
+        return;
       }
-    }
+
+      final dependents = requiredBy(addon.manifest.id);
+      if (!force && dependents.isNotEmpty) {
+        final names = dependents.map((item) => item.manifest.name).take(4).join(', ');
+        final more = dependents.length > 4 ? ' e mais ${dependents.length - 4}' : '';
+        throw AddonInstallException(
+          '${addon.manifest.name} é necessário para: $names$more. Remova esses addons primeiro.',
+        );
+      }
+
+      await registry.remove(addon.manifest.id);
+      if (removeData) {
+        final addonDataRoot = await _directories.addonDataRoot();
+        final dataDirectory = Directory(p.join(addonDataRoot.path, addon.manifest.id));
+        if (await dataDirectory.exists()) {
+          await dataDirectory.delete(recursive: true);
+        }
+      }
+    });
   }
 
-  void _relayRegistryChange() {
-    notifyListeners();
+  void _relayRegistryChange() => _notifySafely();
+
+  void _notifySafely() {
+    if (!_disposed) {
+      notifyListeners();
+    }
   }
 
   @override
   void dispose() {
+    _disposed = true;
     final registry = _registry;
     if (registry != null) {
       registry.removeListener(_relayRegistryChange);
       registry.dispose();
     }
     if (_ownsInstaller) {
-      _installer.close();
+      final installer = _installer;
+      unawaited(_mutationTail.whenComplete(installer.close));
     }
     super.dispose();
   }
