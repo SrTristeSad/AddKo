@@ -12,6 +12,7 @@ import '../../core/runtime/legacy/kodi_builtin_command.dart';
 import '../../core/runtime/legacy/legacy_plugin_item.dart';
 import '../../core/runtime/legacy/legacy_plugin_result.dart';
 import '../../core/runtime/legacy/legacy_plugin_runtime.dart';
+import '../../core/ui/kodi_text.dart';
 import '../player/player_page.dart';
 import 'legacy_addon_settings_page.dart';
 
@@ -193,7 +194,7 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
                 : rawDuration;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
+            content: KodiText(
               message.isEmpty ? heading : '$heading\n$message',
             ),
             duration: Duration(milliseconds: durationMs),
@@ -209,6 +210,7 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
     try {
       await widget.repositoryRegistry.initialize();
       await widget.runtime.addonInstallController.initialize();
+      await widget.repositoryStoreController.ensureKodiSystemCatalog();
 
       var candidate = _bestAvailableAddon(addonId);
       if (candidate == null) {
@@ -220,7 +222,7 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
 
       if (!mounted) return;
       if (candidate == null) {
-        _showMessage('Addon não encontrado nos repositórios ativos: $addonId');
+        _showMessage('Addon não encontrado nos repositórios disponíveis: $addonId');
         return;
       }
 
@@ -268,9 +270,12 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
   Future<void> _updateAddonRepositories() async {
     try {
       await widget.repositoryRegistry.initialize();
-      await widget.repositoryStoreController.synchronizeAll(
-        widget.repositoryRegistry.sources,
-      );
+      await Future.wait([
+        widget.repositoryStoreController.ensureKodiSystemCatalog(),
+        widget.repositoryStoreController.synchronizeAll(
+          widget.repositoryRegistry.sources,
+        ),
+      ]);
       if (!mounted) return;
 
       final failed = widget.repositoryRegistry.sources.where((source) {
@@ -303,7 +308,7 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+      SnackBar(content: KodiText(message)),
     );
   }
 
@@ -398,7 +403,11 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
             },
             icon: const Icon(Icons.arrow_back_rounded),
           ),
-          title: Text(title),
+          title: KodiText(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           actions: [
             IconButton(
               tooltip: 'Configurações do addon',
@@ -534,14 +543,14 @@ class _LegacyItemTile extends StatelessWidget {
               : Icons.play_circle_outline_rounded,
         ),
       ),
-      title: Text(
+      title: KodiText(
         item.label.isEmpty ? '(sem nome)' : item.label,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: item.label2.isEmpty
           ? null
-          : Text(
+          : KodiText(
               item.label2,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -559,7 +568,7 @@ class _LegacyItemTile extends StatelessWidget {
                 for (final action in item.contextMenu)
                   PopupMenuItem<String>(
                     value: action.command,
-                    child: Text(action.label),
+                    child: KodiText(action.label),
                   ),
               ],
             ),
