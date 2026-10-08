@@ -289,16 +289,17 @@ class AddonInstallController extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
     final registry = _registry;
-    if (registry != null) {
-      registry.removeListener(_relayRegistryChange);
-      registry.dispose();
-    }
-    if (_ownsInstaller) {
-      final installer = _installer;
-      unawaited(_mutationTail.whenComplete(installer.close));
-    }
+    registry?.removeListener(_relayRegistryChange);
+    final installer = _ownsInstaller ? _installer : null;
+    unawaited(
+      _mutationTail.whenComplete(() {
+        registry?.dispose();
+        installer?.close();
+      }),
+    );
     super.dispose();
   }
 }
