@@ -144,6 +144,7 @@ class EmbeddedPythonExecutor implements PythonExecutor {
     var authenticated = false;
     try {
       await for (final line in socket
+          .cast<List<int>>()
           .transform(utf8.decoder)
           .transform(const LineSplitter())) {
         if (!authenticated) {
