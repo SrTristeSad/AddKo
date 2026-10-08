@@ -86,6 +86,8 @@ class LauncherPage extends StatelessWidget {
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => SettingsPage(
+                      repositoryRegistry: repositoryRegistry,
+                      repositoryStoreController: repositoryStoreController,
                       addonInstallController: addonInstallController,
                       serviceSupervisor: serviceSupervisor,
                     ),
