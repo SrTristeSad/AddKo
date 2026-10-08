@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from addko_bridge import special_path
+from kodi_proxy import module_getattr
 
 
 def translatePath(path: str) -> str:
@@ -13,9 +14,6 @@ def translatePath(path: str) -> str:
 
 
 def makeLegalFilename(filename: str) -> str:
-    # Preserve directory separators but replace characters that are illegal on
-    # common local filesystems. Kodi's exact result is platform-specific; this
-    # keeps addon-generated filenames safe on Android/Linux/Windows.
     translated = translatePath(filename)
     drive, tail = os.path.splitdrive(translated)
     safe = ''.join('_' if char in '<>:"|?*' else char for char in tail)
@@ -196,3 +194,7 @@ class Stat:
 
     def st_ctime(self) -> int:
         return int(self._stat.st_ctime)
+
+
+def __getattr__(name: str) -> Any:
+    return module_getattr("xbmcvfs", name)
