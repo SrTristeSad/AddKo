@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../../repositories/domain/repository_catalog.dart';
 import '../domain/installed_addon.dart';
@@ -124,9 +127,56 @@ class AddonInstallController extends ChangeNotifier {
     return plan;
   }
 
-  Future<void> uninstall(String addonId) async {
+  List<InstalledAddon> requiredBy(String addonId) {
+    final dependents = installedAddons.where((installed) {
+      return installed.manifest.dependencies.any(
+        (dependency) => !dependency.optional && dependency.id == addonId,
+      );
+    }).toList(growable: false)
+      ..sort((left, right) =>
+          left.manifest.name.toLowerCase().compareTo(right.manifest.name.toLowerCase()));
+    return dependents;
+  }
+
+  Future<void> uninstall(
+    String addonId, {
+    bool removeData = false,
+    bool force = false,
+  }) async {
     await initialize();
-    await _registry?.remove(addonId);
+    final registry = _registry;
+    if (registry == null) {
+      throw AddonInstallException(
+        _initializationError ?? 'O registro local de addons não foi iniciado.',
+      );
+    }
+
+    final addon = registry.byId(addonId);
+    if (addon == null) {
+      return;
+    }
+
+    final dependents = requiredBy(addonId);
+    if (!force && dependents.isNotEmpty) {
+      final names = dependents
+          .map((dependent) => dependent.manifest.name)
+          .take(4)
+          .join(', ');
+      final more = dependents.length > 4 ? ' e mais ${dependents.length - 4}' : '';
+      throw AddonInstallException(
+        '${addon.manifest.name} é necessário para: $names$more. Remova esses addons primeiro.',
+      );
+    }
+
+    await registry.remove(addonId);
+
+    if (removeData) {
+      final addonDataRoot = await _directories.addonDataRoot();
+      final dataDirectory = Directory(p.join(addonDataRoot.path, addonId));
+      if (await dataDirectory.exists()) {
+        await dataDirectory.delete(recursive: true);
+      }
+    }
   }
 
   void _relayRegistryChange() {
