@@ -4,6 +4,7 @@ cd /d "%~dp0\.."
 
 set "APK=build\app\outputs\flutter-apk\app-debug.apk"
 set "DIST_APK=dist\AddKo-arm64-debug.apk"
+set "STDLIB_ZIP=android\app\build\addko-python-runtime\assets\addko_python\3.14.8\arm64-v8a\stdlib.zip"
 
 echo [AddKo] Verificando Flutter...
 where flutter >nul 2>nul || (
@@ -49,10 +50,12 @@ python tools\android\fetch_python_runtime.py --abi arm64-v8a --output android\ap
 if errorlevel 1 exit /b 1
 
 echo [AddKo] Conferindo stdlib CPython empacotada...
-if not exist "android\app\build\addko-python-runtime\assets\addko_python\3.14.8\arm64-v8a\prefix\lib\python3.14\zipfile\_path\__init__.py" (
-  echo [ERRO] zipfile._path nao foi incluido no runtime Android.
+if not exist "%STDLIB_ZIP%" (
+  echo [ERRO] stdlib.zip nao foi gerado.
   exit /b 1
 )
+python -c "import zipfile,sys; p=r'%STDLIB_ZIP%'; z=zipfile.ZipFile(p); required={'zipfile/_path/__init__.py','zipfile/_path/glob.py','_collections_abc.py'}; missing=required-set(z.namelist()); bad=z.testzip(); print('[AddKo] stdlib.zip: OK' if not missing and bad is None else '[ERRO] stdlib.zip invalido: missing=%r bad=%r'%%(sorted(missing),bad)); sys.exit(0 if not missing and bad is None else 1)"
+if errorlevel 1 exit /b 1
 
 set "PYTHON=python"
 echo [AddKo] Gerando APK ARM64...
