@@ -4,6 +4,7 @@ import time
 from typing import Any
 
 from addko_bridge import emit, request, special_path
+from kodi_proxy import module_getattr
 
 LOGDEBUG = 0
 LOGINFO = 1
@@ -81,8 +82,6 @@ def getCondVisibility(condition: str) -> bool:
 
 
 def getLanguage(format: int = ENGLISH_NAME, region: bool = False) -> str:
-    # AddKo currently exposes a stable English fallback until language packs are
-    # mapped into the host. Preserve Kodi's return shape for every format.
     if format == ISO_639_1:
         return "en-US" if region else "en"
     if format == ISO_639_2:
@@ -323,8 +322,6 @@ class Player:
         value = request("xbmc.Player.getSubtitles", default="")
         return "" if value is None else str(value)
 
-    # Kodi calls these callbacks from the native player. They are intentionally
-    # no-ops by default so addon subclasses can override them safely.
     def onPlayBackStarted(self) -> None:
         pass
 
@@ -390,3 +387,7 @@ class PlayList:
 
     def __getitem__(self, index: int) -> Any:
         return self._items[index][1]
+
+
+def __getattr__(name: str) -> Any:
+    return module_getattr("xbmc", name)
