@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../domain/kodi_system_repository.dart';
 import '../domain/repository_catalog.dart';
 import '../domain/repository_source.dart';
 import '../infrastructure/repository_client.dart';
@@ -11,11 +12,12 @@ class RepositoryStoreController extends ChangeNotifier {
       : _client = client ?? RepositoryClient(),
         _ownsClient = client == null;
 
-  static const Duration _syncTimeout = Duration(seconds: 30);
+  static const Duration _syncTimeout = Duration(seconds: 45);
 
   final RepositoryClient _client;
   final bool _ownsClient;
   final Map<Uri, RepositorySyncState> _states = {};
+  final Map<Uri, Future<void>> _inflight = {};
 
   Iterable<RepositoryCatalog> get catalogs sync* {
     for (final state in _states.values) {
@@ -30,21 +32,42 @@ class RepositoryStoreController extends ChangeNotifier {
     return _states[uri] ?? const RepositorySyncState.idle();
   }
 
-  Future<void> synchronize(RepositorySource source) async {
-    if (!source.enabled ||
-        _states[source.uri]?.status == RepositorySyncStatus.syncing) {
+  /// Makes the official Kodi Omega catalog available to the dependency
+  /// resolver without exposing it as a user-added repository card.
+  Future<void> ensureKodiSystemCatalog() async {
+    final source = KodiSystemRepository.omega;
+    final state = stateFor(source.uri);
+    if (state.status == RepositorySyncStatus.ready && state.catalog != null) {
       return;
     }
+    await synchronize(source);
+  }
 
+  Future<void> synchronize(RepositorySource source) {
+    if (!source.enabled) {
+      return Future<void>.value();
+    }
+
+    final active = _inflight[source.uri];
+    if (active != null) {
+      return active;
+    }
+
+    final operation = _synchronizeInternal(source);
+    _inflight[source.uri] = operation;
+    return operation.whenComplete(() {
+      _inflight.remove(source.uri);
+    });
+  }
+
+  Future<void> _synchronizeInternal(RepositorySource source) async {
     _states[source.uri] = RepositorySyncState.syncing(
       previousCatalog: _states[source.uri]?.catalog,
     );
     notifyListeners();
 
     try {
-      final catalog = await _client
-          .synchronize(source)
-          .timeout(_syncTimeout);
+      final catalog = await _client.synchronize(source).timeout(_syncTimeout);
       _states[source.uri] = RepositorySyncState.ready(catalog);
     } on TimeoutException {
       _states[source.uri] = RepositorySyncState.failed(
