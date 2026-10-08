@@ -3,11 +3,12 @@
 
 The worker executes one Kodi-style Python plugin or script invocation. Kodi
 compatibility modules live in runtime/python/shims and emit JSON-line events
-back to Dart.
+back to the AddKo host.
 """
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import sys
@@ -22,6 +23,39 @@ def emit(method: str, **params: object) -> None:
     print(PROTOCOL_PREFIX + json.dumps(message, ensure_ascii=False), flush=True)
 
 
+def _install_kodi_api_fallbacks() -> None:
+    """Attach the shared Kodi compatibility fallback to every legacy module.
+
+    Dedicated APIs in the shim modules always win. The fallback is only used
+    when an addon reaches a Kodi symbol that has not been bridged explicitly.
+    This mirrors the official Kodi API surface without growing a second set of
+    Dart implementations for every minor helper.
+    """
+
+    from kodi_proxy import module_getattr
+
+    for module_name in (
+        "xbmc",
+        "xbmcaddon",
+        "xbmcgui",
+        "xbmcplugin",
+        "xbmcvfs",
+        "xbmcdrm",
+    ):
+        try:
+            module = importlib.import_module(module_name)
+        except Exception:
+            continue
+
+        if "__getattr__" in module.__dict__:
+            continue
+
+        def fallback(name: str, _module_name: str = module_name):
+            return module_getattr(_module_name, name)
+
+        module.__getattr__ = fallback
+
+
 def _execute_entrypoint(entrypoint: Path) -> None:
     """Execute an addon without letting runpy replace Kodi's sys.argv[0]."""
     namespace = {
@@ -30,8 +64,6 @@ def _execute_entrypoint(entrypoint: Path) -> None:
         "__package__": None,
         "__cached__": None,
     }
-    # compile(bytes, ...) keeps Python's encoding-cookie handling while exec
-    # preserves the sys.argv prepared by the Kodi compatibility host.
     code = compile(entrypoint.read_bytes(), str(entrypoint), "exec")
     exec(code, namespace, namespace)
 
@@ -55,6 +87,8 @@ def main() -> int:
     for value in reversed(search_paths):
         if value and value not in sys.path:
             sys.path.insert(0, value)
+
+    _install_kodi_api_fallbacks()
 
     custom_argv = context.get("argv")
     if isinstance(custom_argv, list):
@@ -100,7 +134,7 @@ def main() -> int:
             traceback="",
         )
         return code
-    except BaseException as error:  # Kodi addons may raise non-Exception subclasses.
+    except BaseException as error:
         emit(
             "invocation.error",
             message=f"{type(error).__name__}: {error}",
