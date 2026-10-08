@@ -30,6 +30,13 @@ echo [AddKo] Baixando dependencias Flutter...
 call flutter pub get
 if errorlevel 1 exit /b 1
 
+echo [AddKo] Validando APIs Python do Kodi...
+python tools\test_kodi_shims.py
+if errorlevel 1 (
+  echo [ERRO] A camada de compatibilidade Python/Kodi falhou no smoke test.
+  exit /b 1
+)
+
 echo [AddKo] Analise estatica...
 call flutter analyze --no-fatal-infos --no-fatal-warnings
 if errorlevel 1 (
@@ -40,6 +47,12 @@ if errorlevel 1 (
 echo [AddKo] Preparando CPython Android ARM64...
 python tools\android\fetch_python_runtime.py --abi arm64-v8a --output android\app\build\addko-python-runtime
 if errorlevel 1 exit /b 1
+
+echo [AddKo] Conferindo stdlib CPython empacotada...
+if not exist "android\app\build\addko-python-runtime\assets\addko_python\3.14.8\arm64-v8a\prefix\lib\python3.14\zipfile\_path\__init__.py" (
+  echo [ERRO] zipfile._path nao foi incluido no runtime Android.
+  exit /b 1
+)
 
 set "PYTHON=python"
 echo [AddKo] Gerando APK ARM64...
