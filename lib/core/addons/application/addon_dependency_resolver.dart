@@ -38,15 +38,17 @@ class AddonDependencyResolver {
     required Iterable<InstalledAddon> installedAddons,
     bool installRoot = true,
   }) {
+    String key(String value) => value.toLowerCase();
+
     final allAvailable = <String, List<RepositoryAddonEntry>>{};
     for (final catalog in catalogs) {
       for (final entry in catalog.addons) {
-        allAvailable.putIfAbsent(entry.manifest.id, () => []).add(entry);
+        allAvailable.putIfAbsent(key(entry.manifest.id), () => []).add(entry);
       }
     }
 
     final installed = {
-      for (final addon in installedAddons) addon.manifest.id: addon,
+      for (final addon in installedAddons) key(addon.manifest.id): addon,
     };
     final installOrder = <RepositoryAddonEntry>[];
     final issues = <AddonDependencyIssue>[];
@@ -55,10 +57,11 @@ class AddonDependencyResolver {
 
     void visit(RepositoryAddonEntry entry, {required bool explicitlySelected}) {
       final addonId = entry.manifest.id;
-      if (planned.contains(addonId)) {
+      final addonKey = key(addonId);
+      if (planned.contains(addonKey)) {
         return;
       }
-      if (!visiting.add(addonId)) {
+      if (!visiting.add(addonKey)) {
         issues.add(
           AddonDependencyIssue(
             addonId: addonId,
@@ -88,7 +91,7 @@ class AddonDependencyResolver {
           continue;
         }
 
-        final installedDependency = installed[dependency.id];
+        final installedDependency = installed[key(dependency.id)];
         if (installedDependency != null &&
             KodiVersion(installedDependency.manifest.version)
                 .isAtLeast(dependency.version)) {
@@ -97,7 +100,7 @@ class AddonDependencyResolver {
 
         final candidate = _bestCandidate(
           dependency,
-          allAvailable[dependency.id] ?? const [],
+          allAvailable[key(dependency.id)] ?? const [],
         );
         if (candidate == null) {
           issues.add(
@@ -114,9 +117,9 @@ class AddonDependencyResolver {
         visit(candidate, explicitlySelected: false);
       }
 
-      visiting.remove(addonId);
+      visiting.remove(addonKey);
 
-      final current = installed[addonId];
+      final current = installed[addonKey];
       final alreadySatisfied = current != null &&
           KodiVersion(current.manifest.version)
               .compareTo(KodiVersion(entry.manifest.version)) >=
@@ -131,14 +134,14 @@ class AddonDependencyResolver {
             ),
           );
         }
-        planned.add(addonId);
+        planned.add(addonKey);
         return;
       }
 
       if (explicitlySelected || !alreadySatisfied) {
         installOrder.add(entry);
       }
-      planned.add(addonId);
+      planned.add(addonKey);
     }
 
     visit(root, explicitlySelected: installRoot);
