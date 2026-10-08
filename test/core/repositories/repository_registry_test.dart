@@ -44,6 +44,36 @@ void main() {
     await registry.setEnabled(registry.sources.single.uri, true);
     expect(storage.saved.single.enabled, isTrue);
   });
+
+  test('persists resolved endpoints from repository addon packages', () async {
+    final storage = _MemoryRepositoryStorage([]);
+    final registry = RepositoryRegistry(storage: storage);
+    addTearDown(registry.dispose);
+    await registry.initialize();
+
+    await registry.addResolvedEndpoint(
+      infoUri: Uri.parse('https://repo.example/addons.xml.gz'),
+      packageBaseUri: Uri.parse('https://repo.example/zips/'),
+      checksumUri: Uri.parse('https://repo.example/addons.xml.gz.sha256'),
+      name: 'Example Repository',
+    );
+
+    expect(registry.sources, hasLength(1));
+    final source = registry.sources.single;
+    expect(source.displayName, 'Example Repository');
+    expect(source.packageBaseUri, Uri.parse('https://repo.example/zips/'));
+    expect(
+      source.checksumUri,
+      Uri.parse('https://repo.example/addons.xml.gz.sha256'),
+    );
+    expect(storage.saved.single.hasResolvedEndpoint, isTrue);
+
+    final restored = RepositorySource.fromJson(source.toJson());
+    expect(restored.uri, source.uri);
+    expect(restored.packageBaseUri, source.packageBaseUri);
+    expect(restored.checksumUri, source.checksumUri);
+    expect(restored.name, source.name);
+  });
 }
 
 class _MemoryRepositoryStorage implements RepositoryStorage {
