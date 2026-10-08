@@ -190,7 +190,7 @@ class _TopBar extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            'Kodi Legacy Runtime • v0.1.3',
+            'Kodi Legacy Runtime • v0.1.6',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -265,34 +265,32 @@ class _LauncherCardState extends State<_LauncherCard> {
                           fontWeight: FontWeight.w700,
                         ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 5),
                   Text(
                     widget.subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   Expanded(
                     child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          maxWidth: 86,
-                          maxHeight: 86,
-                        ),
+                      child: SizedBox(
+                        width: 112,
+                        height: 92,
                         child: widget.artwork ??
                             Icon(widget.icon, size: 62, color: scheme.primary),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   SizedBox(
-                    height: 44,
+                    height: 42,
                     child: FilledButton.icon(
                       onPressed: widget.onOpen,
-                      icon: const Icon(Icons.login_rounded),
+                      icon: const Icon(Icons.login_rounded, size: 19),
                       label: const Text('ENTRAR'),
                     ),
                   ),
@@ -313,43 +311,39 @@ class _EmptyAddonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final hasError = initializationError != null;
-
+    final hasError = initializationError?.trim().isNotEmpty == true;
     return Card(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(22),
-        side: BorderSide(color: scheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(22),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              hasError ? Icons.error_outline_rounded : Icons.extension_off_rounded,
-              size: 56,
-              color: hasError ? scheme.error : scheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              hasError ? 'Falha ao abrir addons locais' : 'Nenhum addon pronto',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              hasError
-                  ? initializationError!
-                  : 'Instale um plugin pela Loja. Addons com dependências incompletas ficam ocultos até a instalação terminar.',
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: hasError ? scheme.error : scheme.onSurfaceVariant,
-                  ),
-            ),
-          ],
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                hasError
+                    ? Icons.error_outline_rounded
+                    : Icons.extension_off_rounded,
+                size: 52,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                hasError
+                    ? 'Falha ao carregar addons'
+                    : 'Nenhum addon pronto para executar',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                hasError
+                    ? initializationError!
+                    : 'Abra a Loja para instalar ou corrigir addons e dependências.',
+                textAlign: TextAlign.center,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -378,100 +372,24 @@ class _BottomBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _DockButton(
+          IconButton.filledTonal(
             tooltip: 'Sair',
-            semanticLabel: 'Sair do AddKo',
-            icon: Icons.logout_rounded,
             onPressed: onExit,
+            icon: const Icon(Icons.logout_rounded),
           ),
           const Spacer(),
-          _DockButton(
+          IconButton.filled(
             tooltip: 'Loja',
-            semanticLabel: 'Abrir Loja',
-            icon: Icons.storefront_rounded,
-            prominent: true,
             onPressed: onStore,
+            icon: const Icon(Icons.storefront_rounded),
           ),
           const SizedBox(width: 14),
-          _DockButton(
+          IconButton.filledTonal(
             tooltip: 'Configurações',
-            semanticLabel: 'Abrir Configurações',
-            icon: Icons.settings_rounded,
             onPressed: onSettings,
+            icon: const Icon(Icons.settings_rounded),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _DockButton extends StatefulWidget {
-  const _DockButton({
-    required this.tooltip,
-    required this.semanticLabel,
-    required this.icon,
-    required this.onPressed,
-    this.prominent = false,
-  });
-
-  final String tooltip;
-  final String semanticLabel;
-  final IconData icon;
-  final VoidCallback onPressed;
-  final bool prominent;
-
-  @override
-  State<_DockButton> createState() => _DockButtonState();
-}
-
-class _DockButtonState extends State<_DockButton> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final background = widget.prominent
-        ? scheme.primaryContainer
-        : scheme.surfaceContainerHighest;
-    final foreground = widget.prominent
-        ? scheme.onPrimaryContainer
-        : scheme.onSurfaceVariant;
-
-    return Focus(
-      onFocusChange: (focused) => setState(() => _focused = focused),
-      child: Semantics(
-        button: true,
-        label: widget.semanticLabel,
-        child: Tooltip(
-          message: widget.tooltip,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
-            width: 58,
-            height: 58,
-            decoration: BoxDecoration(
-              color: background,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: _focused ? scheme.primary : scheme.outlineVariant,
-                width: _focused ? 2.5 : 1,
-              ),
-              boxShadow: _focused
-                  ? [
-                      BoxShadow(
-                        color: scheme.shadow.withValues(alpha: 0.2),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ]
-                  : null,
-            ),
-            child: IconButton(
-              tooltip: widget.tooltip,
-              onPressed: widget.onPressed,
-              icon: Icon(widget.icon, color: foreground, size: 29),
-            ),
-          ),
-        ),
       ),
     );
   }
