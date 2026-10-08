@@ -114,6 +114,14 @@ class LegacyRuntimeCollector {
         }
         break;
       default:
+        if (method?.startsWith('kodi.compat.') == true) {
+          final module = map['module']?.toString() ?? 'kodi';
+          final symbol = map['name']?.toString() ??
+              map['method']?.toString() ??
+              map['class_name']?.toString() ??
+              '?';
+          _logs.add('[Kodi compat] $module.$symbol via fallback');
+        }
         break;
     }
   }
