@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../../core/addons/domain/kodi_host_capabilities.dart';
 import '../../core/runtime/legacy/android_python_runtime.dart';
 import '../../core/runtime/legacy/embedded_python_host.dart';
 import '../../core/runtime/legacy/embedded_python_self_test.dart';
@@ -95,6 +96,37 @@ class _CompatibilityPageState extends State<CompatibilityPage> {
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
+          Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.hub_rounded),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Núcleo Kodi ${KodiHostCapabilities.kodiRelease} (Omega)',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Versões de API que o AddKo apresenta aos addons e valida em <requires>:',
+                  ),
+                  const SizedBox(height: 8),
+                  for (final entry in KodiHostCapabilities.versions.entries)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text('${entry.key} • ${entry.value}'),
+                    ),
+                ],
+              ),
+            ),
+          ),
           _StatusCard(
             icon: Icons.memory_rounded,
             title: 'Host nativo do Python',
