@@ -129,6 +129,7 @@ class LegacyPluginRuntime {
     if (Platform.isAndroid) {
       final executor = EmbeddedPythonExecutor(
         workerScriptPath: runtimeFiles.workerPath,
+        requestHandler: requestHandler,
       );
       return executor.invoke(invocation);
     }
