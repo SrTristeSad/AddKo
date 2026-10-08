@@ -55,7 +55,11 @@ Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
 - [x] notificações, `Player.play`, `InstallAddon`, `UpdateAddonRepos`, `UpdateLocalAddons` e `PlayMedia` diretos emitidos por serviços chegam aos controllers/UI globais;
 - [x] painel em Configurações para listar serviços rodando, parados ou com falha;
 - [x] reinício manual de serviços pelo painel;
-- [ ] completar built-ins de serviços como `RunPlugin`, `RunScript`, `ActivateWindow` e controle do player já aberto;
+- [x] `RunPlugin`, `RunAddon`, `RunScript`, `PlayMedia(plugin://...)` e `Container.Update(plugin://...)` disparados por serviços executam pelo runtime global;
+- [x] resultados `setResolvedUrl` e built-ins produzidos por plugins/scripts chamados em background continuam sendo processados;
+- [x] player ativo registra uma ponte global para receber `play`, `pause`, `stop`, `seekTime` e troca de mídia sem abrir outra instância;
+- [ ] suportar os demais comandos do player (`playnext`, `playprevious`, legendas e playlists) no host global;
+- [ ] `ActivateWindow` e navegação visual disparados por serviços;
 - [ ] registrar histórico/log recente por serviço no painel;
 - [ ] CPython embarcado para Android/Android TV e demais plataformas sem Python do sistema;
 - [ ] ampliar os built-ins restantes do Kodi conforme addons reais exigirem;
