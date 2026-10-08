@@ -48,16 +48,23 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Configurações'), findsOneWidget);
+    expect(find.text('Addons instalados'), findsOneWidget);
     expect(find.text('Repositórios'), findsOneWidget);
     expect(find.text('Componentes de addons'), findsOneWidget);
     expect(find.text('Serviços'), findsOneWidget);
     expect(find.text('Player'), findsOneWidget);
     expect(find.text('Compatibilidade Kodi'), findsOneWidget);
 
+    await tester.tap(find.text('Addons instalados'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nenhum addon encontrado'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('Componentes de addons'));
     await tester.pumpAndSettle();
     expect(find.text('Nenhum componente instalado'), findsOneWidget);
-    Navigator.of(tester.element(find.text('Componentes de addons'))).pop();
+    await tester.pageBack();
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Player'));
