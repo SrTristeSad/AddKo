@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 from addko_bridge import emit
+from kodi_proxy import module_getattr
 
 # Values mirror Kodi's SortMethod enum (xbmc/SortFileItem.h).
 SORT_METHOD_NONE = 0
@@ -187,3 +188,7 @@ def setSetting(handle: int, id: str, value: str) -> None:
     from xbmcaddon import Addon
 
     Addon().setSetting(id, value)
+
+
+def __getattr__(name: str) -> Any:
+    return module_getattr("xbmcplugin", name)
