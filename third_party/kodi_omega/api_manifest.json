@@ -1,0 +1,40 @@
+{
+  "commit": "f8815ee40f49a700c047982d752be4b2a61420e2",
+  "license": "GPL-2.0-or-later",
+  "modules": {
+    "xbmc": [
+      "ModuleXbmc.h",
+      "Player.h",
+      "RenderCapture.h",
+      "InfoTagGame.h",
+      "InfoTagMusic.h",
+      "InfoTagPicture.h",
+      "InfoTagRadioRDS.h",
+      "InfoTagVideo.h",
+      "Keyboard.h",
+      "PlayList.h",
+      "Monitor.h"
+    ],
+    "xbmcaddon": [
+      "Addon.h",
+      "Settings.h"
+    ],
+    "xbmcgui": [
+      "ModuleXbmcgui.h",
+      "ListItem.h",
+      "Control.h",
+      "Dialog.h",
+      "Window.h",
+      "WindowDialog.h",
+      "WindowXML.h"
+    ],
+    "xbmcplugin": [
+      "ModuleXbmcplugin.h"
+    ],
+    "xbmcvfs": [
+      "File.h",
+      "Stat.h",
+      "ModuleXbmcvfs.h"
+    ]
+  }
+}
