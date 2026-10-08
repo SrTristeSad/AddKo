@@ -91,4 +91,44 @@ void main() {
 
     expect(catalog.addons.single.manifest.id, 'script.module.demo');
   });
+
+  test('uses package base stored from an installed repository zip', () async {
+    final client = MockClient((request) async {
+      if (request.url.toString() == 'https://repo.example/kodi/addons.xml') {
+        return http.Response(
+          '''
+<addons>
+  <addon id="plugin.video.fromzip" name="From ZIP" version="2.1.0" provider-name="AddKo">
+    <extension point="xbmc.python.pluginsource" library="default.py">
+      <provides>video</provides>
+    </extension>
+  </addon>
+</addons>
+''',
+          200,
+          headers: {'content-type': 'application/xml'},
+        );
+      }
+      return http.Response('not found', 404);
+    });
+
+    final repositoryClient = RepositoryClient(client: client);
+    final catalog = await repositoryClient.synchronize(
+      RepositorySource(
+        uri: Uri.parse('https://repo.example/kodi/addons.xml'),
+        packageBaseUri: Uri.parse('https://cdn.example/zips/'),
+        name: 'Installed Repo',
+        enabled: true,
+      ),
+    );
+
+    expect(catalog.repositoryName, 'Installed Repo');
+    expect(catalog.addons.single.manifest.id, 'plugin.video.fromzip');
+    expect(
+      catalog.addons.single.packageUri,
+      Uri.parse(
+        'https://cdn.example/zips/plugin.video.fromzip/plugin.video.fromzip-2.1.0.zip',
+      ),
+    );
+  });
 }
