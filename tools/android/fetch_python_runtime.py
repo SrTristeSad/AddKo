@@ -13,6 +13,7 @@ import json
 import shutil
 import tarfile
 import urllib.request
+import zipfile
 from pathlib import Path
 
 PYTHON_VERSION = "3.14.8"
@@ -31,11 +32,6 @@ RUNTIMES = {
     },
 }
 
-# Some official Android embeddable archives have historically omitted pure
-# Python package children even though their parent package is present. CPython
-# 3.13+ implements zipfile.Path through zipfile._path, and importlib.resources
-# can import it indirectly. Keep these files synchronized from the exact
-# CPython tag used by the runtime when the archive does not contain them.
 REQUIRED_STDLIB_FILES = (
     "zipfile/_path/__init__.py",
     "zipfile/_path/glob.py",
@@ -80,7 +76,6 @@ def download(url: str, destination: Path, expected_sha256: str) -> None:
 
 
 def download_text(url: str, destination: Path) -> None:
-    """Fetch a missing pure-Python stdlib file from the matching CPython tag."""
     destination.parent.mkdir(parents=True, exist_ok=True)
     request = urllib.request.Request(
         url,
@@ -148,31 +143,58 @@ def ensure_required_stdlib(stdlib_root: Path) -> None:
         )
 
 
-def copy_tree_for_assets(source: Path, destination: Path) -> None:
-    if destination.exists():
-        shutil.rmtree(destination)
-    shutil.copytree(
-        source,
-        destination,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
-    )
+def create_stdlib_archive(source: Path, destination: Path) -> None:
+    """Package stdlib as one safe asset.
 
-    # Android's packaging tool may transparently decompress files ending in .gz.
-    # Match the workaround used by CPython's official Android testbed.
-    files = sorted((p for p in destination.rglob("*") if p.is_file()), reverse=True)
-    for path in files:
-        if path.name.endswith(".gz") or path.name.endswith("-"):
-            path.rename(path.with_name(path.name + "-"))
+    Android's aapt ignores some asset path components beginning with '_' or '.',
+    which breaks legitimate CPython modules such as zipfile/_path and many
+    _*.py modules. A single ZIP asset avoids all aapt filename filtering, and
+    the Android installer extracts the original names verbatim at runtime.
+    """
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(".zip.part")
+    temporary.unlink(missing_ok=True)
+
+    with zipfile.ZipFile(
+        temporary,
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+        compresslevel=6,
+        allowZip64=True,
+    ) as archive:
+        for path in sorted(source.rglob("*")):
+            if not path.is_file():
+                continue
+            relative = path.relative_to(source)
+            if "__pycache__" in relative.parts or path.suffix in {".pyc", ".pyo"}:
+                continue
+            archive.write(path, relative.as_posix())
+
+    temporary.replace(destination)
+
+    with zipfile.ZipFile(destination, "r") as archive:
+        names = set(archive.namelist())
+        missing = [relative for relative in REQUIRED_STDLIB_FILES if relative not in names]
+        if missing:
+            raise RuntimeError(
+                "Generated stdlib archive is missing required files: " + ", ".join(missing)
+            )
+        bad = archive.testzip()
+        if bad is not None:
+            raise RuntimeError(f"Corrupt stdlib archive entry: {bad}")
 
 
 def stage_abi(prefix: Path, abi: str, output_root: Path) -> None:
-    asset_prefix = output_root / "assets" / "addko_python" / PYTHON_VERSION / abi / "prefix"
     stdlib_source = prefix / "lib" / f"python{PYTHON_MINOR}"
     ensure_required_stdlib(stdlib_source)
-    copy_tree_for_assets(stdlib_source, asset_prefix / "lib" / f"python{PYTHON_MINOR}")
 
-    staged_stdlib = asset_prefix / "lib" / f"python{PYTHON_MINOR}"
-    ensure_required_stdlib(staged_stdlib)
+    asset_dir = output_root / "assets" / "addko_python" / PYTHON_VERSION / abi
+    if asset_dir.exists():
+        shutil.rmtree(asset_dir)
+    asset_dir.mkdir(parents=True, exist_ok=True)
+    stdlib_archive = asset_dir / "stdlib.zip"
+    create_stdlib_archive(stdlib_source, stdlib_archive)
+    print(f"[AddKo] packed stdlib asset: {stdlib_archive.name} ({stdlib_archive.stat().st_size} bytes)")
 
     jni_dir = output_root / "jniLibs" / abi
     if jni_dir.exists():
@@ -239,6 +261,7 @@ def main() -> int:
             {
                 "python_version": PYTHON_VERSION,
                 "python_minor": PYTHON_MINOR,
+                "stdlib_format": "zip",
                 "abis": staged,
             },
             indent=2,
