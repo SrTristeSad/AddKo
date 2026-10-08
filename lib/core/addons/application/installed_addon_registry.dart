@@ -21,7 +21,20 @@ class InstalledAddonRegistry extends ChangeNotifier {
   bool get initialized => _initialized;
   List<InstalledAddon> get addons => List.unmodifiable(_addons.values);
 
-  InstalledAddon? byId(String addonId) => _addons[addonId];
+  InstalledAddon? byId(String addonId) {
+    final exact = _addons[addonId];
+    if (exact != null) {
+      return exact;
+    }
+
+    final normalized = addonId.toLowerCase();
+    for (final entry in _addons.entries) {
+      if (entry.key.toLowerCase() == normalized) {
+        return entry.value;
+      }
+    }
+    return null;
+  }
 
   Future<void> initialize() async {
     if (_initialized) {
@@ -68,7 +81,7 @@ class InstalledAddonRegistry extends ChangeNotifier {
   }
 
   Future<void> remove(String addonId) async {
-    final addon = _addons[addonId];
+    final addon = byId(addonId);
     if (addon == null) {
       return;
     }
@@ -77,7 +90,7 @@ class InstalledAddonRegistry extends ChangeNotifier {
     if (await directory.exists()) {
       await directory.delete(recursive: true);
     }
-    _addons.remove(addonId);
+    _addons.remove(addon.manifest.id);
     notifyListeners();
   }
 }
