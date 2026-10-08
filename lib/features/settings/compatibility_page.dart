@@ -7,6 +7,7 @@ import '../../core/addons/domain/kodi_host_capabilities.dart';
 import '../../core/runtime/legacy/android_python_runtime.dart';
 import '../../core/runtime/legacy/embedded_python_host.dart';
 import '../../core/runtime/legacy/embedded_python_self_test.dart';
+import '../../core/runtime/legacy/kodi_native_engine.dart';
 
 class CompatibilityPage extends StatefulWidget {
   const CompatibilityPage({super.key});
@@ -17,6 +18,7 @@ class CompatibilityPage extends StatefulWidget {
 
 class _CompatibilityPageState extends State<CompatibilityPage> {
   EmbeddedPythonProbe _probe = EmbeddedPythonProbe.read();
+  KodiNativeEngineProbe _kodiEngine = KodiNativeEngineProbe.read();
   AndroidPythonRuntimeInfo? _androidRuntime;
   EmbeddedPythonSelfTestResult? _selfTest;
   String? _prepareError;
@@ -43,6 +45,7 @@ class _CompatibilityPageState extends State<CompatibilityPage> {
       setState(() {
         _androidRuntime = info;
         _probe = EmbeddedPythonProbe.read();
+        _kodiEngine = KodiNativeEngineProbe.read();
       });
     } on Object catch (error) {
       if (!mounted) return;
@@ -55,7 +58,10 @@ class _CompatibilityPageState extends State<CompatibilityPage> {
   Future<void> _refresh() async {
     if (Platform.isAndroid) await _prepareAndroidRuntime();
     if (!mounted) return;
-    setState(() => _probe = EmbeddedPythonProbe.read());
+    setState(() {
+      _probe = EmbeddedPythonProbe.read();
+      _kodiEngine = KodiNativeEngineProbe.read();
+    });
   }
 
   Future<void> _runSelfTest() async {
@@ -70,6 +76,7 @@ class _CompatibilityPageState extends State<CompatibilityPage> {
       _testing = false;
       _selfTest = result;
       _probe = EmbeddedPythonProbe.read();
+      _kodiEngine = KodiNativeEngineProbe.read();
     });
   }
 
@@ -108,14 +115,14 @@ class _CompatibilityPageState extends State<CompatibilityPage> {
                       const Icon(Icons.hub_rounded),
                       const SizedBox(width: 12),
                       Text(
-                        'Núcleo Kodi ${KodiHostCapabilities.kodiRelease} (Omega)',
+                        'Kodi ${KodiHostCapabilities.kodiRelease} (Omega)',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ],
                   ),
                   const SizedBox(height: 10),
                   const Text(
-                    'Versões de API que o AddKo apresenta aos addons e valida em <requires>:',
+                    'APIs e ABIs que o host apresenta aos addons em <requires>:',
                   ),
                   const SizedBox(height: 8),
                   for (final entry in KodiHostCapabilities.versions.entries)
@@ -126,6 +133,14 @@ class _CompatibilityPageState extends State<CompatibilityPage> {
                 ],
               ),
             ),
+          ),
+          _StatusCard(
+            icon: Icons.developer_board_rounded,
+            title: 'Motor ABI nativo Kodi Omega',
+            ok: _kodiEngine.loaded,
+            detail: _kodiEngine.loaded
+                ? 'libaddko_kodi_engine carregada • engine ${_kodiEngine.engineVersion} • ${_kodiEngine.kodiRelease}\nABI main ${_kodiEngine.mainAbi} • GUI ${_kodiEngine.guiAbi} • InputStream ${_kodiEngine.inputStreamAbi}'
+                : 'libaddko_kodi_engine não foi carregada nesta build.',
           ),
           _StatusCard(
             icon: Icons.memory_rounded,
