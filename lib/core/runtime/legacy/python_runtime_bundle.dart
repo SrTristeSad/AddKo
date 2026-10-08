@@ -10,7 +10,7 @@ class PythonRuntimeBundle {
   }) : _supportDirectoryProvider =
             supportDirectoryProvider ?? getApplicationSupportDirectory;
 
-  static const _version = 'v1';
+  static const _version = 'v2';
   static const _workerAsset = 'runtime/python/addko_worker.py';
   static const _shimAssets = <String>[
     'runtime/python/shims/addko_bridge.py',
@@ -21,6 +21,7 @@ class PythonRuntimeBundle {
     'runtime/python/shims/xbmcgui.py',
     'runtime/python/shims/xbmcplugin.py',
     'runtime/python/shims/xbmcvfs.py',
+    'runtime/python/shims/zipfile_path.py',
   ];
 
   final Future<Directory> Function() _supportDirectoryProvider;
