@@ -50,4 +50,21 @@ void main() {
     expect(manifest.isPythonScript, isTrue);
     expect(manifest.pythonScriptEntrypoint, 'service.py');
   });
+
+  test('recognizes xbmc.service entrypoints and start mode', () {
+    const xml = '''
+<addon id="service.example" name="Service Example" version="1.0.0" provider-name="AddKo">
+  <requires>
+    <import addon="xbmc.python" version="3.0.0" />
+  </requires>
+  <extension point="xbmc.service" library="service.py" start="startup" />
+</addon>
+''';
+
+    final manifest = parser.parse(xml);
+
+    expect(manifest.isPythonService, isTrue);
+    expect(manifest.pythonServiceEntrypoint, 'service.py');
+    expect(manifest.pythonServiceStartMode, 'startup');
+  });
 }
