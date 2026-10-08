@@ -59,6 +59,10 @@ private data class PythonRuntimeInfo(
 private class PythonRuntimeInstaller(private val context: Context) {
     companion object {
         private const val VERSION = "3.14.8"
+        // Bump this whenever the stdlib/assets packaged with the same CPython
+        // version change. Otherwise an app update would keep using the runtime
+        // extracted by an older APK from Android's private files directory.
+        private const val RUNTIME_REVISION = "3"
         private val SUPPORTED_ABIS = setOf("arm64-v8a", "x86_64")
     }
 
@@ -70,24 +74,32 @@ private class PythonRuntimeInstaller(private val context: Context) {
                     Build.SUPPORTED_ABIS.joinToString()
             )
 
-        val runtimeRoot = File(context.filesDir, "addko-python/$VERSION/$abi")
+        val runtimeTag = "$VERSION-r$RUNTIME_REVISION"
+        val runtimeRoot = File(context.filesDir, "addko-python/$runtimeTag/$abi")
         val prefix = File(runtimeRoot, "prefix")
         val marker = File(runtimeRoot, ".complete")
 
-        if (!marker.exists() || marker.readText().trim() != VERSION) {
+        if (!marker.exists() || marker.readText().trim() != runtimeTag) {
             if (runtimeRoot.exists() && !runtimeRoot.deleteRecursively()) {
                 throw IllegalStateException("Não foi possível limpar $runtimeRoot")
             }
             runtimeRoot.mkdirs()
 
             val assetRoot = "addko_python/$VERSION/$abi/prefix"
-            extractAssetTree(assetRoot, prefix, assetRoot)
-            marker.writeText(VERSION)
+            extractAssetTree(assetRoot, prefix)
+            marker.writeText(runtimeTag)
         }
 
         val stdlib = File(prefix, "lib/python3.14")
         if (!stdlib.isDirectory) {
             throw IllegalStateException("Biblioteca padrão do Python não foi extraída: $stdlib")
+        }
+
+        val zipfilePath = File(stdlib, "zipfile/_path/__init__.py")
+        if (!zipfilePath.isFile) {
+            throw IllegalStateException(
+                "Runtime CPython incompleto: zipfile._path não foi extraído ($zipfilePath)"
+            )
         }
 
         // CPython on Android consults TMPDIR. Android only sets it automatically on
@@ -97,7 +109,7 @@ private class PythonRuntimeInstaller(private val context: Context) {
         return PythonRuntimeInfo(prefix, abi, VERSION)
     }
 
-    private fun extractAssetTree(path: String, target: File, root: String) {
+    private fun extractAssetTree(path: String, target: File) {
         val children = context.assets.list(path)
             ?: throw IllegalStateException("Não foi possível listar asset $path")
 
@@ -106,7 +118,7 @@ private class PythonRuntimeInstaller(private val context: Context) {
                 throw IllegalStateException("Não foi possível criar $target")
             }
             for (child in children) {
-                extractAssetTree("$path/$child", File(target, restoreName(child)), root)
+                extractAssetTree("$path/$child", File(target, restoreName(child)))
             }
             return
         }
