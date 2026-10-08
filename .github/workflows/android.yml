@@ -29,24 +29,31 @@ jobs:
       - run: flutter pub get
       - name: Stage official CPython Android runtime
         run: python3 tools/android/fetch_python_runtime.py --output android/app/build/addko-python-runtime
-      - name: Build debug APK with embedded Python
+      - name: Build split debug APKs with embedded Python
         env:
           PYTHON: python3
-        run: flutter build apk --debug
-      - name: Verify CPython is inside the APK
+        run: flutter build apk --debug --split-per-abi
+      - name: Verify CPython is inside each APK
         shell: bash
         run: |
           set -euo pipefail
-          APK=build/app/outputs/flutter-apk/app-debug.apk
-          unzip -l "$APK" > apk-contents.txt
-          grep -q 'lib/arm64-v8a/libpython3.14.so' apk-contents.txt
-          grep -q 'lib/x86_64/libpython3.14.so' apk-contents.txt
-          grep -q 'assets/addko_python/3.14.8/arm64-v8a/prefix/lib/python3.14/json/__init__.py' apk-contents.txt
-          grep -q 'assets/addko_python/3.14.8/x86_64/prefix/lib/python3.14/json/__init__.py' apk-contents.txt
-          echo 'CPython Android runtime verified in APK.'
+          ARM64=build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
+          X64=build/app/outputs/flutter-apk/app-x86_64-debug.apk
+
+          unzip -l "$ARM64" > apk-arm64-contents.txt
+          grep -q 'lib/arm64-v8a/libpython3.14.so' apk-arm64-contents.txt
+          grep -q 'assets/addko_python/3.14.8/arm64-v8a/prefix/lib/python3.14/json/__init__.py' apk-arm64-contents.txt
+
+          unzip -l "$X64" > apk-x64-contents.txt
+          grep -q 'lib/x86_64/libpython3.14.so' apk-x64-contents.txt
+          grep -q 'assets/addko_python/3.14.8/x86_64/prefix/lib/python3.14/json/__init__.py' apk-x64-contents.txt
+
+          echo 'CPython Android runtime verified in split APKs.'
       - uses: actions/upload-artifact@v4
         with:
-          name: AddKo-debug-android
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          name: AddKo-debug-android-split
+          path: |
+            build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
+            build/app/outputs/flutter-apk/app-x86_64-debug.apk
           if-no-files-found: error
           retention-days: 7
