@@ -68,6 +68,13 @@ if not exist "%APK%" (
   exit /b 1
 )
 
+echo [AddKo] Verificando motor Kodi/Python dentro do APK...
+python tools\android\verify_addko_apk.py "%APK%" --abi arm64-v8a
+if errorlevel 1 (
+  echo [ERRO] O APK foi gerado, mas esta incompleto.
+  exit /b 1
+)
+
 copy /Y "%APK%" "%DIST_APK%" >nul
 if errorlevel 1 (
   echo [ERRO] Nao foi possivel copiar o APK para dist.
@@ -76,7 +83,7 @@ if errorlevel 1 (
 
 for %%F in ("%DIST_APK%") do set "APK_SIZE=%%~zF"
 echo.
-echo [OK] APK gerado.
+echo [OK] APK gerado e verificado.
 echo Arquivo: %CD%\%DIST_APK%
 echo Tamanho: %APK_SIZE% bytes
 exit /b 0
