@@ -16,6 +16,9 @@ Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
 - [x] sincronização HTTP de `addons.xml` / `addons.xml.gz`;
 - [x] organização da Loja por tipos de addon Kodi;
 - [x] instalador seguro de pacotes ZIP com staging/rollback;
+- [x] instalação manual de addon/repository Kodi por arquivo ZIP local;
+- [x] repository instalado por ZIP registra seus endpoints remotos na Loja;
+- [x] dependências de addon instalado por ZIP são buscadas nos repositórios ativos;
 - [x] validação do ID e versão do pacote contra o índice do repositório;
 - [x] registro e descoberta de addons instalados;
 - [x] resolvedor recursivo de dependências e versões;
@@ -98,7 +101,9 @@ Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
 
 ## Regra da Loja
 
-O usuário registra a URL de um repositório. O AddKo aceita um descriptor `xbmc.addon.repository` ou um índice `addons.xml`/`addons.xml.gz`, sincroniza os metadados, apresenta os addons pelas categorias Kodi e usa o mesmo Addon Manager para baixar o pacote e resolver dependências automaticamente.
+O usuário registra a URL de um repositório ou instala o ZIP de um addon `repository.*`. O AddKo aceita um descriptor `xbmc.addon.repository` ou um índice `addons.xml`/`addons.xml.gz`, sincroniza os metadados, apresenta os addons pelas categorias Kodi e usa o mesmo Addon Manager para baixar o pacote e resolver dependências automaticamente.
+
+A Loja também aceita um ZIP Kodi local. O pacote é validado e instalado pelo mesmo instalador seguro; se for um `repository.*`, os endpoints do `addon.xml` entram na Loja. Se for um addon comum, o AddKo procura as dependências faltantes nos repositórios ativos.
 
 Dependências como `script.module.*`, `inputstream.*` e outros addons não aparecem como cards comuns no launcher apenas por estarem instaladas. O launcher é voltado aos addons executáveis pelo usuário.
 
