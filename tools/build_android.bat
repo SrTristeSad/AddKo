@@ -18,30 +18,33 @@ where python >nul 2>nul || (
 python --version || exit /b 1
 
 if not exist dist mkdir dist
+if exist "dist\AddKo-arm64-debug.apk" del /Q "dist\AddKo-arm64-debug.apk"
+
+echo [AddKo] Limpando build anterior para nao reutilizar codigo antigo...
+call flutter clean || exit /b 1
 
 echo [AddKo] Baixando dependencias Flutter...
 call flutter pub get || exit /b 1
 
-echo [AddKo] Preparando CPython Android verificado por SHA-256...
-python tools\android\fetch_python_runtime.py --output android\app\build\addko-python-runtime || exit /b 1
+echo [AddKo] Verificando o codigo antes do build...
+call flutter analyze --no-fatal-infos --no-fatal-warnings || exit /b 1
+
+echo [AddKo] Preparando CPython Android ARM64 verificado por SHA-256...
+python tools\android\fetch_python_runtime.py --abi arm64-v8a --output android\app\build\addko-python-runtime || exit /b 1
 
 set "PYTHON=python"
-echo [AddKo] Gerando APKs por arquitetura...
-call flutter build apk --debug --split-per-abi || exit /b 1
+echo [AddKo] Gerando APK ARM64...
+call flutter build apk --debug --target-platform android-arm64 || exit /b 1
 
-set "ARM64=build\app\outputs\flutter-apk\app-arm64-v8a-debug.apk"
-set "X64=build\app\outputs\flutter-apk\app-x86_64-debug.apk"
-
-if not exist "%ARM64%" (
-  echo [ERRO] O APK ARM64 nao foi gerado em %ARM64%.
+set "APK=build\app\outputs\flutter-apk\app-debug.apk"
+if not exist "%APK%" (
+  echo [ERRO] O APK nao foi gerado em %APK%.
   exit /b 1
 )
 
-copy /Y "%ARM64%" "dist\AddKo-arm64-debug.apk" >nul || exit /b 1
-if exist "%X64%" copy /Y "%X64%" "dist\AddKo-x86_64-debug.apk" >nul
+copy /Y "%APK%" "dist\AddKo-arm64-debug.apk" >nul || exit /b 1
 
 echo.
 echo [OK] Build concluido.
-echo ARM64: %CD%\dist\AddKo-arm64-debug.apk
-if exist "dist\AddKo-x86_64-debug.apk" echo x86_64: %CD%\dist\AddKo-x86_64-debug.apk
+echo APK: %CD%\dist\AddKo-arm64-debug.apk
 exit /b 0
