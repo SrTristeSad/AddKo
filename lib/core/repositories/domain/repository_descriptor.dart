@@ -18,6 +18,7 @@ class RepositoryEndpoint {
     required this.zipPackages,
     this.checksumUri,
     this.minimumVersion,
+    this.maximumVersion,
   });
 
   final Uri infoUri;
@@ -26,4 +27,5 @@ class RepositoryEndpoint {
   final bool compressed;
   final bool zipPackages;
   final String? minimumVersion;
+  final String? maximumVersion;
 }
