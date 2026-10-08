@@ -9,9 +9,12 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SHIMS = ROOT / "runtime" / "python" / "shims"
+RUNTIME = ROOT / "runtime" / "python"
+SHIMS = RUNTIME / "shims"
+sys.path.insert(0, str(RUNTIME))
 sys.path.insert(0, str(SHIMS))
 
+import addko_worker  # noqa: E402
 import kodi_proxy  # noqa: E402,F401
 import xbmc  # noqa: E402
 import xbmcaddon  # noqa: E402,F401
@@ -29,6 +32,10 @@ def require(module: object, *names: str) -> None:
 
 
 def main() -> int:
+    # The worker attaches the common fallback to modules that do not implement
+    # module-level __getattr__ themselves.
+    addko_worker._install_kodi_api_fallbacks()
+
     require(
         xbmc,
         "Keyboard",
@@ -122,11 +129,13 @@ def main() -> int:
     assert snapshot["label"] == "Demo"
     assert snapshot["properties"]["IsPlayable"] == "true"
 
-    # Unknown Kodi symbols should no longer terminate an addon at import/access
-    # time. Behaviour-critical APIs remain explicit; ancillary APIs fall back
-    # to the generic bridge until promoted to an exact implementation.
+    # Unknown official-surface symbols no longer abort addon startup. This is
+    # especially useful for compatibility probes performed by older addons.
     assert xbmc.ADDKO_UNKNOWN_KODI_CONSTANT == 0
     assert xbmcplugin.ADDKO_UNKNOWN_PLUGIN_CONSTANT == 0
+    assert xbmcgui.ADDKO_UNKNOWN_GUI_CONSTANT == 0
+    assert xbmcvfs.ADDKO_UNKNOWN_VFS_CONSTANT == 0
+
     dynamic_type = xbmc.FutureKodiCompatibilityObject
     dynamic_object = dynamic_type("demo")
     assert "FutureKodiCompatibilityObject" in repr(dynamic_object)
