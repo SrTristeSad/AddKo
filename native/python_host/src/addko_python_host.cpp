@@ -17,6 +17,10 @@ using PyGILStateEnsureFn = int (*)();
 using PyGILStateReleaseFn = void (*)(int);
 using PyEvalSaveThreadFn = void* (*)();
 using PyEvalRestoreThreadFn = void (*)(void*);
+using PyThreadStateGetFn = void* (*)();
+using PyThreadStateSwapFn = void* (*)(void*);
+using PyNewInterpreterFn = void* (*)();
+using PyEndInterpreterFn = void (*)(void*);
 
 std::mutex g_mutex;
 void* g_python_handle = nullptr;
@@ -29,14 +33,28 @@ PyGILStateEnsureFn g_py_gil_state_ensure = nullptr;
 PyGILStateReleaseFn g_py_gil_state_release = nullptr;
 PyEvalSaveThreadFn g_py_eval_save_thread = nullptr;
 PyEvalRestoreThreadFn g_py_eval_restore_thread = nullptr;
+PyThreadStateGetFn g_py_thread_state_get = nullptr;
+PyThreadStateSwapFn g_py_thread_state_swap = nullptr;
+PyNewInterpreterFn g_py_new_interpreter = nullptr;
+PyEndInterpreterFn g_py_end_interpreter = nullptr;
 void* g_main_thread_state = nullptr;
 bool g_initialized_by_addko = false;
 std::string g_last_error;
 std::string g_version;
 std::string g_python_home;
 
-void set_error(const std::string& message) {
+void set_error_locked(const std::string& message) {
   g_last_error = message;
+}
+
+void set_error(const std::string& message) {
+  std::lock_guard<std::mutex> lock(g_mutex);
+  set_error_locked(message);
+}
+
+void clear_error() {
+  std::lock_guard<std::mutex> lock(g_mutex);
+  g_last_error.clear();
 }
 
 std::string major_minor_locked() {
@@ -71,13 +89,23 @@ bool resolve_symbols_locked() {
       dlsym(g_python_handle, "PyEval_SaveThread"));
   g_py_eval_restore_thread = reinterpret_cast<PyEvalRestoreThreadFn>(
       dlsym(g_python_handle, "PyEval_RestoreThread"));
+  g_py_thread_state_get = reinterpret_cast<PyThreadStateGetFn>(
+      dlsym(g_python_handle, "PyThreadState_Get"));
+  g_py_thread_state_swap = reinterpret_cast<PyThreadStateSwapFn>(
+      dlsym(g_python_handle, "PyThreadState_Swap"));
+  g_py_new_interpreter = reinterpret_cast<PyNewInterpreterFn>(
+      dlsym(g_python_handle, "Py_NewInterpreter"));
+  g_py_end_interpreter = reinterpret_cast<PyEndInterpreterFn>(
+      dlsym(g_python_handle, "Py_EndInterpreter"));
 
   if (!g_py_initialize || !g_py_is_initialized || !g_py_run_simple_string ||
       !g_py_finalize_ex || !g_py_get_version || !g_py_gil_state_ensure ||
       !g_py_gil_state_release || !g_py_eval_save_thread ||
-      !g_py_eval_restore_thread) {
+      !g_py_eval_restore_thread || !g_py_thread_state_get ||
+      !g_py_thread_state_swap || !g_py_new_interpreter ||
+      !g_py_end_interpreter) {
     const char* error = dlerror();
-    set_error(error ? error : "CPython symbols are incomplete.");
+    set_error_locked(error ? error : "CPython symbols are incomplete.");
     return false;
   }
 
@@ -114,7 +142,7 @@ bool load_python_locked() {
   }
 
   const char* error = dlerror();
-  set_error(
+  set_error_locked(
       error ? error
             : "No bundled libpython3.x.so was found for this architecture.");
   return false;
@@ -122,7 +150,7 @@ bool load_python_locked() {
 
 bool configure_home_locked(const char* home) {
   if (home == nullptr || home[0] == '\0') {
-    set_error("Python home is empty.");
+    set_error_locked("Python home is empty.");
     return false;
   }
   if (!load_python_locked()) {
@@ -134,13 +162,13 @@ bool configure_home_locked(const char* home) {
     if (g_python_home == requested) {
       return true;
     }
-    set_error("CPython is already initialized with a different Python home.");
+    set_error_locked("CPython is already initialized with a different Python home.");
     return false;
   }
 
   const std::string version = major_minor_locked();
   if (version.empty()) {
-    set_error("Unable to determine CPython major/minor version.");
+    set_error_locked("Unable to determine CPython major/minor version.");
     return false;
   }
 
@@ -152,7 +180,7 @@ bool configure_home_locked(const char* home) {
       setenv("PYTHONPATH", python_path.c_str(), 1) != 0 ||
       setenv("PYTHONUTF8", "1", 1) != 0 ||
       setenv("PYTHONDONTWRITEBYTECODE", "1", 1) != 0) {
-    set_error("Failed to configure CPython environment variables.");
+    set_error_locked("Failed to configure CPython environment variables.");
     return false;
   }
 
@@ -169,13 +197,13 @@ bool initialize_locked() {
     return true;
   }
   if (g_python_home.empty()) {
-    set_error("Python home must be configured before initialization.");
+    set_error_locked("Python home must be configured before initialization.");
     return false;
   }
 
   g_py_initialize();
   if (!g_py_is_initialized()) {
-    set_error("Py_Initialize did not initialize CPython.");
+    set_error_locked("Py_Initialize did not initialize CPython.");
     return false;
   }
 
@@ -186,6 +214,11 @@ bool initialize_locked() {
   g_main_thread_state = g_py_eval_save_thread();
   g_last_error.clear();
   return true;
+}
+
+bool ensure_initialized() {
+  std::lock_guard<std::mutex> lock(g_mutex);
+  return initialize_locked();
 }
 }  // namespace
 
@@ -214,13 +247,10 @@ extern "C" int addko_python_is_initialized(void) {
 
 extern "C" int addko_python_exec(const char* code) {
   if (code == nullptr) {
-    std::lock_guard<std::mutex> lock(g_mutex);
     set_error("Python source is null.");
     return -1;
   }
-
-  std::lock_guard<std::mutex> lock(g_mutex);
-  if (!initialize_locked()) {
+  if (!ensure_initialized()) {
     return -2;
   }
 
@@ -232,7 +262,41 @@ extern "C" int addko_python_exec(const char* code) {
     set_error("PyRun_SimpleString returned a non-zero status.");
     return result;
   }
-  g_last_error.clear();
+  clear_error();
+  return 0;
+}
+
+extern "C" int addko_python_exec_isolated(const char* code) {
+  if (code == nullptr) {
+    set_error("Python source is null.");
+    return -1;
+  }
+  if (!ensure_initialized()) {
+    return -2;
+  }
+
+  const int gil_state = g_py_gil_state_ensure();
+  void* main_state = g_py_thread_state_get();
+  void* sub_state = g_py_new_interpreter();
+  if (sub_state == nullptr) {
+    g_py_thread_state_swap(main_state);
+    g_py_gil_state_release(gil_state);
+    set_error("Py_NewInterpreter returned null.");
+    return -3;
+  }
+
+  const int result = g_py_run_simple_string(code);
+  // Py_EndInterpreter requires the subinterpreter thread state to be current.
+  g_py_thread_state_swap(sub_state);
+  g_py_end_interpreter(sub_state);
+  g_py_thread_state_swap(main_state);
+  g_py_gil_state_release(gil_state);
+
+  if (result != 0) {
+    set_error("PyRun_SimpleString returned a non-zero status in subinterpreter.");
+    return result;
+  }
+  clear_error();
   return 0;
 }
 
@@ -255,7 +319,7 @@ extern "C" int addko_python_shutdown(void) {
   const int result = g_py_finalize_ex();
   g_initialized_by_addko = false;
   if (result != 0) {
-    set_error("Py_FinalizeEx returned a non-zero status.");
+    set_error_locked("Py_FinalizeEx returned a non-zero status.");
     return result;
   }
   g_last_error.clear();
