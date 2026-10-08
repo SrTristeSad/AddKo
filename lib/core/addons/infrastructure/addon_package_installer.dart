@@ -268,7 +268,19 @@ class AddonPackageInstaller {
     candidates.sort(
       (left, right) => _depth(left.rootPrefix).compareTo(_depth(right.rootPrefix)),
     );
-    return candidates.first;
+    final shallowestDepth = _depth(candidates.first.rootPrefix);
+    final shallowest = candidates
+        .where((candidate) => _depth(candidate.rootPrefix) == shallowestDepth)
+        .toList(growable: false);
+    final distinctRoots = shallowest
+        .map((candidate) => candidate.rootPrefix.toLowerCase())
+        .toSet();
+    if (distinctRoots.length > 1) {
+      throw const AddonInstallException(
+        'O ZIP contém mais de um addon.xml principal e não pode ser instalado com segurança.',
+      );
+    }
+    return shallowest.first;
   }
 
   Future<void> _extractArchive({
