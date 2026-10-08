@@ -47,7 +47,7 @@ Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
 - [x] built-ins ligados à Loja/Add-on Manager: `InstallAddon`, `UpdateAddonRepos` e `UpdateLocalAddons`;
 - [x] `InstallAddon` procura o pacote nos repositórios ativos e usa o resolvedor recursivo de dependências do AddKo;
 - [x] reconhecimento de `xbmc.service` e seu entrypoint em `addon.xml`;
-- [x] supervisor de serviços Python em processos de segundo plano;
+- [x] supervisor de serviços Python em processos de segundo plano no desktop;
 - [x] `xbmc.Monitor.abortRequested()` e `waitForAbort()` conectados ao supervisor para encerramento limpo;
 - [x] serviços instalados/inseridos ou atualizados são reconciliados automaticamente pelo supervisor;
 - [x] JSON-RPC de serviços é respondido pela mesma camada de compatibilidade do runtime legado;
@@ -64,8 +64,14 @@ Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
 - [x] página em Configurações mostra o estado do host nativo e do CPython embarcado;
 - [x] executor Android usa o mesmo `LegacyPluginInvocation` do desktop e encaminha plugins/scripts ao host embarcado;
 - [x] bridge local autenticado permite requests/eventos bidirecionais entre o worker Python embarcado e o Flutter, incluindo dialogs e demais chamadas síncronas;
-- [ ] incluir `libpython3.x.so` e stdlib Python por ABI dentro do APK;
-- [ ] migrar `xbmc.service` no Android para um supervisor baseado no executor embarcado;
+- [x] CPython 3.14.8 oficial é baixado com SHA-256 fixo e empacotado no APK para `arm64-v8a` e `x86_64`;
+- [x] stdlib e módulos nativos do CPython são preparados por ABI, extraídos para o armazenamento privado do app e configurados como `PYTHONHOME`/`PYTHONPATH`;
+- [x] execução Android usa subinterpretadores CPython para separar `sys.modules`, `sys.path`, `sys.argv` e streams entre addons concorrentes;
+- [x] `xbmc.service` usa CPython embarcado no Android e compartilha o bridge de Monitor, JSON-RPC e eventos do supervisor legado;
+- [x] o CI Android baixa/verifica o runtime, constrói o APK e valida que `libpython` e a stdlib foram realmente incluídos no pacote;
+- [ ] smoke test em emulador Android executando imports reais (`ssl`, `sqlite3`, `json`) e um addon de teste;
+- [ ] build próprio de CPython para `armeabi-v7a` caso decidamos manter suporte a Android 32-bit;
+- [ ] interrupção nativa forçada de serviço que ignore completamente `xbmc.Monitor`;
 - [ ] suportar os demais comandos do player (`playnext`, `playprevious`, legendas e playlists) no host global;
 - [ ] `ActivateWindow` e navegação visual disparados por serviços;
 - [ ] registrar histórico/log recente por serviço no painel;
