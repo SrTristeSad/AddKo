@@ -10,7 +10,7 @@ class PythonRuntimeBundle {
   }) : _supportDirectoryProvider =
             supportDirectoryProvider ?? getApplicationSupportDirectory;
 
-  static const _version = 'v4';
+  static const _version = 'v5';
   static const _workerAsset = 'runtime/python/addko_worker.py';
   static const _shimAssets = <String>[
     'runtime/python/shims/addko_bridge.py',
