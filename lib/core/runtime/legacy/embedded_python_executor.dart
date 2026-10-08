@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 
+import 'android_python_runtime.dart';
 import 'embedded_python_host.dart';
 import 'legacy_plugin_invocation.dart';
 import 'legacy_plugin_result.dart';
@@ -32,13 +33,22 @@ class EmbeddedPythonExecutor implements PythonExecutor {
       );
       return collector.build(exitCode: -1);
     }
+
+    AndroidPythonRuntimeInfo runtimeInfo;
+    try {
+      runtimeInfo = await AndroidPythonRuntime.prepare();
+    } on Object catch (error) {
+      collector.consumeStderrLine('Falha ao preparar CPython Android: $error');
+      return collector.build(exitCode: -2);
+    }
+
     if (!host.hasBundledPython) {
       collector.consumeStderrLine(
         host.lastError.isEmpty
-            ? 'Biblioteca CPython embarcada não encontrada para esta ABI.'
+            ? 'Biblioteca CPython embarcada não encontrada para ${runtimeInfo.abi}.'
             : host.lastError,
       );
-      return collector.build(exitCode: -2);
+      return collector.build(exitCode: -3);
     }
 
     final tempDirectory = await Directory.systemTemp.createTemp(
@@ -64,6 +74,7 @@ class EmbeddedPythonExecutor implements PythonExecutor {
       final contextPath = contextFile.path;
       final stderrPath = stderrFile.path;
       final exitPath = exitFile.path;
+      final pythonHome = runtimeInfo.home;
       final port = server.port;
 
       final execution = Isolate.run<Map<String, Object?>>(
@@ -72,6 +83,7 @@ class EmbeddedPythonExecutor implements PythonExecutor {
           contextPath: contextPath,
           stderrPath: stderrPath,
           exitPath: exitPath,
+          pythonHome: pythonHome,
           port: port,
           token: token,
         ),
@@ -88,7 +100,7 @@ class EmbeddedPythonExecutor implements PythonExecutor {
               : 'CPython não abriu o bridge local do AddKo.',
         );
         return collector.build(
-          exitCode: (nativeResult['status'] as num?)?.toInt() ?? -3,
+          exitCode: (nativeResult['status'] as num?)?.toInt() ?? -4,
         );
       }
 
@@ -136,7 +148,9 @@ class EmbeddedPythonExecutor implements PythonExecutor {
           .transform(const LineSplitter())) {
         if (!authenticated) {
           if (line != 'ADDKO_EMBEDDED $token') {
-            collector.consumeStderrLine('Bridge CPython rejeitado: handshake inválido.');
+            collector.consumeStderrLine(
+              'Bridge CPython rejeitado: handshake inválido.',
+            );
             socket.destroy();
             return;
           }
@@ -180,6 +194,7 @@ class EmbeddedPythonExecutor implements PythonExecutor {
     required String contextPath,
     required String stderrPath,
     required String exitPath,
+    required String pythonHome,
     required int port,
     required String token,
   }) {
@@ -193,6 +208,14 @@ class EmbeddedPythonExecutor implements PythonExecutor {
     if (!host.hasBundledPython) {
       return {
         'status': -2,
+        'error': host.lastError,
+      };
+    }
+
+    final configureResult = host.configure(pythonHome);
+    if (configureResult != 0) {
+      return {
+        'status': configureResult,
         'error': host.lastError,
       };
     }
