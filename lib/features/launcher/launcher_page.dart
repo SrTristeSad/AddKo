@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -19,12 +20,14 @@ class LauncherPage extends StatelessWidget {
     required this.repositoryRegistry,
     required this.repositoryStoreController,
     required this.addonInstallController,
+    this.onExitRequested,
     super.key,
   });
 
   final RepositoryRegistry repositoryRegistry;
   final RepositoryStoreController repositoryStoreController;
   final AddonInstallController addonInstallController;
+  final Future<void> Function()? onExitRequested;
 
   @override
   Widget build(BuildContext context) {
@@ -74,7 +77,7 @@ class LauncherPage extends StatelessWidget {
               ),
             ),
             _BottomBar(
-              onExit: _exitApp,
+              onExit: () => unawaited(_exitApp()),
               onStore: () => _openStore(context),
               onSettings: () {
                 Navigator.of(context).push(
@@ -102,9 +105,10 @@ class LauncherPage extends StatelessWidget {
     );
   }
 
-  void _exitApp() {
-    if (Platform.isAndroid) {
-      SystemNavigator.pop();
+  Future<void> _exitApp() async {
+    await onExitRequested?.call();
+    if (Platform.isAndroid || Platform.isIOS) {
+      await SystemNavigator.pop();
       return;
     }
     exit(0);
