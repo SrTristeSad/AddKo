@@ -4,6 +4,10 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val addkoPythonRuntimeDir = layout.buildDirectory.dir("addko-python-runtime")
+val pythonCommand = System.getenv("PYTHON")?.takeIf { it.isNotBlank() }
+    ?: if (System.getProperty("os.name").lowercase().contains("windows")) "python" else "python3"
+
 android {
     namespace = "com.srtristesad.addko"
     compileSdk = flutter.compileSdkVersion
@@ -21,8 +25,10 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
+        // Python.org currently publishes official Android embeddable packages for
+        // these 64-bit ABIs. 32-bit ARM can be added later from a source build.
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            abiFilters += listOf("arm64-v8a", "x86_64")
         }
 
         externalNativeBuild {
@@ -30,6 +36,11 @@ android {
                 cppFlags += "-std=c++17"
             }
         }
+    }
+
+    sourceSets.getByName("main") {
+        assets.srcDir(addkoPythonRuntimeDir.map { it.dir("assets") })
+        jniLibs.srcDir(addkoPythonRuntimeDir.map { it.dir("jniLibs") })
     }
 
     externalNativeBuild {
@@ -44,6 +55,27 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+val prepareAddKoPythonRuntime by tasks.registering(Exec::class) {
+    group = "addko"
+    description = "Downloads, verifies and stages the official CPython Android runtime."
+
+    val output = addkoPythonRuntimeDir.get().asFile
+    outputs.dir(output)
+    inputs.file(rootProject.file("../tools/android/fetch_python_runtime.py"))
+
+    workingDir(rootProject.projectDir.parentFile)
+    commandLine(
+        pythonCommand,
+        "tools/android/fetch_python_runtime.py",
+        "--output",
+        output.absolutePath,
+    )
+}
+
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn(prepareAddKoPythonRuntime)
 }
 
 kotlin {
