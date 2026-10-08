@@ -15,9 +15,21 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
+      - uses: actions/cache@v4
+        with:
+          path: .cache/addko-python
+          key: addko-cpython-android-3.14.8-v1
       - run: flutter pub get
-      - run: flutter build apk --debug
+      - name: Stage official CPython Android runtime
+        run: python3 tools/android/fetch_python_runtime.py --output android/app/build/addko-python-runtime
+      - name: Build debug APK with embedded Python
+        env:
+          PYTHON: python3
+        run: flutter build apk --debug
