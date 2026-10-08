@@ -58,10 +58,16 @@ Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
 - [x] `RunPlugin`, `RunAddon`, `RunScript`, `PlayMedia(plugin://...)` e `Container.Update(plugin://...)` disparados por serviços executam pelo runtime global;
 - [x] resultados `setResolvedUrl` e built-ins produzidos por plugins/scripts chamados em background continuam sendo processados;
 - [x] player ativo registra uma ponte global para receber `play`, `pause`, `stop`, `seekTime` e troca de mídia sem abrir outra instância;
+- [x] projeto Android/Android TV inicial com launcher Leanback, navegação por controle e orientação horizontal;
+- [x] `libaddko_python_host` nativa compilada por CMake e acessível pelo Flutter via Dart FFI;
+- [x] loader nativo procura CPython por ABI, consulta a versão, inicializa, executa código simples e encerra o interpretador;
+- [x] página em Configurações mostra o estado do host nativo e do CPython embarcado;
+- [ ] incluir `libpython3.x.so` e stdlib Python por ABI dentro do APK;
+- [ ] conectar o worker Kodi ao CPython embarcado com bridge bidirecional de requests/eventos;
+- [ ] migrar `LegacyPluginRuntime` e `xbmc.service` no Android para o executor embarcado;
 - [ ] suportar os demais comandos do player (`playnext`, `playprevious`, legendas e playlists) no host global;
 - [ ] `ActivateWindow` e navegação visual disparados por serviços;
 - [ ] registrar histórico/log recente por serviço no painel;
-- [ ] CPython embarcado para Android/Android TV e demais plataformas sem Python do sistema;
 - [ ] ampliar os built-ins restantes do Kodi conforme addons reais exigirem;
 - [ ] ampliar JSON-RPC para Addons, Files, Player, Playlist, Settings e bibliotecas;
 - [ ] ampliar suporte a scripts Python e demais extension points usados por addons reais;
