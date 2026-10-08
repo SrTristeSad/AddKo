@@ -3,8 +3,8 @@ import 'kodi_version.dart';
 /// Kodi add-on API capabilities implemented by the AddKo legacy runtime.
 ///
 /// AddKo currently targets the Kodi 21 (Omega) Python 3 compatibility line.
-/// These values are used to validate <requires> entries instead of blindly
-/// accepting every xbmc.* dependency as if the host implemented it.
+/// These values validate `requires` entries instead of blindly accepting
+/// every xbmc.* dependency as if the host implemented it.
 class KodiHostCapabilities {
   const KodiHostCapabilities._();
 
