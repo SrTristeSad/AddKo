@@ -33,6 +33,35 @@ void main() {
     );
   });
 
+  test('replaces an existing addon even when only id casing changed', () async {
+    final root = await Directory.systemTemp.createTemp('addko-installer-');
+    addTearDown(() => root.delete(recursive: true));
+
+    final existing = Directory(p.join(root.path, 'plugin.video.BrazucaPlay.Matrix'));
+    await existing.create(recursive: true);
+    await File(p.join(existing.path, 'addon.xml')).writeAsString(
+      _manifest('plugin.video.BrazucaPlay.Matrix', '1.0.0'),
+    );
+    await File(p.join(existing.path, 'old.txt')).writeAsString('old');
+
+    final installer = AddonPackageInstaller();
+    addTearDown(installer.close);
+    final installed = await installer.installBytes(
+      bytes: _zip({
+        'plugin.video.brazucaplay.matrix/addon.xml':
+            _manifest('plugin.video.brazucaplay.matrix', '2.0.0'),
+        'plugin.video.brazucaplay.matrix/default.py': 'print("new")',
+      }),
+      addonsRoot: root,
+      expectedAddonId: 'plugin.video.BrazucaPlay.Matrix',
+      expectedVersion: '2.0.0',
+    );
+
+    expect(installed.installPath, existing.path);
+    expect(File(p.join(existing.path, 'old.txt')).existsSync(), isFalse);
+    expect(File(p.join(existing.path, 'default.py')).existsSync(), isTrue);
+  });
+
   test('rejects ZIP traversal outside the addon root', () async {
     final root = await Directory.systemTemp.createTemp('addko-installer-');
     addTearDown(() => root.delete(recursive: true));
