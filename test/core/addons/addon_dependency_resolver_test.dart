@@ -1,4 +1,5 @@
 import 'package:addko/core/addons/application/addon_dependency_resolver.dart';
+import 'package:addko/core/addons/domain/installed_addon.dart';
 import 'package:addko/core/addons/infrastructure/addon_manifest_parser.dart';
 import 'package:addko/core/repositories/domain/repository_catalog.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -70,6 +71,56 @@ void main() {
 
     expect(plan.canInstall, isFalse);
     expect(plan.issues.single.addonId, 'script.module.missing');
+  });
+
+  test('local zip root can resolve only its missing dependencies', () {
+    final dependency = _entry(
+      id: 'script.module.localdep',
+      version: '1.4.0',
+      xml: '''
+<addon id="script.module.localdep" name="Local dependency" version="1.4.0" provider-name="AddKo">
+  <extension point="xbmc.python.module" library="lib" />
+</addon>
+''',
+    );
+    final root = _entry(
+      id: 'plugin.video.local',
+      version: '1.0.0',
+      xml: '''
+<addon id="plugin.video.local" name="Local ZIP" version="1.0.0" provider-name="AddKo">
+  <requires><import addon="script.module.localdep" version="1.0.0" /></requires>
+  <extension point="xbmc.python.pluginsource" library="default.py"><provides>video</provides></extension>
+</addon>
+''',
+    );
+    final catalog = RepositoryCatalog(
+      repositoryName: 'Repo',
+      sourceUri: Uri.parse('https://repo.example/addons.xml'),
+      packageBaseUri: Uri.parse('https://repo.example/zips/'),
+      addons: [dependency],
+      fetchedAt: DateTime.utc(2026),
+    );
+
+    final plan = const AddonDependencyResolver().resolve(
+      root: RepositoryAddonEntry(
+        manifest: root.manifest,
+        category: root.category,
+      ),
+      catalogs: [catalog],
+      installedAddons: [
+        InstalledAddon(
+          manifest: root.manifest,
+          installPath: '/addons/plugin.video.local',
+        ),
+      ],
+      installRoot: false,
+    );
+
+    expect(plan.canInstall, isTrue);
+    expect(
+      plan.installOrder.map((entry) => entry.manifest.id),
+      ['script.module.localdep'],
+    );
   });
 }
 
