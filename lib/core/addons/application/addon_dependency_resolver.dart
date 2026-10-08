@@ -35,6 +35,7 @@ class AddonDependencyResolver {
     required RepositoryAddonEntry root,
     required Iterable<RepositoryCatalog> catalogs,
     required Iterable<InstalledAddon> installedAddons,
+    bool installRoot = true,
   }) {
     final allAvailable = <String, List<RepositoryAddonEntry>>{};
     for (final catalog in catalogs) {
@@ -124,7 +125,7 @@ class AddonDependencyResolver {
       planned.add(addonId);
     }
 
-    visit(root, explicitlySelected: true);
+    visit(root, explicitlySelected: installRoot);
 
     return AddonInstallPlan(
       installOrder: List.unmodifiable(installOrder),
