@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import '../../addons/application/addon_install_controller.dart';
 import '../../addons/domain/installed_addon.dart';
 import '../plugin_uri.dart';
+import 'addon_path_guard.dart';
 import 'embedded_python_executor.dart';
 import 'legacy_plugin_invocation.dart';
 import 'legacy_plugin_result.dart';
@@ -89,7 +90,16 @@ class LegacyPluginRuntime {
       );
     }
 
-    final entrypointPath = p.normalize(p.join(addon.installPath, entrypoint));
+    final entrypointPath = AddonPathGuard.resolveInside(
+      addon.installPath,
+      entrypoint,
+    );
+    if (entrypointPath == null) {
+      return _failure(
+        '${addon.manifest.name} declara um caminho Python inseguro: "$entrypoint".',
+      );
+    }
+
     return _invokeAddon(
       addon: addon,
       entrypoint: entrypoint,
@@ -106,7 +116,15 @@ class LegacyPluginRuntime {
     required String query,
     List<String>? argv,
   }) async {
-    final entrypointPath = p.normalize(p.join(addon.installPath, entrypoint));
+    final entrypointPath = AddonPathGuard.resolveInside(
+      addon.installPath,
+      entrypoint,
+    );
+    if (entrypointPath == null) {
+      return _failure(
+        '${addon.manifest.name} declara um caminho Python inseguro: "$entrypoint".',
+      );
+    }
     if (!await File(entrypointPath).exists()) {
       return _failure(
         '${addon.manifest.name} declara o arquivo Python "$entrypoint", mas ele não existe no pacote instalado.',
@@ -194,8 +212,13 @@ class LegacyPluginRuntime {
           }
           final library = extension.library?.trim();
           if (library != null && library.isNotEmpty) {
-            final libraryPath = p.normalize(p.join(installed.installPath, library));
-            if (FileSystemEntity.typeSync(libraryPath) != FileSystemEntityType.notFound) {
+            final libraryPath = AddonPathGuard.resolveInside(
+              installed.installPath,
+              library,
+            );
+            if (libraryPath != null &&
+                FileSystemEntity.typeSync(libraryPath) !=
+                    FileSystemEntityType.notFound) {
               result.add(libraryPath);
               addedLibrary = true;
             }
