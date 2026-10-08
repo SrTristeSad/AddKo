@@ -25,11 +25,13 @@ class StorePage extends StatefulWidget {
 }
 
 class _StorePageState extends State<StorePage> {
+  bool _syncScheduled = false;
+
   @override
   void initState() {
     super.initState();
     widget.repositoryRegistry.addListener(_handleRegistryChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _syncIdleSources());
+    _scheduleIdleSync();
   }
 
   @override
@@ -39,7 +41,21 @@ class _StorePageState extends State<StorePage> {
   }
 
   void _handleRegistryChanged() {
-    _syncIdleSources();
+    _scheduleIdleSync();
+  }
+
+  void _scheduleIdleSync() {
+    if (_syncScheduled) {
+      return;
+    }
+    _syncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncScheduled = false;
+      if (!mounted) {
+        return;
+      }
+      _syncIdleSources();
+    });
   }
 
   void _syncIdleSources() {
@@ -70,7 +86,7 @@ class _StorePageState extends State<StorePage> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddRepositoryDialog(context),
+        onPressed: _showAddRepositoryDialog,
         icon: const Icon(Icons.add_link_rounded),
         label: const Text('Adicionar repositório'),
       ),
@@ -131,91 +147,122 @@ class _StorePageState extends State<StorePage> {
     widget.repositoryStoreController.forget(repository.uri);
   }
 
-  Future<void> _showAddRepositoryDialog(BuildContext context) async {
-    final controller = TextEditingController();
-    String? errorText;
-    var submitting = false;
-
-    await showDialog<void>(
+  Future<void> _showAddRepositoryDialog() async {
+    final rawUrl = await showDialog<String>(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            Future<void> submit() async {
-              if (submitting) {
-                return;
-              }
-              setDialogState(() {
-                submitting = true;
-                errorText = null;
-              });
-
-              try {
-                await widget.repositoryRegistry.addUrl(controller.text);
-                if (dialogContext.mounted) {
-                  Navigator.pop(dialogContext);
-                }
-              } on FormatException catch (error) {
-                if (dialogContext.mounted) {
-                  setDialogState(() {
-                    errorText = error.message.toString();
-                    submitting = false;
-                  });
-                }
-              } on Object catch (error) {
-                if (dialogContext.mounted) {
-                  setDialogState(() {
-                    errorText = 'Não foi possível salvar: $error';
-                    submitting = false;
-                  });
-                }
-              }
-            }
-
-            return AlertDialog(
-              title: const Text('Adicionar repositório'),
-              content: SizedBox(
-                width: 560,
-                child: TextField(
-                  controller: controller,
-                  autofocus: true,
-                  enabled: !submitting,
-                  keyboardType: TextInputType.url,
-                  onSubmitted: (_) => unawaited(submit()),
-                  decoration: InputDecoration(
-                    labelText: 'URL do repositório',
-                    hintText: 'https://exemplo.com/repository/',
-                    helperText:
-                        'Aceita descriptor addon.xml ou índice addons.xml/addons.xml.gz.',
-                    errorText: errorText,
-                    border: const OutlineInputBorder(),
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: submitting
-                      ? null
-                      : () => Navigator.pop(dialogContext),
-                  child: const Text('Cancelar'),
-                ),
-                FilledButton(
-                  onPressed: submitting ? null : () => unawaited(submit()),
-                  child: submitting
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Adicionar'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (_) => _AddRepositoryDialog(
+        existingUris: widget.repositoryRegistry.sources
+            .map((source) => source.uri)
+            .toSet(),
+      ),
     );
+    if (!mounted || rawUrl == null) {
+      return;
+    }
 
-    controller.dispose();
+    try {
+      await widget.repositoryRegistry.addUrl(rawUrl);
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      _showError(error.message.toString());
+    } on Object catch (error) {
+      if (!mounted) return;
+      _showError('Não foi possível salvar o repositório: $error');
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+}
+
+class _AddRepositoryDialog extends StatefulWidget {
+  const _AddRepositoryDialog({required this.existingUris});
+
+  final Set<Uri> existingUris;
+
+  @override
+  State<_AddRepositoryDialog> createState() => _AddRepositoryDialogState();
+}
+
+class _AddRepositoryDialogState extends State<_AddRepositoryDialog> {
+  late final TextEditingController _controller = TextEditingController();
+  String? _errorText;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = _controller.text.trim();
+    final uri = Uri.tryParse(value);
+
+    String? error;
+    if (value.isEmpty) {
+      error = 'Informe a URL do repositório.';
+    } else if (uri == null ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.isEmpty) {
+      error = 'Use uma URL HTTP ou HTTPS válida.';
+    } else if (widget.existingUris.contains(uri)) {
+      error = 'Este repositório já foi adicionado.';
+    }
+
+    if (error != null) {
+      setState(() => _errorText = error);
+      return;
+    }
+
+    Navigator.of(context).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Adicionar repositório'),
+      content: SizedBox(
+        width: 560,
+        child: TextField(
+          controller: _controller,
+          autofocus: true,
+          keyboardType: TextInputType.url,
+          textInputAction: TextInputAction.done,
+          onChanged: (_) {
+            if (_errorText != null) {
+              setState(() => _errorText = null);
+            }
+          },
+          onSubmitted: (_) => _submit(),
+          decoration: InputDecoration(
+            labelText: 'URL do repositório',
+            hintText: 'https://exemplo.com/repository/',
+            helperText:
+                'Aceita descriptor addon.xml ou índice addons.xml/addons.xml.gz.',
+            errorText: _errorText,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Adicionar'),
+        ),
+      ],
+    );
   }
 }
 
