@@ -41,6 +41,10 @@ class RepositoryClient {
   final RepositoryChecksumVerifier checksumVerifier;
 
   Future<RepositoryCatalog> synchronize(RepositorySource source) async {
+    if (source.hasResolvedEndpoint) {
+      return _loadResolvedSource(source);
+    }
+
     final candidates = _candidateUris(source.uri);
     Object? lastError;
 
@@ -77,6 +81,34 @@ class RepositoryClient {
 
     throw RepositorySyncException(
       'Não foi possível sincronizar ${source.uri}. ${lastError ?? ''}'.trim(),
+    );
+  }
+
+  Future<RepositoryCatalog> _loadResolvedSource(
+    RepositorySource source,
+  ) async {
+    final document = await _downloadXml(source.uri);
+    final checksumUri = source.checksumUri;
+    if (checksumUri != null) {
+      await _validateChecksumUri(
+        checksumUri: checksumUri,
+        infoUri: source.uri,
+        document: document,
+      );
+    }
+
+    final packageBaseUri = source.packageBaseUri!;
+    final result = indexParser.parse(
+      document.xml,
+      packageBaseUri: packageBaseUri,
+    );
+    return RepositoryCatalog(
+      repositoryName: source.displayName,
+      sourceUri: source.uri,
+      packageBaseUri: packageBaseUri,
+      addons: result.addons,
+      fetchedAt: DateTime.now().toUtc(),
+      skippedAddons: result.skippedAddons,
     );
   }
 
@@ -121,7 +153,18 @@ class RepositoryClient {
     if (checksumUri == null) {
       return;
     }
+    await _validateChecksumUri(
+      checksumUri: checksumUri,
+      infoUri: endpoint.infoUri,
+      document: document,
+    );
+  }
 
+  Future<void> _validateChecksumUri({
+    required Uri checksumUri,
+    required Uri infoUri,
+    required _DownloadedXml document,
+  }) async {
     final checksum = await _downloadChecksum(checksumUri);
     final rawMatches = checksumVerifier.matches(document.rawBytes, checksum);
     final decodedMatches = rawMatches
@@ -130,7 +173,7 @@ class RepositoryClient {
 
     if (!decodedMatches) {
       throw RepositorySyncException(
-        'Checksum inválido para ${endpoint.infoUri}. O índice foi rejeitado.',
+        'Checksum inválido para $infoUri. O índice foi rejeitado.',
       );
     }
   }
