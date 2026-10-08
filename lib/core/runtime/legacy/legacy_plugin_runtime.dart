@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import '../../addons/application/addon_install_controller.dart';
 import '../../addons/domain/installed_addon.dart';
 import '../plugin_uri.dart';
+import 'embedded_python_executor.dart';
 import 'legacy_plugin_invocation.dart';
 import 'legacy_plugin_result.dart';
 import 'legacy_runtime_request.dart';
@@ -95,15 +96,6 @@ class LegacyPluginRuntime {
     required String query,
     List<String>? argv,
   }) async {
-    final python = await _pythonResolver.resolve();
-    if (python == null) {
-      return _failure(
-        'Nenhum runtime Python foi encontrado. Nesta fase o backend de processo '
-        'funciona em desktop; Android receberá o CPython embarcado na próxima '
-        'etapa do runtime.',
-      );
-    }
-
     final runtimeFiles = await _runtimeBundle.materialize();
     final directories = await addonInstallController.directories();
     final supportRoot = p.dirname(directories.addonsRootPath);
@@ -133,6 +125,21 @@ class LegacyPluginRuntime {
       },
       argv: argv,
     );
+
+    if (Platform.isAndroid) {
+      final executor = EmbeddedPythonExecutor(
+        workerScriptPath: runtimeFiles.workerPath,
+      );
+      return executor.invoke(invocation);
+    }
+
+    final python = await _pythonResolver.resolve();
+    if (python == null) {
+      return _failure(
+        'Nenhum runtime Python foi encontrado. No desktop, configure Python 3 '
+        'ou ADDKO_PYTHON; no Android o AddKo usa o runtime CPython embarcado.',
+      );
+    }
 
     final executor = ProcessPythonExecutor(
       pythonExecutable: python,
