@@ -67,19 +67,24 @@ class LegacyFlutterUiBridge {
           options: _stringList(request.params['options']),
         );
       case 'xbmcgui.Dialog.input':
-        return _showInput(
-          context,
-          title: _string(request, 'heading'),
-          initialValue: _string(request, 'default_text'),
-          obscureText: false,
+        return showDialog<String>(
+          context: context,
+          builder: (_) => _TextInputDialog(
+            title: _string(request, 'heading'),
+            initialValue: _string(request, 'default_text'),
+            obscureText: false,
+            allowCancel: true,
+          ),
         );
       case 'xbmcgui.Keyboard.doModal':
-        final value = await _showInput(
-          context,
-          title: _string(request, 'heading'),
-          initialValue: _string(request, 'default_text'),
-          obscureText: request.params['hidden'] == true,
-          allowCancel: true,
+        final value = await showDialog<String>(
+          context: context,
+          builder: (_) => _TextInputDialog(
+            title: _string(request, 'heading'),
+            initialValue: _string(request, 'default_text'),
+            obscureText: request.params['hidden'] == true,
+            allowCancel: true,
+          ),
         );
         return {
           'confirmed': value != null,
@@ -147,43 +152,6 @@ class LegacyFlutterUiBridge {
         -1;
   }
 
-  static Future<String?> _showInput(
-    BuildContext context, {
-    required String title,
-    required String initialValue,
-    required bool obscureText,
-    bool allowCancel = false,
-  }) async {
-    final controller = TextEditingController(text: initialValue);
-    try {
-      return await showDialog<String>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text(title),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            obscureText: obscureText,
-            onSubmitted: (value) => Navigator.pop(dialogContext, value),
-          ),
-          actions: [
-            if (allowCancel)
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Cancelar'),
-              ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, controller.text),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-    } finally {
-      controller.dispose();
-    }
-  }
-
   static String _string(LegacyRuntimeRequest request, String key) {
     return request.params[key]?.toString() ?? '';
   }
@@ -193,5 +161,58 @@ class LegacyFlutterUiBridge {
       return const [];
     }
     return value.map((item) => item.toString()).toList(growable: false);
+  }
+}
+
+class _TextInputDialog extends StatefulWidget {
+  const _TextInputDialog({
+    required this.title,
+    required this.initialValue,
+    required this.obscureText,
+    required this.allowCancel,
+  });
+
+  final String title;
+  final String initialValue;
+  final bool obscureText;
+  final bool allowCancel;
+
+  @override
+  State<_TextInputDialog> createState() => _TextInputDialogState();
+}
+
+class _TextInputDialogState extends State<_TextInputDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialValue,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        obscureText: widget.obscureText,
+        onSubmitted: (value) => Navigator.pop(context, value),
+      ),
+      actions: [
+        if (widget.allowCancel)
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _controller.text),
+          child: const Text('OK'),
+        ),
+      ],
+    );
   }
 }
