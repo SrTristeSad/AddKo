@@ -3,6 +3,7 @@
 #include <dlfcn.h>
 
 #include <array>
+#include <cstdlib>
 #include <mutex>
 #include <string>
 
@@ -32,9 +33,22 @@ void* g_main_thread_state = nullptr;
 bool g_initialized_by_addko = false;
 std::string g_last_error;
 std::string g_version;
+std::string g_python_home;
 
 void set_error(const std::string& message) {
   g_last_error = message;
+}
+
+std::string major_minor_locked() {
+  const std::size_t first = g_version.find('.');
+  if (first == std::string::npos) {
+    return "";
+  }
+  const std::size_t second = g_version.find('.', first + 1);
+  if (second == std::string::npos) {
+    return g_version;
+  }
+  return g_version.substr(0, second);
 }
 
 bool resolve_symbols_locked() {
@@ -78,7 +92,8 @@ bool load_python_locked() {
     return true;
   }
 
-  constexpr std::array<const char*, 4> candidates = {
+  constexpr std::array<const char*, 5> candidates = {
+      "libpython3.14.so",
       "libpython3.13.so",
       "libpython3.12.so",
       "libpython3.11.so",
@@ -105,12 +120,57 @@ bool load_python_locked() {
   return false;
 }
 
+bool configure_home_locked(const char* home) {
+  if (home == nullptr || home[0] == '\0') {
+    set_error("Python home is empty.");
+    return false;
+  }
+  if (!load_python_locked()) {
+    return false;
+  }
+
+  const std::string requested(home);
+  if (g_py_is_initialized && g_py_is_initialized()) {
+    if (g_python_home == requested) {
+      return true;
+    }
+    set_error("CPython is already initialized with a different Python home.");
+    return false;
+  }
+
+  const std::string version = major_minor_locked();
+  if (version.empty()) {
+    set_error("Unable to determine CPython major/minor version.");
+    return false;
+  }
+
+  const std::string stdlib = requested + "/lib/python" + version;
+  const std::string python_path =
+      stdlib + ":" + stdlib + "/lib-dynload:" + stdlib + "/site-packages";
+
+  if (setenv("PYTHONHOME", requested.c_str(), 1) != 0 ||
+      setenv("PYTHONPATH", python_path.c_str(), 1) != 0 ||
+      setenv("PYTHONUTF8", "1", 1) != 0 ||
+      setenv("PYTHONDONTWRITEBYTECODE", "1", 1) != 0) {
+    set_error("Failed to configure CPython environment variables.");
+    return false;
+  }
+
+  g_python_home = requested;
+  g_last_error.clear();
+  return true;
+}
+
 bool initialize_locked() {
   if (!load_python_locked()) {
     return false;
   }
   if (g_py_is_initialized()) {
     return true;
+  }
+  if (g_python_home.empty()) {
+    set_error("Python home must be configured before initialization.");
+    return false;
   }
 
   g_py_initialize();
@@ -132,6 +192,11 @@ bool initialize_locked() {
 extern "C" int addko_python_probe(void) {
   std::lock_guard<std::mutex> lock(g_mutex);
   return load_python_locked() ? 1 : 0;
+}
+
+extern "C" int addko_python_configure(const char* home) {
+  std::lock_guard<std::mutex> lock(g_mutex);
+  return configure_home_locked(home) ? 0 : -1;
 }
 
 extern "C" int addko_python_initialize(void) {
@@ -203,6 +268,11 @@ extern "C" const char* addko_python_version(void) {
     return "";
   }
   return g_version.c_str();
+}
+
+extern "C" const char* addko_python_home(void) {
+  std::lock_guard<std::mutex> lock(g_mutex);
+  return g_python_home.c_str();
 }
 
 extern "C" const char* addko_python_last_error(void) {
