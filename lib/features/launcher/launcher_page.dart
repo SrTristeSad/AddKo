@@ -11,6 +11,7 @@ import '../../core/repositories/application/repository_registry.dart';
 import '../../core/repositories/application/repository_store_controller.dart';
 import '../../core/runtime/legacy/legacy_plugin_runtime.dart';
 import '../../core/runtime/legacy/legacy_service_supervisor.dart';
+import '../../core/ui/kodi_text.dart';
 import '../legacy/legacy_addon_page.dart';
 import '../legacy/legacy_flutter_ui_bridge.dart';
 import '../settings/settings_page.dart';
@@ -183,7 +184,7 @@ class _TopBar extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            'Kodi Legacy Runtime • v0.1.1',
+            'Kodi Legacy Runtime • v0.1.2',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -250,7 +251,7 @@ class _LauncherCardState extends State<_LauncherCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
+                  KodiText(
                     widget.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
