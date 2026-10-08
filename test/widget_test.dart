@@ -20,6 +20,8 @@ void main() {
       ),
     );
     addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
       registry.dispose();
       store.dispose();
       installer.dispose();
@@ -45,7 +47,7 @@ void main() {
     expect(find.text('CONFIGURAÇÕES'), findsNothing);
 
     await tester.tap(find.byIcon(Icons.settings_rounded));
-    await tester.pumpAndSettle();
+    await _pumpRoute(tester);
 
     expect(find.text('Configurações'), findsOneWidget);
     expect(find.text('Addons instalados'), findsOneWidget);
@@ -56,19 +58,19 @@ void main() {
     expect(find.text('Compatibilidade Kodi'), findsOneWidget);
 
     await tester.tap(find.text('Addons instalados'));
-    await tester.pumpAndSettle();
+    await _pumpRoute(tester);
     expect(find.text('Nenhum addon encontrado'), findsOneWidget);
     await tester.pageBack();
-    await tester.pumpAndSettle();
+    await _pumpRoute(tester);
 
     await tester.tap(find.text('Componentes de addons'));
-    await tester.pumpAndSettle();
+    await _pumpRoute(tester);
     expect(find.text('Nenhum componente instalado'), findsOneWidget);
     await tester.pageBack();
-    await tester.pumpAndSettle();
+    await _pumpRoute(tester);
 
     await tester.tap(find.text('Player'));
-    await tester.pumpAndSettle();
+    await _pumpRoute(tester);
     expect(find.text('Backend de reprodução'), findsOneWidget);
   });
 
@@ -82,6 +84,8 @@ void main() {
       ),
     );
     addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
       registry.dispose();
       store.dispose();
       installer.dispose();
@@ -100,11 +104,11 @@ void main() {
     await tester.pump();
 
     await tester.tap(find.byIcon(Icons.storefront_rounded));
-    await tester.pumpAndSettle();
+    await _pumpRoute(tester);
     expect(find.text('Nenhum repositório configurado'), findsOneWidget);
 
     await tester.tap(find.text('Adicionar repositório'));
-    await tester.pumpAndSettle();
+    await _pumpRoute(tester);
     expect(find.text('Adicionar repositório'), findsNWidgets(2));
 
     await tester.enterText(
@@ -112,12 +116,17 @@ void main() {
       'https://example.com/addons.xml',
     );
     await tester.tap(find.widgetWithText(FilledButton, 'Adicionar'));
-    await tester.pumpAndSettle();
+    await _pumpRoute(tester);
 
     expect(tester.takeException(), isNull);
     expect(find.text('https://example.com/addons.xml'), findsOneWidget);
     expect(registry.sources, hasLength(1));
   });
+}
+
+Future<void> _pumpRoute(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 450));
 }
 
 class _NoopRepositoryStoreController extends RepositoryStoreController {

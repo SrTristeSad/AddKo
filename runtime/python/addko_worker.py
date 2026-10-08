@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import os
-import runpy
 import sys
 import traceback
 from pathlib import Path
@@ -21,6 +20,20 @@ PROTOCOL_PREFIX = "ADDKO_RPC "
 def emit(method: str, **params: object) -> None:
     message = {"method": method, "params": params}
     print(PROTOCOL_PREFIX + json.dumps(message, ensure_ascii=False), flush=True)
+
+
+def _execute_entrypoint(entrypoint: Path) -> None:
+    """Execute an addon without letting runpy replace Kodi's sys.argv[0]."""
+    namespace = {
+        "__name__": "__main__",
+        "__file__": str(entrypoint),
+        "__package__": None,
+        "__cached__": None,
+    }
+    # compile(bytes, ...) keeps Python's encoding-cookie handling while exec
+    # preserves the sys.argv prepared by the Kodi compatibility host.
+    code = compile(entrypoint.read_bytes(), str(entrypoint), "exec")
+    exec(code, namespace, namespace)
 
 
 def main() -> int:
@@ -73,7 +86,7 @@ def main() -> int:
         return 4
 
     try:
-        runpy.run_path(str(entrypoint), run_name="__main__")
+        _execute_entrypoint(entrypoint)
         emit("invocation.complete", succeeded=True)
         return 0
     except SystemExit as error:

@@ -3,12 +3,24 @@ import 'dart:io';
 
 import 'package:addko/core/repositories/domain/repository_source.dart';
 import 'package:addko/core/repositories/infrastructure/repository_client.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
   test('loads a repository descriptor and its addons.xml index', () async {
+    const indexXml = '''
+<addons>
+  <addon id="plugin.video.demo" name="Demo" version="1.0.0" provider-name="AddKo">
+    <extension point="xbmc.python.pluginsource" library="default.py">
+      <provides>video</provides>
+    </extension>
+  </addon>
+</addons>
+''';
+    final indexDigest = md5.convert(utf8.encode(indexXml)).toString();
+
     final client = MockClient((request) async {
       if (request.url.toString() == 'https://repo.example/addon.xml') {
         return http.Response(
@@ -30,17 +42,17 @@ void main() {
 
       if (request.url.toString() == 'https://repo.example/addons.xml') {
         return http.Response(
-          '''
-<addons>
-  <addon id="plugin.video.demo" name="Demo" version="1.0.0" provider-name="AddKo">
-    <extension point="xbmc.python.pluginsource" library="default.py">
-      <provides>video</provides>
-    </extension>
-  </addon>
-</addons>
-''',
+          indexXml,
           200,
           headers: {'content-type': 'application/xml'},
+        );
+      }
+
+      if (request.url.toString() == 'https://repo.example/addons.xml.md5') {
+        return http.Response(
+          '$indexDigest  addons.xml\n',
+          200,
+          headers: {'content-type': 'text/plain'},
         );
       }
 
