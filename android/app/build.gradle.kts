@@ -5,6 +5,7 @@ plugins {
 }
 
 val addkoPythonRuntimeDir = layout.buildDirectory.dir("addko-python-runtime")
+val addkoPythonRuntimeRoot = addkoPythonRuntimeDir.get().asFile
 val pythonCommand = System.getenv("PYTHON")?.takeIf { it.isNotBlank() }
     ?: if (System.getProperty("os.name").lowercase().contains("windows")) "python" else "python3"
 
@@ -38,9 +39,12 @@ android {
         }
     }
 
+    // Use concrete File paths here. AGP 9 rejects Provider instances passed to
+    // the legacy SourceSet API because it cannot classify them as generated or
+    // static sources during IDE model construction.
     sourceSets.getByName("main") {
-        assets.srcDir(addkoPythonRuntimeDir.map { it.dir("assets") })
-        jniLibs.srcDir(addkoPythonRuntimeDir.map { it.dir("jniLibs") })
+        assets.srcDir(File(addkoPythonRuntimeRoot, "assets"))
+        jniLibs.srcDir(File(addkoPythonRuntimeRoot, "jniLibs"))
     }
 
     externalNativeBuild {
@@ -61,8 +65,7 @@ val prepareAddKoPythonRuntime by tasks.registering(Exec::class) {
     group = "addko"
     description = "Downloads, verifies and stages the official CPython Android runtime."
 
-    val output = addkoPythonRuntimeDir.get().asFile
-    outputs.dir(output)
+    outputs.dir(addkoPythonRuntimeRoot)
     inputs.file(rootProject.file("../tools/android/fetch_python_runtime.py"))
 
     workingDir(rootProject.projectDir.parentFile)
@@ -70,7 +73,7 @@ val prepareAddKoPythonRuntime by tasks.registering(Exec::class) {
         pythonCommand,
         "tools/android/fetch_python_runtime.py",
         "--output",
-        output.absolutePath,
+        addkoPythonRuntimeRoot.absolutePath,
     )
 }
 
