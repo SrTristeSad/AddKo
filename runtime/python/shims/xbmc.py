@@ -27,6 +27,26 @@ TRAY_OPEN = 16
 TRAY_CLOSED_NO_MEDIA = 64
 TRAY_CLOSED_MEDIA_PRESENT = 96
 
+# Stable Kodi Omega values for info labels frequently consumed by add-ons at
+# import time. Kodi itself obtains these through SystemGUIInfo/CSysInfo. Returning
+# the same shape is important because a very large number of legacy add-ons do
+# int()/float() directly on System.BuildVersion.
+_SYSTEM_INFO_LABEL_DEFAULTS = {
+    "system.buildversion": "21.0",
+    "system.buildversionshort": "21.0",
+    "system.buildversioncode": "21.0.0",
+    "system.builddate": "2024-04-06",
+    "system.friendlyname": "AddKo",
+    "system.profilename": "Master user",
+    "system.language": "English",
+    "system.osversioninfo": "Android",
+    "system.cpuusage": "0%",
+    "system.fps": "60.00",
+    "system.screenwidth": "1920",
+    "system.screenheight": "1080",
+    "network.ipaddress": "127.0.0.1",
+}
+
 
 def log(msg: Any, level: int = LOGDEBUG) -> None:
     emit("xbmc.log", message=str(msg), level=level)
@@ -68,8 +88,18 @@ def getLocalizedString(id: int) -> str:
 
 
 def getInfoLabel(infotag: str) -> str:
-    value = request("xbmc.getInfoLabel", default="", infotag=infotag)
-    return "" if value is None else str(value)
+    key = str(infotag).strip().lower()
+    default = _SYSTEM_INFO_LABEL_DEFAULTS.get(key, "")
+    value = request("xbmc.getInfoLabel", default=default, infotag=infotag)
+    if value is None:
+        return default
+    text = str(value)
+    # An unimplemented host bridge historically returned an empty string. For
+    # labels that Kodi guarantees on a running host, keep the Omega fallback so
+    # callers such as int(BuildVersion[:2]) and float(BuildVersion[:4]) work.
+    if not text and default:
+        return default
+    return text
 
 
 def getInfoImage(infotag: str) -> str:
@@ -78,7 +108,19 @@ def getInfoImage(infotag: str) -> str:
 
 
 def getCondVisibility(condition: str) -> bool:
-    return bool(request("xbmc.getCondVisibility", default=False, condition=condition))
+    normalized = str(condition).strip().lower()
+    known = {
+        "system.platform.android": True,
+        "system.platform.linux": True,
+        "system.platform.windows": False,
+        "system.platform.osx": False,
+        "system.platform.ios": False,
+        "system.platform.atv2": False,
+        "system.ismaster": True,
+        "system.internetstate": True,
+    }
+    default = known.get(normalized, False)
+    return bool(request("xbmc.getCondVisibility", default=default, condition=condition))
 
 
 def getLanguage(format: int = ENGLISH_NAME, region: bool = False) -> str:
