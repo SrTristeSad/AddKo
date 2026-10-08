@@ -10,11 +10,12 @@ class PythonRuntimeBundle {
   }) : _supportDirectoryProvider =
             supportDirectoryProvider ?? getApplicationSupportDirectory;
 
-  static const _version = 'v3';
+  static const _version = 'v4';
   static const _workerAsset = 'runtime/python/addko_worker.py';
   static const _shimAssets = <String>[
     'runtime/python/shims/addko_bridge.py',
     'runtime/python/shims/addko_window.py',
+    'runtime/python/shims/kodi_proxy.py',
     'runtime/python/shims/xbmc.py',
     'runtime/python/shims/xbmcaddon.py',
     'runtime/python/shims/xbmcdrm.py',
