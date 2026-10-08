@@ -5,6 +5,7 @@ import '../../core/addons/application/addon_dependency_resolver.dart';
 import '../../core/addons/domain/kodi_version.dart';
 import '../../core/repositories/application/repository_store_controller.dart';
 import '../../core/repositories/domain/repository_catalog.dart';
+import '../../core/ui/kodi_text.dart';
 
 class RepositoryCatalogPage extends StatelessWidget {
   const RepositoryCatalogPage({
@@ -25,7 +26,11 @@ class RepositoryCatalogPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(catalog.repositoryName),
+        title: KodiText(
+          catalog.repositoryName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
       body: AnimatedBuilder(
         animation: addonInstallController,
@@ -59,8 +64,12 @@ class RepositoryCatalogPage extends StatelessWidget {
                                 errorBuilder: (_, __, ___) =>
                                     const Icon(Icons.extension_rounded),
                               ),
-                        title: Text(addon.manifest.name),
-                        subtitle: Text(
+                        title: KodiText(
+                          addon.manifest.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: KodiText(
                           _subtitleFor(addon),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -120,6 +129,7 @@ class RepositoryCatalogPage extends StatelessWidget {
     RepositoryAddonEntry addon,
   ) async {
     await addonInstallController.initialize();
+    await repositoryStoreController.ensureKodiSystemCatalog();
     if (!context.mounted) {
       return;
     }
@@ -142,7 +152,7 @@ class RepositoryCatalogPage extends StatelessWidget {
           context: context,
           builder: (dialogContext) {
             return AlertDialog(
-              title: Text('Instalar ${addon.manifest.name}?'),
+              title: KodiText('Instalar ${addon.manifest.name}?'),
               content: SizedBox(
                 width: 560,
                 child: Column(
@@ -152,15 +162,20 @@ class RepositoryCatalogPage extends StatelessWidget {
                     Text('${addon.manifest.id} • v${addon.manifest.version}'),
                     const SizedBox(height: 12),
                     if (dependencies.isEmpty)
-                      const Text('Nenhuma dependência adicional precisa ser instalada.')
+                      const Text(
+                        'Nenhuma dependência adicional precisa ser instalada.',
+                      )
                     else ...[
                       Text(
                         '${dependencies.length} dependência(s) serão instaladas automaticamente:',
                       ),
                       const SizedBox(height: 8),
                       for (final dependency in dependencies)
-                        Text(
-                          '• ${dependency.manifest.name} (${dependency.manifest.id}) v${dependency.manifest.version}',
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: KodiText(
+                            '• ${dependency.manifest.name} (${dependency.manifest.id}) v${dependency.manifest.version}',
+                          ),
                         ),
                     ],
                   ],
@@ -200,7 +215,9 @@ class RepositoryCatalogPage extends StatelessWidget {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${addon.manifest.name} instalado com sucesso.'),
+          content: Text(
+            '${KodiMarkup.strip(addon.manifest.name)} instalado com sucesso.',
+          ),
         ),
       );
     } on Object catch (error) {
@@ -209,7 +226,9 @@ class RepositoryCatalogPage extends StatelessWidget {
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Falha ao instalar ${addon.manifest.name}: $error'),
+          content: Text(
+            'Falha ao instalar ${KodiMarkup.strip(addon.manifest.name)}: $error',
+          ),
         ),
       );
     }
@@ -224,7 +243,7 @@ class RepositoryCatalogPage extends StatelessWidget {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: Text('Não foi possível instalar ${addon.manifest.name}'),
+          title: KodiText('Não foi possível instalar ${addon.manifest.name}'),
           content: SizedBox(
             width: 580,
             child: Column(
