@@ -1,17 +1,26 @@
 import 'package:flutter/material.dart';
 
 import '../../core/addons/application/addon_install_controller.dart';
+import '../../core/repositories/application/repository_registry.dart';
+import '../../core/repositories/application/repository_store_controller.dart';
 import '../../core/runtime/legacy/legacy_service_supervisor.dart';
+import '../store/store_page.dart';
 import 'compatibility_page.dart';
+import 'components_page.dart';
+import 'player_settings_page.dart';
 import 'services_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
+    required this.repositoryRegistry,
+    required this.repositoryStoreController,
     required this.addonInstallController,
     required this.serviceSupervisor,
     super.key,
   });
 
+  final RepositoryRegistry repositoryRegistry;
+  final RepositoryStoreController repositoryStoreController;
   final AddonInstallController addonInstallController;
   final LegacyServiceSupervisor serviceSupervisor;
 
@@ -22,15 +31,35 @@ class SettingsPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          const _SettingsTile(
+          _SettingsTile(
             icon: Icons.account_tree_rounded,
             title: 'Repositórios',
             subtitle: 'Origens usadas pela Loja para localizar addons.',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => StorePage(
+                    repositoryRegistry: repositoryRegistry,
+                    repositoryStoreController: repositoryStoreController,
+                    addonInstallController: addonInstallController,
+                  ),
+                ),
+              );
+            },
           ),
-          const _SettingsTile(
+          _SettingsTile(
             icon: Icons.extension_rounded,
             title: 'Componentes de addons',
-            subtitle: 'InputStream, PVR, VFS e outras dependências instaláveis.',
+            subtitle: 'Módulos, serviços, InputStream, PVR, VFS e dependências instaladas.',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ComponentsPage(
+                    addonInstallController: addonInstallController,
+                  ),
+                ),
+              );
+            },
           ),
           _SettingsTile(
             icon: Icons.settings_input_component_rounded,
@@ -47,10 +76,17 @@ class SettingsPage extends StatelessWidget {
               );
             },
           ),
-          const _SettingsTile(
+          _SettingsTile(
             icon: Icons.smart_display_rounded,
             title: 'Player',
-            subtitle: 'Reprodução, áudio, legendas e decodificação.',
+            subtitle: 'Estado do backend de reprodução e integrações Kodi.',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const PlayerSettingsPage(),
+                ),
+              );
+            },
           ),
           _SettingsTile(
             icon: Icons.history_rounded,
@@ -75,13 +111,13 @@ class _SettingsTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
-    this.onTap,
+    required this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
-  final VoidCallback? onTap;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
