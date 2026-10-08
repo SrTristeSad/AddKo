@@ -12,15 +12,22 @@ import 'legacy_runtime_collector.dart';
 import 'legacy_runtime_request.dart';
 import 'python_executor.dart';
 
+typedef EmbeddedPythonEventHandler = FutureOr<void> Function(
+  String method,
+  Map<String, Object?> params,
+);
+
 class EmbeddedPythonExecutor implements PythonExecutor {
   EmbeddedPythonExecutor({
     required this.workerScriptPath,
     this.requestHandler,
+    this.eventHandler,
     EmbeddedPythonHost? host,
   }) : _host = host ?? EmbeddedPythonHost.tryOpen();
 
   final String workerScriptPath;
   final LegacyRuntimeRequestHandler? requestHandler;
+  final EmbeddedPythonEventHandler? eventHandler;
   final EmbeddedPythonHost? _host;
 
   @override
@@ -160,33 +167,62 @@ class EmbeddedPythonExecutor implements PythonExecutor {
         }
 
         final request = LegacyRuntimeRequest.tryParse(line);
-        if (request == null) {
-          collector.consumeStdoutLine(line);
+        if (request != null) {
+          Object? result = request.defaultValue;
+          final handler = requestHandler;
+          if (handler != null) {
+            try {
+              result = await handler(request);
+            } on Object catch (error) {
+              collector.consumeStderrLine(
+                'Embedded request ${request.method} failed: $error',
+              );
+            }
+          }
+
+          socket.writeln(
+            jsonEncode({
+              'request_id': request.id,
+              'result': result,
+            }),
+          );
+          await socket.flush();
           continue;
         }
 
-        Object? result = request.defaultValue;
-        final handler = requestHandler;
-        if (handler != null) {
-          try {
-            result = await handler(request);
-          } on Object catch (error) {
-            collector.consumeStderrLine(
-              'Embedded request ${request.method} failed: $error',
-            );
-          }
-        }
-
-        socket.writeln(
-          jsonEncode({
-            'request_id': request.id,
-            'result': result,
-          }),
-        );
-        await socket.flush();
+        await _forwardEvent(line, collector);
+        collector.consumeStdoutLine(line);
       }
     } finally {
       await socket.close();
+    }
+  }
+
+  Future<void> _forwardEvent(
+    String line,
+    LegacyRuntimeCollector collector,
+  ) async {
+    final handler = eventHandler;
+    if (handler == null ||
+        !line.startsWith(LegacyRuntimeCollector.protocolPrefix)) {
+      return;
+    }
+
+    final payload = line.substring(LegacyRuntimeCollector.protocolPrefix.length);
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is! Map) return;
+      final event = Map<String, Object?>.from(decoded);
+      final method = event['method']?.toString() ?? '';
+      final rawParams = event['params'];
+      final params = rawParams is Map
+          ? Map<String, Object?>.from(rawParams)
+          : const <String, Object?>{};
+      if (method.isNotEmpty) {
+        await Future<void>.sync(() => handler(method, params));
+      }
+    } on Object catch (error) {
+      collector.consumeStderrLine('Embedded event bridge failed: $error');
     }
   }
 
@@ -237,7 +273,7 @@ class EmbeddedPythonExecutor implements PythonExecutor {
       port: port,
       token: token,
     );
-    final status = host.execute(source);
+    final status = host.executeIsolated(source);
     return {
       'status': status,
       'error': status == 0 ? '' : host.lastError,
