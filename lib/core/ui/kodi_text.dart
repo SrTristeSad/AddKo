@@ -89,17 +89,16 @@ class KodiMarkup {
   ) {
     if (raw.isEmpty) return;
 
-    var text = raw;
-    switch (state.transform) {
-      case _TextTransform.uppercase:
-        text = text.toUpperCase();
-      case _TextTransform.lowercase:
-        text = text.toLowerCase();
-      case _TextTransform.capitalize:
-        text = _capitalize(text);
-      case _TextTransform.none:
-        break;
-    }
+    final text = switch (state.transform) {
+      _TextTransform.uppercase => raw.toUpperCase(),
+      _TextTransform.lowercase => raw.toLowerCase(),
+      _TextTransform.capitalize => _capitalize(raw),
+      _TextTransform.none => raw,
+    };
+
+    final effectiveColor = state.light
+        ? state.color?.withValues(alpha: 0.72)
+        : state.color;
 
     spans.add(
       TextSpan(
@@ -107,12 +106,7 @@ class KodiMarkup {
         style: TextStyle(
           fontWeight: state.bold ? FontWeight.w700 : null,
           fontStyle: state.italic ? FontStyle.italic : null,
-          color: state.color,
-          fontWeightFallback: const [],
-        ).copyWith(
-          color: state.light
-              ? state.color?.withValues(alpha: 0.72)
-              : state.color,
+          color: effectiveColor,
         ),
       ),
     );
