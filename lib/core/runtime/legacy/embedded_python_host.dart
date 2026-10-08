@@ -36,6 +36,9 @@ class EmbeddedPythonHost {
         _exec = library.lookupFunction<_ExecNative, _ExecDart>(
           'addko_python_exec',
         ),
+        _execIsolated = library.lookupFunction<_ExecNative, _ExecDart>(
+          'addko_python_exec_isolated',
+        ),
         _shutdown = library.lookupFunction<_ShutdownNative, _ShutdownDart>(
           'addko_python_shutdown',
         ),
@@ -54,6 +57,7 @@ class EmbeddedPythonHost {
   final _InitializeDart _initialize;
   final _IsInitializedDart _isInitialized;
   final _ExecDart _exec;
+  final _ExecDart _execIsolated;
   final _ShutdownDart _shutdown;
   final _StringDart _version;
   final _StringDart _home;
@@ -104,10 +108,14 @@ class EmbeddedPythonHost {
 
   int initialize() => _initialize();
 
-  int execute(String code) {
+  int execute(String code) => _executeWith(_exec, code);
+
+  int executeIsolated(String code) => _executeWith(_execIsolated, code);
+
+  int _executeWith(_ExecDart function, String code) {
     final pointer = code.toNativeUtf8();
     try {
-      return _exec(pointer);
+      return function(pointer);
     } finally {
       malloc.free(pointer);
     }
