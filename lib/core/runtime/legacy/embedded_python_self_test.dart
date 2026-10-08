@@ -74,6 +74,8 @@ import socket
 import sqlite3
 import ssl
 import urllib.parse
+import zipfile
+import zipfile._path
 import zlib
 
 assert json.loads('{"ok": true}')['ok'] is True
@@ -87,6 +89,8 @@ assert len(hashlib.sha256(b'addko').hexdigest()) == 64
 assert ssl.OPENSSL_VERSION
 assert socket.AF_INET
 assert urllib.parse.urlparse('https://example.com/addko').scheme == 'https'
+assert zipfile.Path is not None
+assert zipfile._path.Path is not None
 ''');
 
     if (status != 0) {
@@ -102,7 +106,7 @@ assert urllib.parse.urlparse('https://example.com/addko').scheme == 'https'
 
     return EmbeddedPythonSelfTestResult(
       passed: true,
-      message: 'json, sqlite3, ssl, socket, zlib, hashlib e urllib carregaram corretamente.',
+      message: 'json, sqlite3, ssl, socket, zlib, hashlib, urllib e zipfile._path carregaram corretamente.',
       version: host.version,
       abi: runtime.abi,
     );
