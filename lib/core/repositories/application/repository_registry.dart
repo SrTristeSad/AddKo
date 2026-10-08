@@ -10,28 +10,38 @@ class RepositoryRegistry extends ChangeNotifier {
   final List<RepositorySource> _sources = [];
 
   bool _initialized = false;
+  Future<void>? _initialization;
 
   List<RepositorySource> get sources => List.unmodifiable(_sources);
   bool get initialized => _initialized;
 
-  Future<void> initialize() async {
+  Future<void> initialize() {
     if (_initialized) {
-      return;
+      return Future<void>.value();
     }
+    return _initialization ??= _initializeInternal();
+  }
 
-    final storage = _storage;
-    if (storage != null) {
-      final loaded = await storage.load();
-      _sources
-        ..clear()
-        ..addAll(_deduplicated(loaded));
+  Future<void> _initializeInternal() async {
+    try {
+      final storage = _storage;
+      if (storage != null) {
+        final loaded = await storage.load();
+        _sources
+          ..clear()
+          ..addAll(_deduplicated(loaded));
+      }
+      _initialized = true;
+      notifyListeners();
+    } catch (_) {
+      _initialization = null;
+      rethrow;
     }
-
-    _initialized = true;
-    notifyListeners();
   }
 
   Future<void> addUrl(String rawUrl) async {
+    await initialize();
+
     final value = rawUrl.trim();
     if (value.isEmpty) {
       throw const FormatException('Informe a URL do repositório.');
@@ -53,6 +63,8 @@ class RepositoryRegistry extends ChangeNotifier {
     Uri? checksumUri,
     String? name,
   }) async {
+    await initialize();
+
     if (!_isHttpUri(infoUri) || !_isHttpUri(packageBaseUri)) {
       throw const FormatException(
         'O addon de repositório publicou um endpoint HTTP/HTTPS inválido.',
@@ -80,39 +92,45 @@ class RepositoryRegistry extends ChangeNotifier {
       throw const FormatException('Este repositório já foi adicionado.');
     }
 
-    _sources.add(source);
-    await _persist();
-    notifyListeners();
+    final next = [..._sources, source];
+    await _commit(next);
   }
 
   Future<void> remove(Uri uri) async {
-    final oldLength = _sources.length;
-    _sources.removeWhere((source) => source.uri == uri);
-    if (_sources.length == oldLength) {
+    await initialize();
+
+    final next = _sources.where((source) => source.uri != uri).toList();
+    if (next.length == _sources.length) {
       return;
     }
 
-    await _persist();
-    notifyListeners();
+    await _commit(next);
   }
 
   Future<void> setEnabled(Uri uri, bool enabled) async {
+    await initialize();
+
     final index = _sources.indexWhere((source) => source.uri == uri);
     if (index == -1 || _sources[index].enabled == enabled) {
       return;
     }
 
-    _sources[index] = _sources[index].copyWith(enabled: enabled);
-    await _persist();
-    notifyListeners();
+    final next = List<RepositorySource>.of(_sources);
+    next[index] = next[index].copyWith(enabled: enabled);
+    await _commit(next);
   }
 
-  Future<void> _persist() async {
+  Future<void> _commit(List<RepositorySource> next) async {
+    final deduplicated = _deduplicated(next);
     final storage = _storage;
-    if (storage == null) {
-      return;
+    if (storage != null) {
+      await storage.save(List.unmodifiable(deduplicated));
     }
-    await storage.save(sources);
+
+    _sources
+      ..clear()
+      ..addAll(deduplicated);
+    notifyListeners();
   }
 
   List<RepositorySource> _deduplicated(List<RepositorySource> sources) {
