@@ -5,6 +5,7 @@ import '../../core/repositories/application/repository_registry.dart';
 import '../../core/repositories/application/repository_store_controller.dart';
 import '../../core/runtime/legacy/legacy_service_supervisor.dart';
 import '../store/store_page.dart';
+import 'addon_manager_page.dart';
 import 'compatibility_page.dart';
 import 'components_page.dart';
 import 'player_settings_page.dart';
@@ -31,6 +32,20 @@ class SettingsPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
+          _SettingsTile(
+            icon: Icons.apps_rounded,
+            title: 'Addons instalados',
+            subtitle: 'Gerenciar, configurar e desinstalar addons com segurança.',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => AddonManagerPage(
+                    addonInstallController: addonInstallController,
+                  ),
+                ),
+              );
+            },
+          ),
           _SettingsTile(
             icon: Icons.account_tree_rounded,
             title: 'Repositórios',
