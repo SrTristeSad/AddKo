@@ -29,6 +29,9 @@ call flutter pub get || exit /b 1
 echo [AddKo] Verificando o codigo antes do build...
 call flutter analyze --no-fatal-infos --no-fatal-warnings || exit /b 1
 
+echo [AddKo] Executando testes de regressao...
+call flutter test || exit /b 1
+
 echo [AddKo] Preparando CPython Android ARM64 verificado por SHA-256...
 python tools\android\fetch_python_runtime.py --abi arm64-v8a --output android\app\build\addko-python-runtime || exit /b 1
 
@@ -45,6 +48,6 @@ if not exist "%APK%" (
 copy /Y "%APK%" "dist\AddKo-arm64-debug.apk" >nul || exit /b 1
 
 echo.
-echo [OK] Build concluido.
+echo [OK] Analise, testes e build concluidos.
 echo APK: %CD%\dist\AddKo-arm64-debug.apk
 exit /b 0
