@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SHIMS = ROOT / "runtime" / "python" / "shims"
 sys.path.insert(0, str(SHIMS))
 
+import kodi_proxy  # noqa: E402,F401
 import xbmc  # noqa: E402
 import xbmcaddon  # noqa: E402,F401
 import xbmcgui  # noqa: E402
@@ -121,6 +122,15 @@ def main() -> int:
     assert snapshot["label"] == "Demo"
     assert snapshot["properties"]["IsPlayable"] == "true"
 
+    # Unknown Kodi symbols should no longer terminate an addon at import/access
+    # time. Behaviour-critical APIs remain explicit; ancillary APIs fall back
+    # to the generic bridge until promoted to an exact implementation.
+    assert xbmc.ADDKO_UNKNOWN_KODI_CONSTANT == 0
+    assert xbmcplugin.ADDKO_UNKNOWN_PLUGIN_CONSTANT == 0
+    dynamic_type = xbmc.FutureKodiCompatibilityObject
+    dynamic_object = dynamic_type("demo")
+    assert "FutureKodiCompatibilityObject" in repr(dynamic_object)
+
     with tempfile.TemporaryDirectory(prefix="addko-vfs-") as temporary:
         path = os.path.join(temporary, "hello.txt")
         writer = xbmcvfs.File(path, "w")
@@ -132,7 +142,7 @@ def main() -> int:
         assert xbmcvfs.exists(path)
         assert xbmcvfs.Stat(path).st_size() > 0
 
-    print("[AddKo] Kodi Python shims: OK")
+    print("[AddKo] Kodi Python shims + fallback: OK")
     return 0
 
 
