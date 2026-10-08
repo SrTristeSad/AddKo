@@ -4,15 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../../core/player/playback_host_controller.dart';
 import '../../core/player/playback_request.dart';
 
 class PlayerPage extends StatefulWidget {
   const PlayerPage({
     required this.request,
+    this.playbackHost,
     super.key,
   });
 
   final PlaybackRequest request;
+  final PlaybackHostController? playbackHost;
 
   @override
   State<PlayerPage> createState() => _PlayerPageState();
@@ -21,6 +24,10 @@ class PlayerPage extends StatefulWidget {
 class _PlayerPageState extends State<PlayerPage> {
   late final Player _player = Player();
   late final VideoController _controller = VideoController(_player);
+  late final PlaybackHostController _playbackHost =
+      widget.playbackHost ?? PlaybackHostController.shared;
+  late PlaybackRequest _request = widget.request;
+  late final Object _hostToken;
 
   StreamSubscription<String>? _errorSubscription;
   String? _error;
@@ -29,6 +36,13 @@ class _PlayerPageState extends State<PlayerPage> {
   @override
   void initState() {
     super.initState();
+    _hostToken = _playbackHost.attach(
+      onOpen: _openRequest,
+      onPlay: _player.play,
+      onPause: _player.pause,
+      onStop: _player.stop,
+      onSeek: _player.seek,
+    );
     _errorSubscription = _player.stream.error.listen((message) {
       if (mounted) {
         setState(() => _error = message);
@@ -37,9 +51,20 @@ class _PlayerPageState extends State<PlayerPage> {
     unawaited(_open());
   }
 
+  Future<void> _openRequest(PlaybackRequest request) async {
+    if (!mounted) return;
+    setState(() {
+      _request = request;
+      _error = null;
+      _opening = true;
+    });
+    await _open();
+  }
+
   Future<void> _open() async {
-    final request = widget.request;
+    final request = _request;
     if (request.uri.trim().isEmpty) {
+      if (!mounted) return;
       setState(() {
         _opening = false;
         _error = 'O addon não forneceu uma URL ou arquivo para reprodução.';
@@ -48,7 +73,9 @@ class _PlayerPageState extends State<PlayerPage> {
     }
 
     if (request.requiresKodiInputStream) {
-      setState(() => _opening = false);
+      if (mounted) {
+        setState(() => _opening = false);
+      }
       return;
     }
 
@@ -77,6 +104,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
   @override
   void dispose() {
+    _playbackHost.detach(_hostToken);
     unawaited(_errorSubscription?.cancel());
     unawaited(_player.dispose());
     super.dispose();
@@ -84,7 +112,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
   @override
   Widget build(BuildContext context) {
-    final request = widget.request;
+    final request = _request;
 
     return Scaffold(
       backgroundColor: Colors.black,
