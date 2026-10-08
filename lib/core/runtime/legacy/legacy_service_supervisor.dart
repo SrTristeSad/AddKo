@@ -30,6 +30,7 @@ class LegacyServiceSupervisor extends ChangeNotifier {
 
   bool _started = false;
   bool _disposed = false;
+  bool _notifierDisposed = false;
   bool _reconciling = false;
   bool _reconcileAgain = false;
 
@@ -106,7 +107,7 @@ class LegacyServiceSupervisor extends ChangeNotifier {
   Future<void> retry(String addonId) async {
     _failedVersions.remove(addonId);
     _errors.remove(addonId);
-    notifyListeners();
+    _notifyListenersSafely();
     await reconcile();
   }
 
@@ -123,7 +124,7 @@ class LegacyServiceSupervisor extends ChangeNotifier {
     final running = List<_RunningService>.from(_running.values);
     await Future.wait(running.map(_stopRunning));
     _running.clear();
-    notifyListeners();
+    _notifyListenersSafely();
   }
 
   Future<void> _startService(InstalledAddon addon) async {
@@ -204,7 +205,7 @@ class LegacyServiceSupervisor extends ChangeNotifier {
       _running[addon.manifest.id] = running;
       _errors.remove(addon.manifest.id);
       _failedVersions.remove(addon.manifest.id);
-      notifyListeners();
+      _notifyListenersSafely();
 
       final stdoutDone = process.stdout
           .transform(utf8.decoder)
@@ -289,7 +290,7 @@ class LegacyServiceSupervisor extends ChangeNotifier {
       } else if (method == 'invocation.error') {
         final message = values['message']?.toString() ?? 'Falha no serviço.';
         _errors[running.addonId] = message;
-        notifyListeners();
+        _notifyListenersSafely();
       } else if (method == 'xbmc.executebuiltin') {
         final function = values['function']?.toString() ?? '';
         debugPrint(
@@ -346,7 +347,7 @@ class LegacyServiceSupervisor extends ChangeNotifier {
           'Serviço encerrou inesperadamente com código $exitCode.';
       _failedVersions[running.addonId] = running.version;
     }
-    notifyListeners();
+    _notifyListenersSafely();
   }
 
   Future<void> _stopRunning(_RunningService running) async {
@@ -372,7 +373,13 @@ class LegacyServiceSupervisor extends ChangeNotifier {
   void _recordFailure(InstalledAddon addon, String message) {
     _errors[addon.manifest.id] = message;
     _failedVersions[addon.manifest.id] = addon.manifest.version;
-    notifyListeners();
+    _notifyListenersSafely();
+  }
+
+  void _notifyListenersSafely() {
+    if (!_notifierDisposed) {
+      notifyListeners();
+    }
   }
 
   Future<void> _cleanupTemp(_RunningService running) async {
@@ -429,6 +436,7 @@ class LegacyServiceSupervisor extends ChangeNotifier {
 
   @override
   void dispose() {
+    _notifierDisposed = true;
     unawaited(shutdown());
     super.dispose();
   }
