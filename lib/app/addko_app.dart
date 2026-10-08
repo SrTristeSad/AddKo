@@ -125,6 +125,7 @@ class _AddKoAppState extends State<AddKoApp> {
         repositoryRegistry: _repositoryRegistry,
         repositoryStoreController: _repositoryStoreController,
         addonInstallController: _addonInstallController,
+        serviceSupervisor: _legacyServiceSupervisor,
         onExitRequested: _prepareForExit,
       ),
     );
