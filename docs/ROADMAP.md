@@ -60,11 +60,12 @@ Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
 - [x] player ativo registra uma ponte global para receber `play`, `pause`, `stop`, `seekTime` e troca de mídia sem abrir outra instância;
 - [x] projeto Android/Android TV inicial com launcher Leanback, navegação por controle e orientação horizontal;
 - [x] `libaddko_python_host` nativa compilada por CMake e acessível pelo Flutter via Dart FFI;
-- [x] loader nativo procura CPython por ABI, consulta a versão, inicializa, executa código simples e encerra o interpretador;
+- [x] loader nativo procura CPython por ABI, consulta a versão, inicializa, executa código e libera o GIL entre isolates;
 - [x] página em Configurações mostra o estado do host nativo e do CPython embarcado;
+- [x] executor Android usa o mesmo `LegacyPluginInvocation` do desktop e encaminha plugins/scripts ao host embarcado;
+- [x] bridge local autenticado permite requests/eventos bidirecionais entre o worker Python embarcado e o Flutter, incluindo dialogs e demais chamadas síncronas;
 - [ ] incluir `libpython3.x.so` e stdlib Python por ABI dentro do APK;
-- [ ] conectar o worker Kodi ao CPython embarcado com bridge bidirecional de requests/eventos;
-- [ ] migrar `LegacyPluginRuntime` e `xbmc.service` no Android para o executor embarcado;
+- [ ] migrar `xbmc.service` no Android para um supervisor baseado no executor embarcado;
 - [ ] suportar os demais comandos do player (`playnext`, `playprevious`, legendas e playlists) no host global;
 - [ ] `ActivateWindow` e navegação visual disparados por serviços;
 - [ ] registrar histórico/log recente por serviço no painel;
