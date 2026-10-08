@@ -3,15 +3,24 @@ name: Android build
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   apk:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -33,7 +42,7 @@ jobs:
         env:
           PYTHON: python3
         run: flutter build apk --debug --split-per-abi
-      - name: Verify CPython is inside each APK
+      - name: Verify CPython is inside each published APK
         shell: bash
         run: |
           set -euo pipefail
@@ -48,7 +57,7 @@ jobs:
           grep -q 'lib/x86_64/libpython3.14.so' apk-x64-contents.txt
           grep -q 'assets/addko_python/3.14.8/x86_64/prefix/lib/python3.14/json/__init__.py' apk-x64-contents.txt
 
-          echo 'CPython Android runtime verified in split APKs.'
+          echo 'CPython Android runtime verified in published split APKs.'
       - uses: actions/upload-artifact@v4
         with:
           name: AddKo-debug-android-split

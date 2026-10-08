@@ -3,12 +3,21 @@ name: Flutter checks
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: flutter-checks-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
