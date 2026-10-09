@@ -3,6 +3,10 @@
 
 The generated directory is consumed by android/app/build.gradle.kts and is not
 committed. Downloads are pinned by SHA-256 and cached under .cache/addko-python.
+
+For lean device builds set ADDKO_ANDROID_ABIS to a comma-separated ABI list,
+for example ``arm64-v8a``. Without it the script keeps staging every supported
+ABI so IDE/development builds remain multi-architecture compatible.
 """
 
 from __future__ import annotations
@@ -10,6 +14,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import tarfile
 import urllib.request
@@ -144,7 +149,7 @@ def ensure_required_stdlib(stdlib_root: Path) -> None:
 
 
 def create_stdlib_archive(source: Path, destination: Path) -> None:
-    """Package stdlib as one safe asset.
+    """Package stdlib as one safe, maximally-compressed Android asset.
 
     Android's aapt ignores some asset path components beginning with '_' or '.',
     which breaks legitimate CPython modules such as zipfile/_path and many
@@ -159,7 +164,7 @@ def create_stdlib_archive(source: Path, destination: Path) -> None:
         temporary,
         "w",
         compression=zipfile.ZIP_DEFLATED,
-        compresslevel=6,
+        compresslevel=9,
         allowZip64=True,
     ) as archive:
         for path in sorted(source.rglob("*")):
@@ -223,21 +228,58 @@ def parse_args() -> argparse.Namespace:
         "--abi",
         action="append",
         choices=sorted(RUNTIMES),
-        help="ABI to stage. May be repeated; defaults to all supported ABIs.",
+        help="ABI to stage. May be repeated; defaults to ADDKO_ANDROID_ABIS or all supported ABIs.",
     )
     parser.add_argument("--clean", action="store_true")
     return parser.parse_args()
 
 
+def selected_abis(explicit: list[str] | None) -> list[str]:
+    if explicit:
+        return list(dict.fromkeys(explicit))
+
+    configured = os.environ.get("ADDKO_ANDROID_ABIS", "").strip()
+    if not configured:
+        return list(RUNTIMES)
+
+    values = [
+        value.strip()
+        for raw in configured.split(",")
+        for value in raw.split()
+        if value.strip()
+    ]
+    unknown = [value for value in values if value not in RUNTIMES]
+    if unknown:
+        raise RuntimeError(
+            "Unsupported ABI in ADDKO_ANDROID_ABIS: " + ", ".join(sorted(set(unknown)))
+        )
+    if not values:
+        raise RuntimeError("ADDKO_ANDROID_ABIS did not contain a valid ABI")
+    return list(dict.fromkeys(values))
+
+
 def main() -> int:
     args = parse_args()
     output_root = args.output.resolve()
-    selected = args.abi or list(RUNTIMES)
+    selected = selected_abis(args.abi)
     cache_root = repo_root() / ".cache" / "addko-python" / PYTHON_VERSION
 
     if args.clean and output_root.exists():
         shutil.rmtree(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
+
+    # A previous multi-ABI build may leave stale assets/jni libraries behind.
+    # Remove ABI directories that are not part of this build so an ARM64 APK
+    # cannot accidentally ship a second CPython runtime.
+    for abi in RUNTIMES:
+        if abi in selected:
+            continue
+        stale_asset = output_root / "assets" / "addko_python" / PYTHON_VERSION / abi
+        stale_jni = output_root / "jniLibs" / abi
+        if stale_asset.exists():
+            shutil.rmtree(stale_asset)
+        if stale_jni.exists():
+            shutil.rmtree(stale_jni)
 
     staged = []
     for abi in selected:
