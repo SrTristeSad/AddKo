@@ -103,14 +103,10 @@ class _AddKoAppState extends State<AddKoApp> {
   Future<void> _initializeLegacyRuntime() async {
     try {
       await _addonInstallController.initialize();
-
-      // Only the real app-owned store should perform the hidden Kodi system
-      // catalog bootstrap. Tests and other injected controllers must remain
-      // deterministic and must not start background network requests.
-      if (_ownsRepositoryStoreController) {
-        unawaited(_repositoryStoreController.ensureKodiSystemCatalog());
-      }
-
+      // The official Kodi catalog is intentionally lazy. Starting a large
+      // network synchronization while the user is opening a plugin made first
+      // navigation compete for CPU/network. Install flows call
+      // ensureKodiSystemCatalog() exactly when a Kodi dependency is needed.
       await _legacyServiceSupervisor.start();
     } catch (error, stackTrace) {
       debugPrint('Failed to initialize legacy runtime: $error');
