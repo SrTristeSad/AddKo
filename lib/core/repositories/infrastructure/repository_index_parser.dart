@@ -93,16 +93,57 @@ class RepositoryIndexParser {
       final point = extension.point.toLowerCase();
       final provides = extension.provides.map((value) => value.toLowerCase());
 
-      if (point.contains('inputstream')) {
+      // Kodi Omega binary/addon-instance families.
+      if (point == 'kodi.inputstream') {
         return RepositoryAddonCategory.inputStream;
       }
-      if (point.contains('pvrclient') || point.contains('.pvr')) {
+      if (point == 'kodi.pvrclient' || point == 'xbmc.pvrclient') {
         return RepositoryAddonCategory.pvr;
       }
+      if (point == 'kodi.gameclient' || point == 'kodi.addon.game') {
+        return RepositoryAddonCategory.games;
+      }
+      if (point == 'kodi.game.controller') {
+        return RepositoryAddonCategory.gameControllers;
+      }
+      if (point == 'kodi.peripheral') {
+        return RepositoryAddonCategory.peripherals;
+      }
+      if (point == 'kodi.audiodecoder' || point == 'kodi.audioencoder') {
+        return RepositoryAddonCategory.audioCodecs;
+      }
+      if (point == 'kodi.imagedecoder') {
+        return RepositoryAddonCategory.imageDecoders;
+      }
+      if (point == 'kodi.vfs') {
+        return RepositoryAddonCategory.vfs;
+      }
+      if (point == 'xbmc.ui.screensaver') {
+        return RepositoryAddonCategory.screensavers;
+      }
+      if (point == 'xbmc.player.musicviz') {
+        return RepositoryAddonCategory.visualizations;
+      }
+
+      // Core repository/resources/UI families.
       if (point == 'xbmc.addon.repository') {
         return RepositoryAddonCategory.repositories;
       }
-      if (point == 'xbmc.python.module') {
+      if (point.startsWith('xbmc.metadata.scraper.')) {
+        return RepositoryAddonCategory.metadata;
+      }
+      if (point == 'xbmc.gui.skin') {
+        return RepositoryAddonCategory.skins;
+      }
+      if (point == 'xbmc.webinterface') {
+        return RepositoryAddonCategory.webInterfaces;
+      }
+      if (point.startsWith('kodi.resource.')) {
+        return RepositoryAddonCategory.resources;
+      }
+
+      // Python invoker families.
+      if (point == 'xbmc.python.module' || point == 'xbmc.python.library') {
         return RepositoryAddonCategory.modules;
       }
       if (point == 'xbmc.service') {
@@ -110,6 +151,12 @@ class RepositoryIndexParser {
       }
       if (point == 'xbmc.subtitle.module') {
         return RepositoryAddonCategory.subtitles;
+      }
+      if (point == 'xbmc.python.weather') {
+        return RepositoryAddonCategory.weather;
+      }
+      if (point == 'xbmc.python.lyrics') {
+        return RepositoryAddonCategory.lyrics;
       }
       if (point == 'xbmc.python.pluginsource') {
         if (provides.contains('video')) {
@@ -123,7 +170,21 @@ class RepositoryIndexParser {
         }
         return RepositoryAddonCategory.programs;
       }
-      if (point == 'xbmc.python.script') {
+      if (point == 'xbmc.python.script' || point == 'kodi.context.item') {
+        return RepositoryAddonCategory.programs;
+      }
+
+      // Static addon content types retained by Kodi's addon type table.
+      if (point == 'xbmc.addon.video') {
+        return RepositoryAddonCategory.video;
+      }
+      if (point == 'xbmc.addon.audio') {
+        return RepositoryAddonCategory.audio;
+      }
+      if (point == 'xbmc.addon.image') {
+        return RepositoryAddonCategory.images;
+      }
+      if (point == 'xbmc.addon.executable') {
         return RepositoryAddonCategory.programs;
       }
     }
