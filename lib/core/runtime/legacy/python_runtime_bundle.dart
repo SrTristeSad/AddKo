@@ -7,7 +7,8 @@ import 'package:path_provider/path_provider.dart';
 class PythonRuntimeBundle {
   PythonRuntimeBundle({
     Future<Directory> Function()? supportDirectoryProvider,
-  }) : _supportDirectoryProvider =
+  })  : _usesSharedCache = supportDirectoryProvider == null,
+        _supportDirectoryProvider =
             supportDirectoryProvider ?? getApplicationSupportDirectory;
 
   static const _version = 'v5';
@@ -24,9 +25,34 @@ class PythonRuntimeBundle {
     'runtime/python/shims/xbmcvfs.py',
   ];
 
+  static Future<PythonRuntimeFiles>? _sharedMaterialization;
+
+  final bool _usesSharedCache;
   final Future<Directory> Function() _supportDirectoryProvider;
 
   Future<PythonRuntimeFiles> materialize() async {
+    if (!_usesSharedCache) {
+      return _materializeInternal();
+    }
+
+    final cached = _sharedMaterialization;
+    if (cached != null) {
+      return cached;
+    }
+
+    final operation = _materializeInternal();
+    _sharedMaterialization = operation;
+    try {
+      return await operation;
+    } on Object {
+      if (identical(_sharedMaterialization, operation)) {
+        _sharedMaterialization = null;
+      }
+      rethrow;
+    }
+  }
+
+  Future<PythonRuntimeFiles> _materializeInternal() async {
     final support = await _supportDirectoryProvider();
     final runtimeRoot = Directory(
       p.join(support.path, 'runtime', 'python', _version),
