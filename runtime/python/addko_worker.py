@@ -8,10 +8,12 @@ back to the AddKo host.
 
 from __future__ import annotations
 
+import datetime
 import importlib
 import json
 import os
 import re
+import sqlite3
 import sys
 import traceback
 from pathlib import Path
@@ -51,33 +53,43 @@ def _install_kodi_api_fallbacks() -> None:
         module.__getattr__ = fallback
 
 
-def _install_runtime_overrides(context: dict[str, object]) -> None:
-    """Bridge Kodi conditions that can be answered locally without RPC.
+def _installed_addons(context: dict[str, object]) -> dict[str, str]:
+    """Return the current Kodi-style installed addon snapshot.
 
-    A large number of video addons use System.HasAddon()/AddonIsEnabled() on
-    every directory navigation. Returning False forever makes them repeatedly
-    request installation of inputstream.adaptive/ffmpegdirect and adds a large
-    delay. The installed addon registry is represented by addon.xml files on
-    disk, so answer these conditions immediately inside the Python worker.
+    Prefer the registry snapshot supplied by Dart. Also discover addon.xml files
+    directly because legacy addons can unpack a dependency into the addons
+    directory before the Dart registry has observed it.
     """
+
+    installed: dict[str, str] = {}
+    raw_snapshot = context.get("installed_addons")
+    if isinstance(raw_snapshot, dict):
+        for addon_id, version in raw_snapshot.items():
+            value = str(addon_id).strip()
+            if value:
+                installed[value] = str(version or "")
+
+    addons_root = Path(str(context.get("addons_root", "")))
+    if addons_root.is_dir():
+        try:
+            for child in addons_root.iterdir():
+                manifest = child / "addon.xml"
+                if child.is_dir() and manifest.is_file():
+                    installed.setdefault(child.name, "")
+        except OSError:
+            pass
+    return installed
+
+
+def _install_runtime_overrides(context: dict[str, object]) -> None:
+    """Bridge Kodi conditions that can be answered locally without RPC."""
 
     try:
         import xbmc
     except Exception:
         return
 
-    addons_root = Path(str(context.get("addons_root", "")))
-    installed_ids: set[str] = set()
-    if addons_root.is_dir():
-        try:
-            installed_ids = {
-                child.name.lower()
-                for child in addons_root.iterdir()
-                if child.is_dir() and (child / "addon.xml").is_file()
-            }
-        except OSError:
-            installed_ids = set()
-
+    installed_ids = {addon_id.lower() for addon_id in _installed_addons(context)}
     original_get_cond_visibility = xbmc.getCondVisibility
     addon_condition = re.compile(
         r"^system\.(?:hasaddon|addonisenabled)\((.+)\)$",
@@ -95,6 +107,93 @@ def _install_runtime_overrides(context: dict[str, object]) -> None:
     xbmc.getCondVisibility = get_cond_visibility
 
 
+def _ensure_kodi_addon_database(context: dict[str, object]) -> None:
+    """Create the subset of Addons33.db used by legacy Kodi addons.
+
+    Kodi maintains addon installation/enabled state in its addon database. Some
+    older ecosystems, including Brazuca Play helpers, access Addons33.db with
+    sqlite3 directly instead of going through JSON-RPC. A missing database makes
+    those helpers silently fail and the freshly extracted addon never becomes
+    usable. Keep a small compatible installed table synchronized with AddKo's
+    real addon registry.
+    """
+
+    special_paths = context.get("special_paths")
+    if not isinstance(special_paths, dict):
+        return
+    profile_value = special_paths.get("special://profile")
+    if not profile_value:
+        return
+
+    database_dir = Path(str(profile_value)) / "Database"
+    database_dir.mkdir(parents=True, exist_ok=True)
+    database_path = database_dir / "Addons33.db"
+    installed = _installed_addons(context)
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    try:
+        connection = sqlite3.connect(str(database_path), timeout=2.0)
+        try:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS installed (
+                  id INTEGER PRIMARY KEY,
+                  addonID TEXT,
+                  enabled BOOLEAN,
+                  installDate TEXT,
+                  lastUpdated TEXT,
+                  lastUsed TEXT,
+                  origin TEXT
+                )
+                """
+            )
+
+            # Old third-party helpers sometimes created a reduced installed
+            # table themselves. Add the columns Kodi-era code commonly queries.
+            columns = {
+                str(row[1])
+                for row in connection.execute("PRAGMA table_info(installed)")
+            }
+            for name, sql_type in (
+                ("lastUpdated", "TEXT"),
+                ("lastUsed", "TEXT"),
+                ("origin", "TEXT"),
+            ):
+                if name not in columns:
+                    connection.execute(
+                        f"ALTER TABLE installed ADD COLUMN {name} {sql_type}"
+                    )
+
+            for addon_id in installed:
+                existing = connection.execute(
+                    "SELECT id FROM installed WHERE addonID=? LIMIT 1",
+                    (addon_id,),
+                ).fetchone()
+                if existing is None:
+                    connection.execute(
+                        """
+                        INSERT INTO installed
+                          (addonID, enabled, installDate, lastUpdated, origin)
+                        VALUES (?, 1, ?, ?, ?)
+                        """,
+                        (addon_id, now, now, "repository.addko"),
+                    )
+                else:
+                    connection.execute(
+                        "UPDATE installed SET enabled=1 WHERE addonID=?",
+                        (addon_id,),
+                    )
+            connection.commit()
+        finally:
+            connection.close()
+    except (OSError, sqlite3.Error) as error:
+        emit(
+            "xbmc.log",
+            level=2,
+            message=f"AddKo Addons33.db compatibility warning: {error}",
+        )
+
+
 def _execute_entrypoint(entrypoint: Path) -> None:
     """Execute an addon without letting runpy replace Kodi's sys.argv[0]."""
     namespace = {
@@ -108,13 +207,7 @@ def _execute_entrypoint(entrypoint: Path) -> None:
 
 
 def _exception_details(error: BaseException, addon_root: Path) -> dict[str, object]:
-    """Return a compact traceback that points at the failing addon source.
-
-    Kodi addons are commonly packed behind helper modules. Showing only the
-    worker frame hides the actionable line. Keep the ordinary traceback and a
-    structured frame list, while separately selecting the deepest frame that
-    belongs to the addon directory.
-    """
+    """Return a compact traceback that points at the failing addon source."""
 
     extracted = traceback.extract_tb(error.__traceback__)
     frames: list[dict[str, object]] = []
@@ -143,9 +236,7 @@ def _exception_details(error: BaseException, addon_root: Path) -> dict[str, obje
 
     if not addon_location and frames:
         last = frames[-1]
-        addon_location = (
-            f"{last['file']}:{last['line']} in {last['function']}"
-        )
+        addon_location = f"{last['file']}:{last['line']} in {last['function']}"
 
     return {
         "exception_type": type(error).__name__,
@@ -180,6 +271,7 @@ def main() -> int:
 
     _install_kodi_api_fallbacks()
     _install_runtime_overrides(context)
+    _ensure_kodi_addon_database(context)
 
     custom_argv = context.get("argv")
     if isinstance(custom_argv, list):
