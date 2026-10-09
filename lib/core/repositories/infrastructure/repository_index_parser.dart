@@ -1,3 +1,5 @@
+import 'dart:ffi';
+
 import 'package:xml/xml.dart';
 
 import '../../addons/domain/addon_manifest.dart';
@@ -128,8 +130,9 @@ class RepositoryIndexParser {
     }
 
     final normalizedBase = _directoryUri(baseUri);
+    final directoryName = _packageDirectoryName(normalizedBase, manifest);
     return normalizedBase.resolve(
-      '${Uri.encodeComponent(manifest.id)}/${Uri.encodeComponent(manifest.id)}-${Uri.encodeComponent(manifest.version)}.zip',
+      '${Uri.encodeComponent(directoryName)}/${Uri.encodeComponent(manifest.id)}-${Uri.encodeComponent(manifest.version)}.zip',
     );
   }
 
@@ -139,14 +142,52 @@ class RepositoryIndexParser {
     }
 
     final normalizedBase = _directoryUri(baseUri);
+    final directoryName = _packageDirectoryName(normalizedBase, manifest);
     final iconPath = manifest.iconPath?.trim();
     if (iconPath != null && iconPath.isNotEmpty) {
       return normalizedBase.resolve(
-        '${Uri.encodeComponent(manifest.id)}/$iconPath',
+        '${Uri.encodeComponent(directoryName)}/$iconPath',
       );
     }
 
-    return normalizedBase.resolve('${Uri.encodeComponent(manifest.id)}/icon.png');
+    return normalizedBase.resolve(
+      '${Uri.encodeComponent(directoryName)}/icon.png',
+    );
+  }
+
+  String _packageDirectoryName(Uri baseUri, AddonManifest manifest) {
+    if (!_isKodiOfficialRepository(baseUri) || !_isBinaryAddon(manifest)) {
+      return manifest.id;
+    }
+
+    final platform = _kodiPlatformSuffix();
+    if (platform == null) {
+      return manifest.id;
+    }
+    return '${manifest.id}+$platform';
+  }
+
+  bool _isBinaryAddon(AddonManifest manifest) {
+    return manifest.dependencies.any(
+      (dependency) => dependency.id.toLowerCase().startsWith('kodi.binary.'),
+    );
+  }
+
+  bool _isKodiOfficialRepository(Uri uri) {
+    return uri.host.toLowerCase() == 'mirrors.kodi.tv' &&
+        uri.path.toLowerCase().contains('/addons/');
+  }
+
+  String? _kodiPlatformSuffix() {
+    final abi = Abi.current();
+    if (abi == Abi.androidArm64) return 'android-aarch64';
+    if (abi == Abi.androidArm) return 'android-armv7';
+    if (abi == Abi.androidX64) return 'android-x86_64';
+    if (abi == Abi.windowsX64) return 'windows-x86_64';
+    if (abi == Abi.windowsIA32) return 'windows-i686';
+    if (abi == Abi.macosArm64) return 'osx-arm64';
+    if (abi == Abi.macosX64) return 'osx-x86_64';
+    return null;
   }
 
   Uri _directoryUri(Uri uri) {
