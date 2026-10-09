@@ -19,6 +19,9 @@
       "Addon.h",
       "Settings.h"
     ],
+    "xbmcdrm": [
+      "DrmCryptoSession.h"
+    ],
     "xbmcgui": [
       "ModuleXbmcgui.h",
       "ListItem.h",
@@ -35,6 +38,25 @@
       "File.h",
       "Stat.h",
       "ModuleXbmcvfs.h"
+    ],
+    "xbmcwsgi": [
+      "WsgiErrorStream.h",
+      "WsgiInputStream.h",
+      "WsgiResponse.h",
+      "WsgiResponseBody.h"
     ]
-  }
+  },
+  "binary_instance_types": [
+    "audiodecoder",
+    "audioencoder",
+    "game",
+    "imagedecoder",
+    "inputstream",
+    "peripheral",
+    "pvr",
+    "screensaver",
+    "vfs",
+    "visualization",
+    "videocodec"
+  ]
 }

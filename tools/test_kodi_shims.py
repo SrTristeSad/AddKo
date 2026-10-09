@@ -23,9 +23,11 @@ import addko_worker  # noqa: E402
 import kodi_proxy  # noqa: E402,F401
 import xbmc  # noqa: E402
 import xbmcaddon  # noqa: E402,F401
+import xbmcdrm  # noqa: E402
 import xbmcgui  # noqa: E402
 import xbmcplugin  # noqa: E402
 import xbmcvfs  # noqa: E402
+import xbmcwsgi  # noqa: E402
 
 
 def require(module: object, *names: str) -> None:
@@ -105,6 +107,21 @@ def main() -> int:
         "translatePath",
         "validatePath",
     )
+    require(
+        xbmcdrm,
+        "CryptoSession",
+        "CRYPTO_SESSION_SYSTEM_NONE",
+        "CRYPTO_SESSION_SYSTEM_WIDEVINE",
+        "CRYPTO_SESSION_SYSTEM_PLAYREADY",
+    )
+    require(
+        xbmcwsgi,
+        "WsgiErrorStream",
+        "WsgiInputStreamIterator",
+        "WsgiInputStream",
+        "WsgiResponse",
+        "WsgiResponseBody",
+    )
 
     assert xbmcgui.INPUT_ALPHANUM == 0
     assert xbmcgui.INPUT_NUMERIC == 1
@@ -165,6 +182,36 @@ def main() -> int:
         reader.close()
         assert xbmcvfs.exists(path)
         assert xbmcvfs.Stat(path).st_size() > 0
+
+    # Kodi 21 exports xbmcdrm through SWIG. The current AddKo host validates the
+    # exact method surface even though native MediaDrm is still pending.
+    drm = xbmcdrm.CryptoSession(
+        "edef8ba9-79d6-4ace-a3c8-27dcd51d21ed",
+        "AES/CBC/NoPadding",
+        "HmacSHA256",
+    )
+    drm.SetPropertyString("securityLevel", "L3")
+    assert drm.GetPropertyString("securityLevel") == "L3"
+    assert drm.GetKeyRequest(bytearray(), "video/mp4", False, {}) == b""
+    assert drm.Encrypt(b"", b"demo", b"") == b""
+    assert drm.Decrypt(b"", b"demo", b"") == b""
+    assert drm.Sign(b"", b"demo") == b""
+    assert drm.Verify(b"", b"demo", b"") is False
+
+    # Kodi's WSGI objects are only injected into web-interface invocations. The
+    # shim still needs their exact callable/stream shape so those packages can
+    # import cleanly and can be covered by compatibility tests.
+    input_stream = xbmcwsgi.WsgiInputStream("alpha\nbeta\n")
+    assert input_stream.readline() == "alpha\n"
+    assert input_stream.readlines() == ["beta\n"]
+
+    response = xbmcwsgi.WsgiResponse()
+    write = response("200 OK", [("Content-Type", "text/plain")])
+    write("hello")
+    write(" world")
+    assert response.status == "200 OK"
+    assert response.response_headers == [("Content-Type", "text/plain")]
+    assert response.body.data == "hello world"
 
     print("[AddKo] Kodi Python shims + fallback: OK")
     return 0
