@@ -29,6 +29,7 @@ class AddonInstallController extends ChangeNotifier {
 
   InstalledAddonRegistry? _registry;
   Future<void>? _initialization;
+  Future<DirectoryInfo>? _directoryInfo;
   Future<void> _mutationTail = Future<void>.value();
   final Set<String> _installing = {};
   String? _initializationError;
@@ -104,7 +105,11 @@ class AddonInstallController extends ChangeNotifier {
     });
   }
 
-  Future<DirectoryInfo> directories() async {
+  Future<DirectoryInfo> directories() {
+    return _directoryInfo ??= _loadDirectoryInfo();
+  }
+
+  Future<DirectoryInfo> _loadDirectoryInfo() async {
     final addonsRoot = await _directories.addonsRoot();
     final addonDataRoot = await _directories.addonDataRoot();
     return DirectoryInfo(
