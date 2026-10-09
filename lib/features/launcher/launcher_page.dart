@@ -59,12 +59,14 @@ class LauncherPage extends StatelessWidget {
                           .where((addon) => addon.manifest.isPythonPlugin)
                           .toList(growable: false);
 
-                      return GridView.count(
+                      return GridView(
                         padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
-                        crossAxisCount: crossAxisCount,
-                        crossAxisSpacing: 20,
-                        mainAxisSpacing: 20,
-                        childAspectRatio: landscape ? 1.22 : 0.82,
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: crossAxisCount,
+                          crossAxisSpacing: 20,
+                          mainAxisSpacing: 20,
+                          mainAxisExtent: 320,
+                        ),
                         children: [
                           if (KodiCore.supported)
                             _LauncherCard(

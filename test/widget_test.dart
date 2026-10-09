@@ -136,8 +136,11 @@ void main() {
 }
 
 Future<void> _pumpRoute(WidgetTester tester) async {
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 450));
+  await tester.pumpAndSettle(
+    const Duration(milliseconds: 100),
+    EnginePhase.sendSemanticsUpdate,
+    const Duration(seconds: 5),
+  );
 }
 
 class _NoopRepositoryStoreController extends RepositoryStoreController {
