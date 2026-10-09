@@ -206,10 +206,23 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
     }
   }
 
-  Future<void> _installAddonFromRepositories(String addonId) async {
+  Future<void> _installAddonFromRepositories(String rawAddonId) async {
+    final addonId = _normalizeAddonId(rawAddonId);
+    if (addonId.isEmpty) {
+      _showMessage('O addon solicitou uma dependência sem identificador válido.');
+      return;
+    }
+
     try {
       await widget.repositoryRegistry.initialize();
       await widget.runtime.addonInstallController.initialize();
+
+      if (widget.runtime.addonInstallController.installedById(addonId) != null) {
+        return;
+      }
+
+      // Binary video components such as inputstream.adaptive and
+      // inputstream.ffmpegdirect live in the official Kodi Omega catalog.
       await widget.repositoryStoreController.ensureKodiSystemCatalog();
 
       var candidate = _bestAvailableAddon(addonId);
@@ -249,11 +262,31 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
     }
   }
 
+  String _normalizeAddonId(String rawValue) {
+    var value = rawValue.trim();
+    if (value.length >= 2 &&
+        ((value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'")))) {
+      value = value.substring(1, value.length - 1).trim();
+    }
+    value = value.replaceAll('\\', '/');
+    while (value.endsWith('/')) {
+      value = value.substring(0, value.length - 1);
+    }
+    final slash = value.lastIndexOf('/');
+    if (slash >= 0) {
+      value = value.substring(slash + 1);
+    }
+    return value.trim();
+  }
+
   RepositoryAddonEntry? _bestAvailableAddon(String addonId) {
+    final normalizedId = addonId.toLowerCase();
     RepositoryAddonEntry? selected;
     for (final catalog in widget.repositoryStoreController.catalogs) {
       for (final entry in catalog.addons) {
-        if (entry.manifest.id != addonId || entry.packageUri == null) {
+        if (entry.manifest.id.toLowerCase() != normalizedId ||
+            entry.packageUri == null) {
           continue;
         }
         if (selected == null ||
@@ -597,6 +630,9 @@ class _Artwork extends StatelessWidget {
         child: Image.network(
           value,
           fit: BoxFit.cover,
+          cacheWidth: 112,
+          cacheHeight: 112,
+          filterQuality: FilterQuality.low,
           errorBuilder: (_, __, ___) => Icon(fallback, size: 38),
         ),
       );
