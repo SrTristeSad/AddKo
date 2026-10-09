@@ -17,6 +17,10 @@ class LegacyRuntimeCollector {
   String? _errorType;
   String? _errorLocation;
   String? _errorTraceback;
+  bool _directoryEnded = false;
+  bool _directorySucceeded = true;
+  bool _updateListing = false;
+  bool _cacheToDisc = true;
 
   void consumeStdoutLine(String line) {
     if (!line.startsWith(protocolPrefix)) {
@@ -73,6 +77,17 @@ class LegacyRuntimeCollector {
             itemJson['is_folder'] = entry['is_folder'] == true;
             _items.add(LegacyPluginItem.fromJson(itemJson));
           }
+        }
+        break;
+      case 'xbmcplugin.endOfDirectory':
+        _directoryEnded = true;
+        _directorySucceeded = map['succeeded'] != false;
+        _updateListing = map['update_listing'] == true;
+        _cacheToDisc = map['cache_to_disc'] != false;
+        if (!_directorySucceeded) {
+          _succeeded = false;
+          _errorMessage ??=
+              'O addon informou que não conseguiu carregar esta pasta.';
         }
         break;
       case 'xbmcplugin.setContent':
@@ -182,6 +197,10 @@ class LegacyRuntimeCollector {
       errorType: _errorType,
       errorLocation: _errorLocation,
       errorTraceback: _errorTraceback,
+      directoryEnded: _directoryEnded,
+      directorySucceeded: _directorySucceeded,
+      updateListing: _updateListing,
+      cacheToDisc: _cacheToDisc,
       builtins: List.unmodifiable(_builtins),
     );
   }
