@@ -56,6 +56,13 @@ class RepositoryIndexParser {
     for (final addonElement in root.findElements('addon')) {
       try {
         final manifest = addonManifestParser.parse(addonElement.toXmlString());
+        if (!_matchesCurrentKodiPlatform(
+          packageBaseUri,
+          addonElement,
+          manifest,
+        )) {
+          continue;
+        }
         entries.add(
           RepositoryAddonEntry(
             manifest: manifest,
@@ -165,6 +172,42 @@ class RepositoryIndexParser {
       return manifest.id;
     }
     return '${manifest.id}+$platform';
+  }
+
+  bool _matchesCurrentKodiPlatform(
+    Uri? baseUri,
+    XmlElement addonElement,
+    AddonManifest manifest,
+  ) {
+    if (baseUri == null ||
+        !_isKodiOfficialRepository(baseUri) ||
+        !_isBinaryAddon(manifest)) {
+      return true;
+    }
+
+    final currentPlatform = _kodiPlatformSuffix();
+    if (currentPlatform == null) {
+      return true;
+    }
+
+    final platforms = addonElement
+        .findElements('extension')
+        .where(
+          (element) => element.getAttribute('point') == 'xbmc.addon.metadata',
+        )
+        .expand((element) => element.findElements('platform'))
+        .expand(
+          (element) => element.innerText
+              .split(RegExp(r'[\s,]+'))
+              .map((value) => value.trim().toLowerCase())
+              .where((value) => value.isNotEmpty),
+        )
+        .toSet();
+
+    if (platforms.isEmpty || platforms.contains('all')) {
+      return true;
+    }
+    return platforms.contains(currentPlatform.toLowerCase());
   }
 
   bool _isBinaryAddon(AddonManifest manifest) {
