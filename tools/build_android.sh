@@ -15,6 +15,8 @@ command -v python3 >/dev/null 2>&1 || {
 
 mkdir -p dist
 flutter pub get
+python3 tools/audit_kodi_omega_compat.py
+python3 tools/test_kodi_shims.py
 python3 tools/android/fetch_python_runtime.py --output android/app/build/addko-python-runtime
 PYTHON=python3 flutter build apk --debug --split-per-abi
 

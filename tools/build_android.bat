@@ -31,6 +31,13 @@ echo [AddKo] Baixando dependencias Flutter...
 call flutter pub get
 if errorlevel 1 exit /b 1
 
+echo [AddKo] Auditando superficie Kodi Omega...
+python tools\audit_kodi_omega_compat.py
+if errorlevel 1 (
+  echo [ERRO] A matriz estrutural Kodi Omega esta incompleta.
+  exit /b 1
+)
+
 echo [AddKo] Validando APIs Python do Kodi...
 python tools\test_kodi_shims.py
 if errorlevel 1 (

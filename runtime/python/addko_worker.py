@@ -38,6 +38,7 @@ def _install_kodi_api_fallbacks() -> None:
         "xbmcplugin",
         "xbmcvfs",
         "xbmcdrm",
+        "xbmcwsgi",
     ):
         try:
             module = importlib.import_module(module_name)
