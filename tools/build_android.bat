@@ -46,6 +46,13 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo [AddKo] Validando isolamento entre subinterpretadores...
+python tools\test_embedded_context_isolation.py
+if errorlevel 1 (
+  echo [ERRO] O isolamento de contexto entre addons/servicos falhou.
+  exit /b 1
+)
+
 echo [AddKo] Analise estatica...
 call flutter analyze --no-fatal-infos --no-fatal-warnings
 if errorlevel 1 (
