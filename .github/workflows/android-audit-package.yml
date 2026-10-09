@@ -1,0 +1,115 @@
+name: Audit and package AddKo Android
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: addko-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit-test-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ADDKO_ANDROID_ABIS: arm64-v8a
+      PYTHON: python3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Cache CPython Android download
+        uses: actions/cache@v4
+        with:
+          path: .cache/addko-python
+          key: addko-cpython-3.14.8-arm64-v8a-v1
+
+      - name: Resolve Flutter packages
+        run: flutter pub get
+
+      - name: Audit Kodi Omega surface
+        run: python3 tools/audit_kodi_omega_compat.py
+
+      - name: Smoke test Kodi Python shims
+        run: python3 tools/test_kodi_shims.py
+
+      - name: Test CPython context isolation
+        run: python3 tools/test_embedded_context_isolation.py
+
+      - name: Static analysis
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Flutter tests
+        run: flutter test
+
+      - name: Stage official CPython ARM64 runtime
+        run: >-
+          python3 tools/android/fetch_python_runtime.py
+          --abi arm64-v8a
+          --output android/app/build/addko-python-runtime
+
+      - name: Verify staged CPython
+        run: >-
+          python3 tools/android/verify_staged_runtime.py
+          android/app/build/addko-python-runtime/assets/addko_python/3.14.8/arm64-v8a/stdlib.zip
+
+      - name: Build lean ARM64 release APK
+        run: flutter build apk --release --target-platform android-arm64
+
+      - name: Verify APK runtime and ABI
+        run: >-
+          python3 tools/android/verify_addko_apk.py
+          build/app/outputs/flutter-apk/app-release.apk
+          --abi arm64-v8a
+          --strict-abi
+
+      - name: Assemble test bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/AddKo-test-arm64
+          cp build/app/outputs/flutter-apk/app-release.apk dist/AddKo-test-arm64/AddKo-arm64-release.apk
+          cat > dist/AddKo-test-arm64/LEIA-ME.txt <<'EOF'
+          AddKo - pacote de teste Android ARM64
+
+          1. Instale AddKo-arm64-release.apk em um aparelho Android/Android TV ARM64.
+          2. Se o Android bloquear a instalação, permita instalação de apps dessa origem.
+          3. Abra o AddKo, entre em Configurações > Compatibilidade Kodi e rode o teste do CPython.
+          4. Depois instale um repositório/addon Kodi pela Loja e teste navegação e reprodução.
+
+          Este build contém somente ARM64 para evitar carregar o runtime x86_64 inutilmente.
+          A auditoria valida a superfície Kodi 21 Omega, os shims Python, os testes Flutter e a presença do CPython dentro do APK.
+          Addons binários que dependem de hosts ainda não implementados (por exemplo PVR/Game completos) podem ser reconhecidos/instalados sem ter paridade funcional total com o Kodi.
+          EOF
+          (cd dist/AddKo-test-arm64 && sha256sum AddKo-arm64-release.apk > SHA256SUMS.txt)
+          du -h dist/AddKo-test-arm64/AddKo-arm64-release.apk
+
+      - name: Upload AddKo test ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: AddKo-test-arm64
+          path: dist/AddKo-test-arm64/*
+          if-no-files-found: error
+          compression-level: 9
+          retention-days: 14
