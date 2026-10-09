@@ -24,6 +24,7 @@ mkdir -p dist
 flutter pub get
 python3 tools/audit_kodi_omega_compat.py
 python3 tools/test_kodi_shims.py
+python3 tools/test_embedded_context_isolation.py
 flutter analyze --no-fatal-infos --no-fatal-warnings
 flutter test
 python3 tools/android/fetch_python_runtime.py --abi arm64-v8a --output android/app/build/addko-python-runtime
