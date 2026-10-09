@@ -1,17 +1,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
-    <uses-feature
-        android:name="android.software.leanback"
-        android:required="false" />
-    <uses-feature
-        android:name="android.hardware.touchscreen"
-        android:required="false" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
-    <application
-        android:label="AddKo"
-        android:banner="@drawable/tv_banner"
-        android:usesCleartextTraffic="true">
+    <application android:label="AddKo" android:banner="@drawable/tv_banner" android:usesCleartextTraffic="true" android:extractNativeLibs="true" android:requestLegacyExternalStorage="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -21,9 +22,7 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
-            <meta-data
-                android:name="io.flutter.embedding.android.NormalTheme"
-                android:resource="@style/NormalTheme" />
+            <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -33,9 +32,20 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <meta-data
-            android:name="flutterEmbedding"
-            android:value="2" />
+        <activity android:name="com.srtristesad.addko.KodiBootstrapActivity" android:exported="false" android:screenOrientation="sensorLandscape" android:theme="@style/AppTheme" />
+        <activity android:name="org.xbmc.kodi.Main" android:process=":kodi" android:exported="false" android:launchMode="singleTask" android:screenOrientation="sensorLandscape" android:theme="@style/AppTheme" android:configChanges="orientation|keyboard|keyboardHidden|navigation|touchscreen|screenLayout|screenSize|colorMode">
+            <meta-data android:name="android.app.lib_name" android:value="kodi" />
+        </activity>
+        <receiver android:name="com.srtristesad.addko.XBMCBroadcastReceiver" android:exported="false">
+            <intent-filter><action android:name="android.intent.action.MEDIA_BUTTON" /><action android:name="android.bluetooth.a2dp.profile.action.CONNECTION_STATE_CHANGED" /><action android:name="android.intent.action.DREAMING_STOPPED" /></intent-filter>
+        </receiver>
+        <receiver android:name="org.xbmc.kodi.XBMCBroadcastReceiver" android:exported="false" />
+        <provider android:name="org.xbmc.kodi.content.XBMCMediaContentProvider" android:authorities="com.srtristesad.addko.kodi.media" android:exported="false" />
+        <provider android:name="org.xbmc.kodi.content.XBMCFileContentProvider" android:authorities="com.srtristesad.addko.kodi.file" android:exported="false" />
+        <provider android:name="org.xbmc.kodi.content.XBMCYTDLContentProvider" android:authorities="com.srtristesad.addko.kodi.ytdl" android:exported="false" />
+        <activity android:name="org.xbmc.kodi.XBMCSearchableActivity" android:exported="false"><meta-data android:name="android.app.searchable" android:resource="@xml/searchable" /></activity>
+        <service android:name="org.xbmc.kodi.channels.SyncChannelJobService" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service android:name="org.xbmc.kodi.channels.SyncProgramsJobService" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
+        <meta-data android:name="flutterEmbedding" android:value="2" />
     </application>
 </manifest>

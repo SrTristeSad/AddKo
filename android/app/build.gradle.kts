@@ -4,11 +4,6 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-val addkoPythonRuntimeDir = layout.buildDirectory.dir("addko-python-runtime")
-val addkoPythonRuntimeRoot = addkoPythonRuntimeDir.get().asFile
-val pythonCommand = System.getenv("PYTHON")?.takeIf { it.isNotBlank() }
-    ?: if (System.getProperty("os.name").lowercase().contains("windows")) "python" else "python3"
-
 android {
     namespace = "com.srtristesad.addko"
     compileSdk = flutter.compileSdkVersion
@@ -21,62 +16,43 @@ android {
 
     defaultConfig {
         applicationId = "com.srtristesad.addko"
-        minSdk = flutter.minSdkVersion
+        minSdk = maxOf(24, flutter.minSdkVersion)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-
-        // Do not set ndk.abiFilters here. Flutter's --split-per-abi configures
-        // ABI splits itself and AGP rejects using both mechanisms together.
-        // The release/test pipeline only publishes the ABIs for which AddKo
-        // currently stages CPython: arm64-v8a and x86_64.
-        externalNativeBuild {
-            cmake {
-                cppFlags += "-std=c++17"
-            }
+        ndk {
+            abiFilters.clear()
+            abiFilters += "arm64-v8a"
         }
     }
 
-    // Use concrete File paths here. AGP 9 rejects Provider instances passed to
-    // the legacy SourceSet API because it cannot classify them as generated or
-    // static sources during IDE model construction.
     sourceSets.getByName("main") {
-        assets.srcDir(File(addkoPythonRuntimeRoot, "assets"))
-        jniLibs.srcDir(File(addkoPythonRuntimeRoot, "jniLibs"))
+        java.srcDir("../../third_party/kodi_21_3/java")
+        res.srcDir("../../third_party/kodi_21_3/res")
+        assets.srcDir("../../third_party/kodi_21_3/assets")
+        jniLibs.srcDir("../../third_party/kodi_21_3/jniLibs")
     }
-
-    externalNativeBuild {
-        cmake {
-            path = file("../../native/python_host/CMakeLists.txt")
-            version = "3.22.1"
+    androidResources {
+        // AAPT's default ignores directories beginning with '_', which drops
+        // Python's _vendor/_bundled modules and Kodi's web translations.
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~"
+    }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += "**/*.so"
+            pickFirsts += "**/libc++_shared.so"
         }
     }
 
     buildTypes {
         release {
+            // Kodi looks up Java classes/methods through JNI at runtime.
+            isMinifyEnabled = false
+            isShrinkResources = false
             signingConfig = signingConfigs.getByName("debug")
         }
     }
-}
-
-val prepareAddKoPythonRuntime by tasks.registering(Exec::class) {
-    group = "addko"
-    description = "Downloads, verifies and stages the official CPython Android runtime."
-
-    outputs.dir(addkoPythonRuntimeRoot)
-    inputs.file(rootProject.file("../tools/android/fetch_python_runtime.py"))
-
-    workingDir(rootProject.projectDir.parentFile)
-    commandLine(
-        pythonCommand,
-        "tools/android/fetch_python_runtime.py",
-        "--output",
-        addkoPythonRuntimeRoot.absolutePath,
-    )
-}
-
-tasks.matching { it.name == "preBuild" }.configureEach {
-    dependsOn(prepareAddKoPythonRuntime)
 }
 
 kotlin {
@@ -87,4 +63,10 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+
+dependencies {
+    implementation("androidx.tvprovider:tvprovider:1.1.0-alpha01")
+    implementation("com.google.code.gson:gson:2.10.1")
 }

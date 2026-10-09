@@ -6,10 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/addons/application/addon_install_controller.dart';
+import '../../core/addons/domain/kodi_version.dart';
 import '../../core/repositories/application/repository_registry.dart';
 import '../../core/repositories/application/repository_store_controller.dart';
+import '../../core/repositories/domain/repository_descriptor.dart';
 import '../../core/repositories/domain/repository_source.dart';
 import '../../core/repositories/infrastructure/repository_descriptor_parser.dart';
+import '../../core/ui/kodi_text.dart';
 import 'repository_catalog_page.dart';
 
 class StorePage extends StatefulWidget {
@@ -35,47 +38,180 @@ class _StorePageState extends State<StorePage> {
     mimeTypes: <String>['application/zip', 'application/x-zip-compressed'],
   );
 
-  bool _syncScheduled = false;
+  static final KodiVersion _hostKodiVersion = KodiVersion('21.0.0');
+
   bool _installingZip = false;
+  bool _syncScheduled = false;
 
   @override
   void initState() {
     super.initState();
-    widget.repositoryRegistry.addListener(_handleRegistryChanged);
+    widget.repositoryRegistry.addListener(_onRegistryChanged);
     _scheduleIdleSync();
   }
 
   @override
   void dispose() {
-    widget.repositoryRegistry.removeListener(_handleRegistryChanged);
+    widget.repositoryRegistry.removeListener(_onRegistryChanged);
     super.dispose();
   }
 
-  void _handleRegistryChanged() {
+  void _onRegistryChanged() {
     _scheduleIdleSync();
   }
 
   void _scheduleIdleSync() {
-    if (_syncScheduled) {
-      return;
-    }
+    if (_syncScheduled) return;
     _syncScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _syncScheduled = false;
-      if (!mounted) {
-        return;
+      if (!mounted) return;
+      for (final source in widget.repositoryRegistry.sources) {
+        final state = widget.repositoryStoreController.stateFor(source.uri);
+        if (source.enabled && state.status == RepositorySyncStatus.idle) {
+          unawaited(widget.repositoryStoreController.synchronize(source));
+        }
       }
-      _syncIdleSources();
     });
   }
 
-  void _syncIdleSources() {
-    for (final source in widget.repositoryRegistry.sources) {
-      final state = widget.repositoryStoreController.stateFor(source.uri);
-      if (source.enabled && state.status == RepositorySyncStatus.idle) {
-        unawaited(widget.repositoryStoreController.synchronize(source));
-      }
+  Future<void> _addRepository() async {
+    final rawUrl = await showDialog<String>(
+      context: context,
+      builder: (_) => _AddRepositoryDialog(
+        existingUris: widget.repositoryRegistry.sources
+            .map((source) => source.uri)
+            .toSet(),
+      ),
+    );
+
+    if (!mounted || rawUrl == null) return;
+
+    try {
+      await widget.repositoryRegistry.addUrl(rawUrl);
+    } on FormatException catch (error) {
+      if (mounted) _showError(error.message.toString());
+    } on Object catch (error) {
+      if (mounted) _showError('Não foi possível adicionar a fonte: $error');
     }
+  }
+
+  Future<void> _installZip() async {
+    final selected = await openFile(
+      acceptedTypeGroups: const <XTypeGroup>[_zipTypeGroup],
+    );
+    if (selected == null || !mounted) return;
+
+    setState(() => _installingZip = true);
+    try {
+      await widget.repositoryStoreController.ensureKodiSystemCatalog();
+      final result = await widget.addonInstallController.installLocalPackage(
+        bytes: await selected.readAsBytes(),
+        catalogs: widget.repositoryStoreController.catalogs,
+      );
+
+      var registeredRepository = false;
+      if (result.addon.manifest.isRepository) {
+        registeredRepository = await _registerRepositoryAddon(
+          result.addon.installPath,
+        );
+      }
+
+      if (!mounted) return;
+
+      if (!result.dependenciesResolved) {
+        final issues = result.dependencyPlan.issues
+            .map((issue) => '${issue.addonId}: ${issue.message}')
+            .join('\n');
+        _showError(
+          '${result.addon.manifest.name} foi instalado, mas ainda faltam dependências:\n$issues',
+        );
+        return;
+      }
+
+      _showMessage(
+        registeredRepository
+            ? '${result.addon.manifest.name} instalado e adicionado à Loja.'
+            : '${result.addon.manifest.name} instalado com sucesso.',
+      );
+    } on Object catch (error) {
+      if (mounted) _showError('Falha ao instalar ZIP: $error');
+    } finally {
+      if (mounted) setState(() => _installingZip = false);
+    }
+  }
+
+  Future<bool> _registerRepositoryAddon(String installPath) async {
+    final manifestFile = File(p.join(installPath, 'addon.xml'));
+    if (!await manifestFile.exists()) return false;
+
+    final descriptor = const RepositoryDescriptorParser().parse(
+      await manifestFile.readAsString(),
+    );
+
+    var added = false;
+    for (final endpoint in descriptor.endpoints) {
+      if (!_endpointIsCompatible(endpoint)) continue;
+      if (widget.repositoryRegistry.sources.any(
+        (source) => source.uri == endpoint.infoUri,
+      )) {
+        continue;
+      }
+
+      await widget.repositoryRegistry.addResolvedEndpoint(
+        infoUri: endpoint.infoUri,
+        packageBaseUri: endpoint.dataUri,
+        checksumUri: endpoint.checksumUri,
+        name: descriptor.name,
+      );
+      added = true;
+    }
+    return added;
+  }
+
+  bool _endpointIsCompatible(RepositoryEndpoint endpoint) {
+    final minimum = endpoint.minimumVersion?.trim();
+    if (minimum != null &&
+        minimum.isNotEmpty &&
+        _hostKodiVersion.compareTo(KodiVersion(minimum)) < 0) {
+      return false;
+    }
+
+    final maximum = endpoint.maximumVersion?.trim();
+    if (maximum != null &&
+        maximum.isNotEmpty &&
+        _hostKodiVersion.compareTo(KodiVersion(maximum)) > 0) {
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> _removeRepository(RepositorySource source) async {
+    await widget.repositoryRegistry.remove(source.uri);
+    widget.repositoryStoreController.forget(source.uri);
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
   }
 
   @override
@@ -107,9 +243,9 @@ class _StorePageState extends State<StorePage> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showAddRepositoryDialog,
+        onPressed: () => unawaited(_addRepository()),
         icon: const Icon(Icons.add_link_rounded),
-        label: const Text('Adicionar repositório'),
+        label: const Text('Adicionar fonte'),
       ),
       body: AnimatedBuilder(
         animation: Listenable.merge([
@@ -151,185 +287,19 @@ class _StorePageState extends State<StorePage> {
                 onRefresh: () => unawaited(
                   widget.repositoryStoreController.synchronize(repository),
                 ),
-                onEnabledChanged: (value) => unawaited(
-                  widget.repositoryRegistry.setEnabled(repository.uri, value),
+                onEnabledChanged: (enabled) => unawaited(
+                  widget.repositoryRegistry.setEnabled(
+                    repository.uri,
+                    enabled,
+                  ),
                 ),
-                onRemove: () => unawaited(_remove(repository)),
+                onRemove: () => unawaited(_removeRepository(repository)),
               );
             },
           );
         },
       ),
     );
-  }
-
-  Future<void> _installZip() async {
-    final selected = await openFile(
-      acceptedTypeGroups: const <XTypeGroup>[_zipTypeGroup],
-    );
-    if (selected == null || !mounted) {
-      return;
-    }
-
-    setState(() => _installingZip = true);
-    try {
-      final bytes = await selected.readAsBytes();
-      final result = await widget.addonInstallController.installLocalPackage(
-        bytes: bytes,
-        catalogs: widget.repositoryStoreController.catalogs,
-      );
-
-      var repositoryRegistered = false;
-      if (result.addon.manifest.isRepository) {
-        repositoryRegistered = await _registerRepositoryAddon(result.addon.installPath);
-      }
-
-      if (!mounted) return;
-      if (!result.dependenciesResolved) {
-        await _showDependencyIssues(
-          addonName: result.addon.manifest.name,
-          issues: result.dependencyPlan.issues
-              .map((issue) => '${issue.addonId}: ${issue.message}')
-              .toList(growable: false),
-        );
-        return;
-      }
-
-      final repositorySuffix = repositoryRegistered
-          ? ' O repositório também foi adicionado à Loja.'
-          : '';
-      _showMessage(
-        '${result.addon.manifest.name} instalado com sucesso.$repositorySuffix',
-      );
-    } on Object catch (error) {
-      if (!mounted) return;
-      _showError('Falha ao instalar o ZIP: $error');
-    } finally {
-      if (mounted) {
-        setState(() => _installingZip = false);
-      }
-    }
-  }
-
-  Future<bool> _registerRepositoryAddon(String installPath) async {
-    final manifestFile = File(p.join(installPath, 'addon.xml'));
-    if (!await manifestFile.exists()) {
-      return false;
-    }
-
-    final descriptor = const RepositoryDescriptorParser().parse(
-      await manifestFile.readAsString(),
-    );
-    var added = false;
-    for (final endpoint in descriptor.endpoints) {
-      final alreadyRegistered = widget.repositoryRegistry.sources.any(
-        (source) => source.uri == endpoint.infoUri,
-      );
-      if (alreadyRegistered) {
-        continue;
-      }
-      await widget.repositoryRegistry.addResolvedEndpoint(
-        infoUri: endpoint.infoUri,
-        packageBaseUri: endpoint.dataUri,
-        checksumUri: endpoint.checksumUri,
-        name: descriptor.name,
-      );
-      added = true;
-    }
-    return added;
-  }
-
-  Future<void> _showDependencyIssues({
-    required String addonName,
-    required List<String> issues,
-  }) async {
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('$addonName foi instalado, mas precisa de dependências'),
-        content: SizedBox(
-          width: 620,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'O ZIP foi instalado, porém estas dependências obrigatórias não foram encontradas nos repositórios ativos:',
-              ),
-              const SizedBox(height: 12),
-              for (final issue in issues)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Text('• $issue'),
-                ),
-              const SizedBox(height: 8),
-              const Text(
-                'Adicione ou atualize o repositório que fornece essas dependências e reinstale o addon.',
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _remove(RepositorySource repository) async {
-    await widget.repositoryRegistry.remove(repository.uri);
-    widget.repositoryStoreController.forget(repository.uri);
-  }
-
-  Future<void> _showAddRepositoryDialog() async {
-    final rawUrl = await showDialog<String>(
-      context: context,
-      builder: (_) => _AddRepositoryDialog(
-        existingUris: widget.repositoryRegistry.sources
-            .map((source) => source.uri)
-            .toSet(),
-      ),
-    );
-    if (!mounted || rawUrl == null) {
-      return;
-    }
-
-    try {
-      await widget.repositoryRegistry.addUrl(rawUrl);
-    } on FormatException catch (error) {
-      if (!mounted) return;
-      _showError(error.message.toString());
-    } on Object catch (error) {
-      if (!mounted) return;
-      _showError('Não foi possível salvar o repositório: $error');
-    }
-  }
-
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
   }
 }
 
@@ -358,13 +328,13 @@ class _AddRepositoryDialogState extends State<_AddRepositoryDialog> {
 
     String? error;
     if (value.isEmpty) {
-      error = 'Informe a URL do repositório.';
+      error = 'Informe a URL da fonte/repositório.';
     } else if (uri == null ||
         (uri.scheme != 'http' && uri.scheme != 'https') ||
         uri.host.isEmpty) {
       error = 'Use uma URL HTTP ou HTTPS válida.';
     } else if (widget.existingUris.contains(uri)) {
-      error = 'Este repositório já foi adicionado.';
+      error = 'Esta fonte já foi adicionada.';
     }
 
     if (error != null) {
@@ -378,25 +348,23 @@ class _AddRepositoryDialogState extends State<_AddRepositoryDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Adicionar repositório'),
+      title: const Text('Adicionar fonte Kodi'),
       content: SizedBox(
-        width: 560,
+        width: 580,
         child: TextField(
           controller: _controller,
           autofocus: true,
           keyboardType: TextInputType.url,
           textInputAction: TextInputAction.done,
           onChanged: (_) {
-            if (_errorText != null) {
-              setState(() => _errorText = null);
-            }
+            if (_errorText != null) setState(() => _errorText = null);
           },
           onSubmitted: (_) => _submit(),
           decoration: InputDecoration(
-            labelText: 'URL do repositório',
-            hintText: 'https://exemplo.com/repository/',
+            labelText: 'URL',
+            hintText: 'https://vikingskoditeam.github.io',
             helperText:
-                'Aceita descriptor addon.xml ou índice addons.xml/addons.xml.gz.',
+                'Aceita fonte Kodi com ZIPs, addon.xml ou addons.xml/addons.xml.gz.',
             errorText: _errorText,
             border: const OutlineInputBorder(),
           ),
@@ -412,44 +380,6 @@ class _AddRepositoryDialogState extends State<_AddRepositoryDialog> {
           child: const Text('Adicionar'),
         ),
       ],
-    );
-  }
-}
-
-class _EmptyStore extends StatelessWidget {
-  const _EmptyStore();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.storefront_rounded,
-                size: 72,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Nenhum repositório configurado',
-                style: Theme.of(context).textTheme.headlineSmall,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Adicione a URL de um repositório ou use o ícone de ZIP na barra superior para instalar um addon/repository Kodi local.',
-                style: Theme.of(context).textTheme.bodyLarge,
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -474,26 +404,24 @@ class _RepositoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final catalog = state.catalog;
-    final title = catalog?.repositoryName ?? repository.displayName;
-
     return Card(
       child: ListTile(
         onTap: onOpen,
         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         leading: _StatusIcon(state: state),
-        title: Text(title),
+        title: KodiText(catalog?.repositoryName ?? repository.displayName),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 4),
             Text(repository.uri.toString()),
             const SizedBox(height: 5),
-            Text(_statusText(state)),
+            Text(_statusText()),
             if (state.errorMessage case final error?) ...[
               const SizedBox(height: 4),
               Text(
                 error,
-                maxLines: 2,
+                maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
@@ -511,10 +439,7 @@ class _RepositoryCard extends StatelessWidget {
                   : null,
               icon: const Icon(Icons.refresh_rounded),
             ),
-            Switch(
-              value: repository.enabled,
-              onChanged: onEnabledChanged,
-            ),
+            Switch(value: repository.enabled, onChanged: onEnabledChanged),
             IconButton(
               tooltip: 'Remover',
               onPressed: onRemove,
@@ -527,14 +452,14 @@ class _RepositoryCard extends StatelessWidget {
     );
   }
 
-  String _statusText(RepositorySyncState state) {
+  String _statusText() {
     switch (state.status) {
       case RepositorySyncStatus.idle:
         return repository.enabled
             ? 'Aguardando sincronização.'
-            : 'Repositório desativado.';
+            : 'Fonte desativada.';
       case RepositorySyncStatus.syncing:
-        return 'Sincronizando índice…';
+        return 'Detectando fonte e sincronizando…';
       case RepositorySyncStatus.ready:
         final catalog = state.catalog!;
         final skipped = catalog.skippedAddons == 0
@@ -544,7 +469,7 @@ class _RepositoryCard extends StatelessWidget {
       case RepositorySyncStatus.failed:
         return state.catalog == null
             ? 'Falha na sincronização.'
-            : 'Falha ao atualizar; mostrando o último índice carregado.';
+            : 'Falha ao atualizar; usando o último catálogo.';
     }
   }
 }
@@ -572,5 +497,42 @@ class _StatusIcon extends StatelessWidget {
       case RepositorySyncStatus.idle:
         return const Icon(Icons.account_tree_rounded);
     }
+  }
+}
+
+class _EmptyStore extends StatelessWidget {
+  const _EmptyStore();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.storefront_rounded,
+                size: 72,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Nenhuma fonte configurada',
+                style: Theme.of(context).textTheme.headlineSmall,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Adicione a mesma URL que você usaria como fonte no Kodi. O AddKo também aceita addon.xml, addons.xml e ZIP local.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

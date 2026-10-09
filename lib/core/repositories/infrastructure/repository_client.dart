@@ -39,6 +39,9 @@ class RepositoryClient {
   static const int _maxFileSourcePages = 12;
   static const Duration _requestTimeout = Duration(seconds: 12);
 
+  // AddKo currently targets the modern Python 3 Kodi addon generation.
+  // Repository <dir minversion/maxversion> filters are compared against this
+  // compatibility level so Leia/Python 2 feeds are not mixed into Matrix+.
   static final KodiVersion _hostKodiVersion = KodiVersion('21.0.0');
 
   final http.Client _client;
@@ -77,6 +80,10 @@ class RepositoryClient {
             skippedAddons: result.skippedAddons,
           );
 
+          // Some Kodi "file sources" expose an empty addons.xml at the root
+          // and expect the user to install a repository ZIP from the HTML
+          // listing first. Keep the empty result as a fallback, but continue
+          // looking for a real repository descriptor.
           if (catalog.addons.isNotEmpty || _looksLikeDirectXml(source.uri)) {
             return catalog;
           }
@@ -86,7 +93,7 @@ class RepositoryClient {
 
         if (rootName == 'addon') {
           final descriptor = descriptorParser.parse(xml);
-          return _loadDescriptor(source, descriptor);
+          return await _loadDescriptor(source, descriptor);
         }
 
         lastError = RepositorySyncException(
@@ -103,7 +110,7 @@ class RepositoryClient {
           source.uri,
         );
         if (descriptor != null) {
-          return _loadDescriptor(source, descriptor);
+          return await _loadDescriptor(source, descriptor);
         }
       } on Object catch (error) {
         lastError = error;
@@ -194,7 +201,8 @@ class RepositoryClient {
 
     if (successfulEndpoints == 0) {
       throw RepositorySyncException(
-        'O repositório ${descriptor.name} não possui um endpoint utilizável. ${lastError ?? ''}'.trim(),
+        'O repositório ${descriptor.name} não possui um endpoint utilizável. ${lastError ?? ''}'
+            .trim(),
       );
     }
 
@@ -251,9 +259,8 @@ class RepositoryClient {
 
       final page = await _downloadHtml(pageUri);
       final links = _extractLinks(pageUri, page);
-      final repositoryZips = links
-          .where(_isRepositoryZipCandidate)
-          .toList(growable: false);
+      final repositoryZips =
+          links.where(_isRepositoryZipCandidate).toList(growable: false);
 
       for (final zipUri in repositoryZips.reversed) {
         try {
@@ -284,15 +291,13 @@ class RepositoryClient {
   Future<RepositoryDescriptor?> _descriptorFromRepositoryZip(Uri uri) async {
     late http.Response response;
     try {
-      response = await _client
-          .get(
-            uri,
-            headers: const {
-              'Accept': 'application/zip,application/octet-stream,*/*',
-              'User-Agent': 'AddKo/0.1.0',
-            },
-          )
-          .timeout(_requestTimeout);
+      response = await _client.get(
+        uri,
+        headers: const {
+          'Accept': 'application/zip,application/octet-stream,*/*',
+          'User-Agent': 'AddKo/0.1.0',
+        },
+      ).timeout(_requestTimeout);
     } on TimeoutException {
       throw RepositorySyncException(
         'Tempo esgotado ao inspecionar o pacote de repositório $uri.',
@@ -346,15 +351,13 @@ class RepositoryClient {
   Future<String> _downloadHtml(Uri uri) async {
     late http.Response response;
     try {
-      response = await _client
-          .get(
-            uri,
-            headers: const {
-              'Accept': 'text/html,application/xhtml+xml,*/*',
-              'User-Agent': 'AddKo/0.1.0',
-            },
-          )
-          .timeout(_requestTimeout);
+      response = await _client.get(
+        uri,
+        headers: const {
+          'Accept': 'text/html,application/xhtml+xml,*/*',
+          'User-Agent': 'AddKo/0.1.0',
+        },
+      ).timeout(_requestTimeout);
     } on TimeoutException {
       throw RepositorySyncException(
         'Tempo esgotado ao ler a fonte Kodi $uri.',
@@ -409,9 +412,8 @@ class RepositoryClient {
     if (!path.endsWith('.zip')) {
       return false;
     }
-    final name = uri.pathSegments.isEmpty
-        ? path
-        : uri.pathSegments.last.toLowerCase();
+    final name =
+        uri.pathSegments.isEmpty ? path : uri.pathSegments.last.toLowerCase();
     return name.contains('repository') ||
         name.contains('.repo') ||
         name.startsWith('repo') ||
@@ -475,15 +477,13 @@ class RepositoryClient {
   Future<_DownloadedXml> _downloadXml(Uri uri) async {
     late http.Response response;
     try {
-      response = await _client
-          .get(
-            uri,
-            headers: const {
-              'Accept': 'application/xml,text/xml,application/gzip,*/*',
-              'User-Agent': 'AddKo/0.1.0',
-            },
-          )
-          .timeout(_requestTimeout);
+      response = await _client.get(
+        uri,
+        headers: const {
+          'Accept': 'application/xml,text/xml,application/gzip,*/*',
+          'User-Agent': 'AddKo/0.1.0',
+        },
+      ).timeout(_requestTimeout);
     } on TimeoutException {
       throw RepositorySyncException(
         'Tempo esgotado ao acessar $uri (${_requestTimeout.inSeconds}s).',
@@ -527,15 +527,13 @@ class RepositoryClient {
   Future<String> _downloadChecksum(Uri uri) async {
     late http.Response response;
     try {
-      response = await _client
-          .get(
-            uri,
-            headers: const {
-              'Accept': 'text/plain,*/*',
-              'User-Agent': 'AddKo/0.1.0',
-            },
-          )
-          .timeout(_requestTimeout);
+      response = await _client.get(
+        uri,
+        headers: const {
+          'Accept': 'text/plain,*/*',
+          'User-Agent': 'AddKo/0.1.0',
+        },
+      ).timeout(_requestTimeout);
     } on TimeoutException {
       throw RepositorySyncException(
         'Tempo esgotado ao acessar checksum $uri (${_requestTimeout.inSeconds}s).',
@@ -556,7 +554,8 @@ class RepositoryClient {
     try {
       return utf8.decode(response.bodyBytes);
     } on FormatException catch (error) {
-      throw RepositorySyncException('Checksum não está em UTF-8 válido: $error');
+      throw RepositorySyncException(
+          'Checksum não está em UTF-8 válido: $error');
     }
   }
 

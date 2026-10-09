@@ -173,7 +173,6 @@ class Addon:
                 ordered.append(child)
 
         merged: dict[int, str] = {}
-        # Load fallbacks first and preferred languages last so preferred values win.
         for directory in reversed(ordered):
             po = directory / "strings.po"
             xml = directory / "strings.xml"

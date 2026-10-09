@@ -16,6 +16,9 @@ import '../legacy/legacy_addon_page.dart';
 import '../legacy/legacy_flutter_ui_bridge.dart';
 import '../settings/settings_page.dart';
 import '../store/store_page.dart';
+import '../kodi/kodi_core_page.dart';
+import '../kodi/native_addon_page.dart';
+import '../../core/runtime/kodi/kodi_core.dart';
 
 class LauncherPage extends StatelessWidget {
   const LauncherPage({
@@ -46,23 +49,14 @@ class LauncherPage extends StatelessWidget {
                 builder: (context, _) {
                   return LayoutBuilder(
                     builder: (context, constraints) {
-                      final isLandscape =
+                      final landscape =
                           constraints.maxWidth > constraints.maxHeight;
-                      final crossAxisCount = isLandscape
-                          ? constraints.maxWidth >= 1700
-                              ? 4
-                              : 3
-                          : constraints.maxWidth >= 700
-                              ? 3
-                              : 2;
+                      final crossAxisCount = landscape
+                          ? (constraints.maxWidth >= 1100 ? 4 : 3)
+                          : (constraints.maxWidth >= 700 ? 3 : 2);
 
-                      final launchable = addonInstallController.installedAddons
-                          .where(
-                            (addon) =>
-                                addon.manifest.isPythonPlugin &&
-                                addonInstallController
-                                    .hasRequiredDependencies(addon),
-                          )
+                      final addons = addonInstallController.installedAddons
+                          .where((addon) => addon.manifest.isPythonPlugin)
                           .toList(growable: false);
 
                       return GridView.count(
@@ -70,14 +64,23 @@ class LauncherPage extends StatelessWidget {
                         crossAxisCount: crossAxisCount,
                         crossAxisSpacing: 20,
                         mainAxisSpacing: 20,
-                        childAspectRatio: isLandscape ? 1.05 : 0.78,
+                        childAspectRatio: landscape ? 1.22 : 0.82,
                         children: [
-                          for (final addon in launchable)
-                            _installedAddonCard(context, addon),
-                          if (launchable.isEmpty)
+                          if (KodiCore.supported)
+                            _LauncherCard(
+                              title: 'Núcleo do AddKo',
+                              subtitle: 'Estado e diagnóstico',
+                              onOpen: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const KodiCorePage(),
+                                ),
+                              ),
+                            ),
+                          for (final addon in addons)
+                            _addonCard(context, addon),
+                          if (addons.isEmpty)
                             _EmptyAddonCard(
-                              initializationError:
-                                  addonInstallController.initializationError,
+                              error: addonInstallController.initializationError,
                             ),
                         ],
                       );
@@ -129,25 +132,27 @@ class LauncherPage extends StatelessWidget {
     exit(0);
   }
 
-  Widget _installedAddonCard(BuildContext context, InstalledAddon addon) {
+  Widget _addonCard(BuildContext context, InstalledAddon addon) {
     final iconPath = addon.manifest.iconPath ?? 'icon.png';
     final iconFile = File(p.join(addon.installPath, iconPath));
 
     return _LauncherCard(
       title: addon.manifest.name,
       subtitle: '${addon.manifest.id} • v${addon.manifest.version}',
-      icon: Icons.extension_rounded,
       artwork: iconFile.existsSync()
           ? Image.file(
               iconFile,
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const Icon(
-                Icons.extension_rounded,
-                size: 62,
-              ),
+              errorBuilder: (_, __, ___) =>
+                  const Icon(Icons.extension_rounded, size: 68),
             )
           : null,
       onOpen: () {
+        if (KodiCore.supported) {
+          Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => NativeAddonPage(addon: addon)));
+          return;
+        }
         Navigator.of(context).push(
           MaterialPageRoute<void>(
             builder: (_) => LegacyAddonPage(
@@ -172,28 +177,28 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(28, 22, 28, 8),
       child: Row(
         children: [
-          Icon(
-            Icons.extension_rounded,
-            color: Theme.of(context).colorScheme.primary,
-            size: 34,
-          ),
+          Icon(Icons.extension_rounded, color: scheme.primary, size: 34),
           const SizedBox(width: 12),
           Text(
             'AddKo',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+            style: Theme.of(context)
+                .textTheme
+                .headlineMedium
+                ?.copyWith(fontWeight: FontWeight.w800),
           ),
           const Spacer(),
           Text(
-            'Kodi Omega Runtime • v0.1.9',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+            'AddKo • integração do núcleo',
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: scheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -205,14 +210,12 @@ class _LauncherCard extends StatefulWidget {
   const _LauncherCard({
     required this.title,
     required this.subtitle,
-    required this.icon,
     required this.onOpen,
     this.artwork,
   });
 
   final String title;
   final String subtitle;
-  final IconData icon;
   final VoidCallback onOpen;
   final Widget? artwork;
 
@@ -229,7 +232,7 @@ class _LauncherCardState extends State<_LauncherCard> {
 
     return FocusableActionDetector(
       onShowFocusHighlight: (value) => setState(() => _focused = value),
-      actions: {
+      actions: <Type, Action<Intent>>{
         ActivateIntent: CallbackAction<ActivateIntent>(
           onInvoke: (_) {
             widget.onOpen();
@@ -238,7 +241,7 @@ class _LauncherCardState extends State<_LauncherCard> {
         ),
       },
       child: AnimatedScale(
-        scale: _focused ? 1.025 : 1,
+        scale: _focused ? 1.035 : 1,
         duration: const Duration(milliseconds: 140),
         child: Card(
           elevation: _focused ? 8 : 1,
@@ -250,10 +253,10 @@ class _LauncherCardState extends State<_LauncherCard> {
             ),
           ),
           child: InkWell(
-            borderRadius: BorderRadius.circular(22),
             onTap: widget.onOpen,
+            borderRadius: BorderRadius.circular(22),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+              padding: const EdgeInsets.all(22),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -261,38 +264,38 @@ class _LauncherCardState extends State<_LauncherCard> {
                     widget.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
-                  const SizedBox(height: 5),
+                  const SizedBox(height: 6),
                   Text(
                     widget.subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: scheme.onSurfaceVariant),
                   ),
-                  const SizedBox(height: 10),
-                  Expanded(
-                    child: Center(
-                      child: SizedBox(
-                        width: 112,
-                        height: 92,
-                        child: widget.artwork ??
-                            Icon(widget.icon, size: 62, color: scheme.primary),
-                      ),
+                  const Spacer(),
+                  Center(
+                    child: SizedBox.square(
+                      dimension: 82,
+                      child: widget.artwork ??
+                          Icon(
+                            Icons.extension_rounded,
+                            size: 68,
+                            color: scheme.primary,
+                          ),
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    height: 42,
-                    child: FilledButton.icon(
-                      onPressed: widget.onOpen,
-                      icon: const Icon(Icons.login_rounded, size: 19),
-                      label: const Text('ENTRAR'),
-                    ),
+                  const Spacer(),
+                  FilledButton.icon(
+                    onPressed: widget.onOpen,
+                    icon: const Icon(Icons.login_rounded),
+                    label: const Text('ENTRAR'),
                   ),
                 ],
               ),
@@ -305,13 +308,15 @@ class _LauncherCardState extends State<_LauncherCard> {
 }
 
 class _EmptyAddonCard extends StatelessWidget {
-  const _EmptyAddonCard({this.initializationError});
+  const _EmptyAddonCard({this.error});
 
-  final String? initializationError;
+  final String? error;
 
   @override
   Widget build(BuildContext context) {
-    final hasError = initializationError?.trim().isNotEmpty == true;
+    final scheme = Theme.of(context).colorScheme;
+    final hasError = error != null && error!.trim().isNotEmpty;
+
     return Card(
       child: Center(
         child: Padding(
@@ -323,21 +328,22 @@ class _EmptyAddonCard extends StatelessWidget {
                 hasError
                     ? Icons.error_outline_rounded
                     : Icons.extension_off_rounded,
-                size: 52,
+                size: 56,
+                color: hasError ? scheme.error : scheme.onSurfaceVariant,
               ),
               const SizedBox(height: 16),
               Text(
                 hasError
-                    ? 'Falha ao carregar addons'
-                    : 'Nenhum addon pronto para executar',
+                    ? 'Falha ao abrir addons locais'
+                    : 'Nenhum addon instalado',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
               Text(
                 hasError
-                    ? initializationError!
-                    : 'Abra a Loja para instalar ou corrigir addons e dependências.',
+                    ? error!
+                    : 'Abra a Loja para adicionar um repositório ou instalar um ZIP.',
                 textAlign: TextAlign.center,
                 maxLines: 4,
                 overflow: TextOverflow.ellipsis,

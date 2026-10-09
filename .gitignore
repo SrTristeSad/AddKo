@@ -32,3 +32,22 @@ windows/flutter/ephemeral/
 .addko/
 userdata/
 cache/
+
+# Native Kodi payload fetched with pinned checksums
+.cache/kodi/
+third_party/kodi_21_3/jniLibs/
+third_party/kodi_21_3/assets/*
+!third_party/kodi_21_3/assets/system/
+third_party/kodi_21_3/assets/system/*
+!third_party/kodi_21_3/assets/system/addon-manifest.xml
+!third_party/kodi_21_3/assets/addons/
+third_party/kodi_21_3/assets/addons/*
+!third_party/kodi_21_3/assets/addons/script.addko.bridge/
+!third_party/kodi_21_3/assets/addons/skin.estuary/
+third_party/kodi_21_3/assets/addons/skin.estuary/*
+!third_party/kodi_21_3/assets/addons/skin.estuary/xml/
+third_party/kodi_21_3/assets/addons/skin.estuary/xml/*
+!third_party/kodi_21_3/assets/addons/skin.estuary/xml/Home.xml
+__pycache__/
+*.pyc
+dist/
