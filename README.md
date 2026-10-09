@@ -34,7 +34,7 @@ https://github.com/xbmc/inputstream.ffmpegdirect (versions above).
 ## GitHub Actions
 
 The workflow builds and audits an ARM64 release APK, uploads it as an artifact,
-and attempts a startup smoke test on an API 30 Google APIs emulator with ARM
+and attempts a startup smoke test on an API 35 Google APIs emulator with ARM
 translation. The test requires a Flutter frame, ready native JSON-RPC, and
 a stable native process for 15 seconds. Diagnostics are uploaded on failure.
 An emulator lacking ARM64 translation fails explicitly rather than reporting
