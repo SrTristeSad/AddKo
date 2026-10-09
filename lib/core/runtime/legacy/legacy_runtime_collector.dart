@@ -14,6 +14,9 @@ class LegacyRuntimeCollector {
   LegacyPluginItem? _resolvedItem;
   bool _succeeded = true;
   String? _errorMessage;
+  String? _errorType;
+  String? _errorLocation;
+  String? _errorTraceback;
 
   void consumeStdoutLine(String line) {
     if (!line.startsWith(protocolPrefix)) {
@@ -108,9 +111,15 @@ class LegacyRuntimeCollector {
       case 'invocation.error':
         _succeeded = false;
         _errorMessage = map['message']?.toString() ?? 'Unknown Python error';
-        final traceback = map['traceback']?.toString();
-        if (traceback != null && traceback.isNotEmpty) {
-          _logs.add(traceback);
+        _errorType = _nonEmpty(map['exception_type']);
+        _errorLocation = _nonEmpty(map['addon_location']);
+        _errorTraceback = _nonEmpty(map['traceback']);
+        if (_errorTraceback != null) {
+          _logs.add(_errorTraceback!);
+        }
+        final rawFrames = map['frames'];
+        if (rawFrames is List && rawFrames.isNotEmpty) {
+          _logs.add(_formatFrames(rawFrames));
         }
         break;
       default:
@@ -124,6 +133,28 @@ class LegacyRuntimeCollector {
         }
         break;
     }
+  }
+
+  String? _nonEmpty(Object? raw) {
+    final value = raw?.toString().trim();
+    return value == null || value.isEmpty ? null : value;
+  }
+
+  String _formatFrames(List<Object?> frames) {
+    final buffer = StringBuffer('Python frames:');
+    for (final raw in frames) {
+      if (raw is! Map) continue;
+      final frame = Map<String, Object?>.from(raw);
+      final file = frame['file']?.toString() ?? '?';
+      final line = frame['line']?.toString() ?? '?';
+      final function = frame['function']?.toString() ?? '?';
+      final source = frame['source']?.toString().trim() ?? '';
+      buffer.write('\n$file:$line in $function');
+      if (source.isNotEmpty) {
+        buffer.write('\n  $source');
+      }
+    }
+    return buffer.toString();
   }
 
   void consumeStderrLine(String line) {
@@ -148,6 +179,9 @@ class LegacyRuntimeCollector {
       category: _category,
       resolvedItem: _resolvedItem,
       errorMessage: error,
+      errorType: _errorType,
+      errorLocation: _errorLocation,
+      errorTraceback: _errorTraceback,
       builtins: List.unmodifiable(_builtins),
     );
   }
