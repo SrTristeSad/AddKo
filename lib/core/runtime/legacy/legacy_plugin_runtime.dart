@@ -43,7 +43,14 @@ class LegacyPluginRuntime {
       return _failure(error.message.toString());
     }
 
-    final addon = addonInstallController.installedById(pluginUri.addonId);
+    var addon = addonInstallController.installedById(pluginUri.addonId);
+    if (addon == null) {
+      // Kodi add-ons are allowed to unpack/install another add-on directly into
+      // special://home/addons and then invoke it immediately. Refresh the disk
+      // registry once before declaring the target missing.
+      await addonInstallController.refreshInstalled();
+      addon = addonInstallController.installedById(pluginUri.addonId);
+    }
     if (addon == null) {
       return _failure('Addon ${pluginUri.addonId} não está instalado.');
     }
@@ -73,7 +80,11 @@ class LegacyPluginRuntime {
     List<String> arguments = const [],
   }) async {
     await addonInstallController.initialize();
-    final addon = addonInstallController.installedById(addonId);
+    var addon = addonInstallController.installedById(addonId);
+    if (addon == null) {
+      await addonInstallController.refreshInstalled();
+      addon = addonInstallController.installedById(addonId);
+    }
     if (addon == null) {
       return _failure('Addon $addonId não está instalado.');
     }
@@ -136,6 +147,9 @@ class LegacyPluginRuntime {
     final supportRoot = p.dirname(directories.addonsRootPath);
     final profilePath = p.join(directories.addonDataRootPath, addon.manifest.id);
     await Directory(profilePath).create(recursive: true);
+    // Legacy Kodi addons frequently access special://profile/Database directly
+    // instead of using JSON-RPC. Kodi always exposes this directory.
+    await Directory(p.join(supportRoot, 'Database')).create(recursive: true);
 
     final tempPath = p.join(Directory.systemTemp.path, 'addko');
     await Directory(tempPath).create(recursive: true);
@@ -157,6 +171,10 @@ class LegacyPluginRuntime {
         'special://profile': supportRoot,
         'special://userdata': supportRoot,
         'special://temp': tempPath,
+      },
+      installedAddons: {
+        for (final installed in addonInstallController.installedAddons)
+          installed.manifest.id: installed.manifest.version,
       },
       argv: argv,
     );
