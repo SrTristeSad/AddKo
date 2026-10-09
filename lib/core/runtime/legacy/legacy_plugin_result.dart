@@ -12,6 +12,10 @@ class LegacyPluginResult {
     this.errorType,
     this.errorLocation,
     this.errorTraceback,
+    this.directoryEnded = false,
+    this.directorySucceeded = true,
+    this.updateListing = false,
+    this.cacheToDisc = true,
     this.builtins = const [],
   });
 
@@ -25,5 +29,21 @@ class LegacyPluginResult {
   final String? errorType;
   final String? errorLocation;
   final String? errorTraceback;
+
+  /// Whether the addon called xbmcplugin.endOfDirectory for this invocation.
+  final bool directoryEnded;
+
+  /// Kodi's `succeeded` flag from endOfDirectory. A false value means the
+  /// directory retrieval failed; it is not a successful empty listing.
+  final bool directorySucceeded;
+
+  /// Kodi's `updateListing` flag. When true the current container is replaced
+  /// instead of creating a normal navigation-history entry.
+  final bool updateListing;
+
+  /// Kodi's `cacheToDisc` hint. AddKo can use it for a conservative listing
+  /// cache without changing addon semantics.
+  final bool cacheToDisc;
+
   final List<String> builtins;
 }
