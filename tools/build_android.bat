@@ -5,6 +5,7 @@ cd /d "%~dp0\.."
 set "APK=build\app\outputs\flutter-apk\app-debug.apk"
 set "DIST_APK=dist\AddKo-arm64-debug.apk"
 set "STDLIB_ZIP=android\app\build\addko-python-runtime\assets\addko_python\3.14.8\arm64-v8a\stdlib.zip"
+set "ADDKO_ANDROID_ABIS=arm64-v8a"
 
 echo [AddKo] Verificando Flutter...
 where flutter >nul 2>nul || (
@@ -52,6 +53,13 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo [AddKo] Testes Flutter...
+call flutter test
+if errorlevel 1 (
+  echo [ERRO] flutter test encontrou falhas.
+  exit /b 1
+)
+
 echo [AddKo] Preparando CPython Android ARM64...
 python tools\android\fetch_python_runtime.py --abi arm64-v8a --output android\app\build\addko-python-runtime
 if errorlevel 1 exit /b 1
@@ -76,9 +84,9 @@ if not exist "%APK%" (
 )
 
 echo [AddKo] Verificando motor Kodi/Python dentro do APK...
-python tools\android\verify_addko_apk.py "%APK%" --abi arm64-v8a
+python tools\android\verify_addko_apk.py "%APK%" --abi arm64-v8a --strict-abi
 if errorlevel 1 (
-  echo [ERRO] O APK foi gerado, mas esta incompleto.
+  echo [ERRO] O APK foi gerado, mas esta incompleto ou trouxe ABI extra.
   exit /b 1
 )
 
@@ -90,7 +98,7 @@ if errorlevel 1 (
 
 for %%F in ("%DIST_APK%") do set "APK_SIZE=%%~zF"
 echo.
-echo [OK] APK gerado e verificado.
+echo [OK] APK ARM64 gerado e verificado.
 echo Arquivo: %CD%\%DIST_APK%
 echo Tamanho: %APK_SIZE% bytes
 exit /b 0
