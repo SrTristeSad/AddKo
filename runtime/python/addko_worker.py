@@ -259,7 +259,15 @@ def main() -> int:
     with context_path.open("r", encoding="utf-8") as handle:
         context = json.load(handle)
 
-    os.environ["ADDKO_CONTEXT_FILE"] = str(context_path)
+    # CPython subinterpreters share the process environment. Keep the invocation
+    # context on the interpreter itself so concurrent Android services cannot
+    # overwrite each other's ADDKO_CONTEXT_FILE. Standalone desktop workers are
+    # separate processes, therefore the legacy environment fallback is safe
+    # there and remains available for third-party helper code that reads it.
+    context_was_preconfigured = bool(getattr(sys, "_addko_context_file", None))
+    sys._addko_context_file = str(context_path)  # type: ignore[attr-defined]
+    if not context_was_preconfigured:
+        os.environ["ADDKO_CONTEXT_FILE"] = str(context_path)
 
     search_paths = [
         context["shims_path"],
