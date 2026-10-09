@@ -1,0 +1,8 @@
+{
+  "version": "21.3-Omega",
+  "apk_url": "https://mirrors.kodi.tv/releases/android/arm64-v8a/kodi-21.3-Omega-arm64-v8a.apk",
+  "apk_sha256": "34e7526705a038fa12f70161d0c1cc38f10deb0fee305b46fbd46ff015d05b44",
+  "source_url": "https://github.com/xbmc/xbmc/tree/21.3-Omega",
+  "source_zip_sha256": "5710900629c2aedb63df0665c7d78c1b50325a625297e2f9bafc262d65d8c075",
+  "integration": "NativeActivity in :kodi process; Java JNI namespace retained"
+}

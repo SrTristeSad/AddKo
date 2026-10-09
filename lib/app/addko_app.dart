@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import '../core/runtime/kodi/kodi_core.dart';
+
 import 'package:flutter/material.dart';
 
 import '../core/addons/application/addon_install_controller.dart';
@@ -56,10 +58,9 @@ class _AddKoAppState extends State<AddKoApp> {
   void initState() {
     super.initState();
     _ownsRepositoryRegistry = widget.repositoryRegistry == null;
-    _repositoryRegistry = widget.repositoryRegistry ??
-        RepositoryRegistry(
-          storage: const SharedPreferencesRepositoryStorage(),
-        );
+    _repositoryRegistry =
+        widget.repositoryRegistry ??
+        RepositoryRegistry(storage: const SharedPreferencesRepositoryStorage());
 
     _ownsRepositoryStoreController = widget.repositoryStoreController == null;
     _repositoryStoreController =
@@ -70,7 +71,8 @@ class _AddKoAppState extends State<AddKoApp> {
         widget.addonInstallController ?? AddonInstallController();
 
     _ownsLegacyServiceSupervisor = widget.legacyServiceSupervisor == null;
-    _legacyServiceSupervisor = widget.legacyServiceSupervisor ??
+    _legacyServiceSupervisor =
+        widget.legacyServiceSupervisor ??
         LegacyServiceSupervisor(
           addonInstallController: _addonInstallController,
         );
@@ -107,7 +109,7 @@ class _AddKoAppState extends State<AddKoApp> {
       // network synchronization while the user is opening a plugin made first
       // navigation compete for CPU/network. Install flows call
       // ensureKodiSystemCatalog() exactly when a Kodi dependency is needed.
-      await _legacyServiceSupervisor.start();
+      if (!KodiCore.supported) await _legacyServiceSupervisor.start();
     } catch (error, stackTrace) {
       debugPrint('Failed to initialize legacy runtime: $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -153,10 +155,8 @@ class _AddKoAppState extends State<AddKoApp> {
     try {
       await navigator.push<void>(
         MaterialPageRoute<void>(
-          builder: (_) => PlayerPage(
-            request: request,
-            playbackHost: playbackHost,
-          ),
+          builder: (_) =>
+              PlayerPage(request: request, playbackHost: playbackHost),
         ),
       );
     } finally {
@@ -193,9 +193,7 @@ class _AddKoAppState extends State<AddKoApp> {
     _legacyServiceSupervisor.eventHandler = null;
     if (_ownsLegacyServiceSupervisor) {
       final supervisor = _legacyServiceSupervisor;
-      unawaited(
-        supervisor.shutdown().whenComplete(supervisor.dispose),
-      );
+      unawaited(supervisor.shutdown().whenComplete(supervisor.dispose));
     }
     if (_ownsAddonInstallController) {
       _addonInstallController.dispose();

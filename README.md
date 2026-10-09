@@ -1,71 +1,43 @@
-# AddKo
+# AddKo — Android native Kodi integration
 
-AddKo é uma plataforma Flutter para executar addons legados do Kodi e, futuramente, um novo modelo de App Plugin em Python.
+Version 0.2.1+26 brings the current native integration into this repository.
+Android ARM64 uses Kodi 21.3, its CPython 3.11, InputStream Adaptive 21.5.25
+and FFmpegDirect 21.3.8. Flutter draws the application interface over the
+native activity. The launcher prepares the private runtime before starting
+the native activity in the :kodi process.
 
-## Objetivo da linha 0.1.x
+## Startup fixes
 
-A prioridade é compatibilidade com addons Kodi existentes sem exigir alteração do addon:
+The first ARM64 emulator run reproduced a native SIGABRT: libandroidjni
+constructed the input listener using the application package, while only
+the original JNI package contained that class. An application-package
+subclass now preserves the original registered native callbacks. The APK
+audit requires both application-package helpers.
 
-- instalar addons por ZIP;
-- ler `addon.xml`;
-- abrir rotas `plugin://`;
-- executar o entrypoint Python do addon;
-- suportar dependências `script.module.*` e repositórios Kodi;
-- preservar organização e metadados dos repositórios;
-- suportar `xbmc`, `xbmcaddon`, `xbmcplugin`, `xbmcgui` e `xbmcvfs`;
-- evoluir para GUI legada, InputStream, PVR, VFS e demais addons binários.
+Native paths are configured in the native process before loading libkodi.
+An absent vendor launcher no longer causes a null dereference. The Flutter
+host continues waiting for a slow native surface instead of abandoning
+startup after 12 seconds. MPV Android libraries have been removed; desktop
+MPV packages remain.
 
-## Regra da compatibilidade Kodi
+## Reproducible runtime
 
-O AddKo não deve inventar uma segunda API Kodi em Dart. O código oficial **Kodi Omega** é a fonte de verdade para nomes, assinaturas, constantes e contratos da API legada.
+Run `python3 tools/android/fetch_kodi_runtime.py` before building. It downloads
+pinned official packages, verifies SHA-256, stages assets and ARM64 libraries,
+applies the versioned integration overlays, then audits every inventoried
+file. Large binary payloads are not stored in Git. Sources and licenses:
+`third_party/kodi_21_3/PROVENANCE.json`, `LICENSE.md`, and `LICENSES/`. Kodi
+source is available at https://github.com/xbmc/xbmc/tree/21.3-Omega; InputStream
+sources at https://github.com/xbmc/inputstream.adaptive and
+https://github.com/xbmc/inputstream.ffmpegdirect (versions above).
 
-A referência está fixada no commit Kodi Omega:
+## GitHub Actions
 
-`f8815ee40f49a700c047982d752be4b2a61420e2`
+The workflow builds and audits an ARM64 release APK, uploads it as an artifact,
+and attempts a startup smoke test on an API 35 Google APIs emulator with ARM
+translation. The test requires a Flutter frame, ready native JSON-RPC, and
+a stable native process for 15 seconds. Diagnostics are uploaded on failure.
+An emulator lacking ARM64 translation fails explicitly rather than reporting
+a successful startup. This does not verify playback, DRM, or every TV box.
 
-Arquivos SWIG oficiais necessários para os módulos Python estão preservados em `third_party/kodi_omega/`. O script `tools/vendor_kodi_omega_api.py` baixa um snapshot reproduzível dos headers legados quando precisamos atualizar a compatibilidade.
-
-## Arquitetura
-
-```text
-Flutter UI
-├── Launcher
-├── Loja
-└── Configurações
-        │
-        ▼
-Addon Core
-├── Addon Manager
-├── Repository Manager
-└── Dependency Resolver
-        │
-        ▼
-AddKo Legacy Host
-├── CPython Android
-├── Kodi API bridge
-│   ├── xbmc
-│   ├── xbmcaddon
-│   ├── xbmcgui
-│   ├── xbmcplugin
-│   └── xbmcvfs
-├── Player / JSON-RPC / VFS bridge
-└── Binary Addon ABI (em evolução)
-```
-
-Funções críticas continuam com implementação explícita no host. APIs auxiliares ainda não mapeadas passam pelo fallback genérico `kodi_proxy.py`, evitando que um addon morra imediatamente com `AttributeError` enquanto a ponte nativa é ampliada.
-
-O objetivo final é manter Flutter como frontend e concentrar a compatibilidade Kodi no host/runtime, em vez de reproduzir o comportamento do Kodi widget por widget em Dart.
-
-## Licença do código Kodi reutilizado
-
-Kodi é GPL-2.0-or-later. Arquivos copiados do Kodi permanecem identificados e separados em `third_party/kodi_omega/`, com aviso de licença e commit de origem.
-
-## Build Android local
-
-Use `BUILD_ANDROID.bat`. O build executa smoke tests da camada Kodi/Python, valida o CPython Android e gera o APK ARM64 em:
-
-`dist\AddKo-arm64-debug.apk`
-
-## Estado
-
-Projeto em desenvolvimento. A branch `main` é a linha principal.
+The startup regression is not considered validated until that test passes.
