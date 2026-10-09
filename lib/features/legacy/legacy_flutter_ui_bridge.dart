@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/runtime/legacy/kodi_json_rpc_compat.dart';
 import '../../core/runtime/legacy/legacy_runtime_request.dart';
+import '../../core/ui/kodi_text.dart';
 import 'legacy_window_xml_dialog.dart';
 
 class LegacyFlutterUiBridge {
@@ -24,8 +25,8 @@ class LegacyFlutterUiBridge {
         await showDialog<void>(
           context: context,
           builder: (dialogContext) => AlertDialog(
-            title: Text(_string(request, 'heading')),
-            content: Text(_string(request, 'message')),
+            title: KodiText(_string(request, 'heading')),
+            content: KodiText(_string(request, 'message')),
             actions: [
               FilledButton(
                 onPressed: () => Navigator.pop(dialogContext),
@@ -39,20 +40,16 @@ class LegacyFlutterUiBridge {
         return await showDialog<bool>(
               context: context,
               builder: (dialogContext) => AlertDialog(
-                title: Text(_string(request, 'heading')),
-                content: Text(_string(request, 'message')),
+                title: KodiText(_string(request, 'heading')),
+                content: KodiText(_string(request, 'message')),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.pop(dialogContext, false),
-                    child: Text(_string(request, 'no_label').isEmpty
-                        ? 'Não'
-                        : _string(request, 'no_label')),
+                    child: Text(_buttonLabel(request, 'no_label', 'Não')),
                   ),
                   FilledButton(
                     onPressed: () => Navigator.pop(dialogContext, true),
-                    child: Text(_string(request, 'yes_label').isEmpty
-                        ? 'Sim'
-                        : _string(request, 'yes_label')),
+                    child: Text(_buttonLabel(request, 'yes_label', 'Sim')),
                   ),
                 ],
               ),
@@ -62,26 +59,20 @@ class LegacyFlutterUiBridge {
         return await showDialog<int>(
               context: context,
               builder: (dialogContext) => AlertDialog(
-                title: Text(_string(request, 'heading')),
-                content: Text(_string(request, 'message')),
+                title: KodiText(_string(request, 'heading')),
+                content: KodiText(_string(request, 'message')),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.pop(dialogContext, 0),
-                    child: Text(_string(request, 'no_label').isEmpty
-                        ? 'Não'
-                        : _string(request, 'no_label')),
+                    child: Text(_buttonLabel(request, 'no_label', 'Não')),
                   ),
                   TextButton(
                     onPressed: () => Navigator.pop(dialogContext, 2),
-                    child: Text(_string(request, 'custom_label').isEmpty
-                        ? 'Outro'
-                        : _string(request, 'custom_label')),
+                    child: Text(_buttonLabel(request, 'custom_label', 'Outro')),
                   ),
                   FilledButton(
                     onPressed: () => Navigator.pop(dialogContext, 1),
-                    child: Text(_string(request, 'yes_label').isEmpty
-                        ? 'Sim'
-                        : _string(request, 'yes_label')),
+                    child: Text(_buttonLabel(request, 'yes_label', 'Sim')),
                   ),
                 ],
               ),
@@ -111,7 +102,7 @@ class LegacyFlutterUiBridge {
         return showDialog<String>(
           context: context,
           builder: (_) => _TextInputDialog(
-            title: _string(request, 'heading'),
+            title: KodiMarkup.strip(_string(request, 'heading')),
             initialValue: _string(request, 'default_text'),
             obscureText: request.params['hidden'] == true ||
                 _int(request.params['input_type']) == 5,
@@ -123,7 +114,7 @@ class LegacyFlutterUiBridge {
         final value = await showDialog<String>(
           context: context,
           builder: (_) => _TextInputDialog(
-            title: _string(request, 'heading'),
+            title: KodiMarkup.strip(_string(request, 'heading')),
             initialValue: _string(request, 'default_text'),
             obscureText: request.params['hidden'] == true,
             allowCancel: true,
@@ -137,11 +128,13 @@ class LegacyFlutterUiBridge {
         await showDialog<void>(
           context: context,
           builder: (dialogContext) => AlertDialog(
-            title: Text(_string(request, 'heading')),
+            title: KodiText(_string(request, 'heading')),
             content: SizedBox(
               width: 720,
               child: SingleChildScrollView(
-                child: SelectableText(_string(request, 'text')),
+                child: SelectableText(
+                  KodiMarkup.strip(_string(request, 'text')),
+                ),
               ),
             ),
             actions: [
@@ -154,8 +147,6 @@ class LegacyFlutterUiBridge {
         );
         return true;
       case 'xbmcgui.Dialog.browse':
-        // AddKo cannot expose Kodi's source browser yet. Preserve Kodi's
-        // cancellation/default-value semantics instead of crashing the addon.
         if (request.params['enable_multiple'] == true) {
           return const <String>[];
         }
@@ -188,7 +179,7 @@ class LegacyFlutterUiBridge {
     return await showDialog<int>(
           context: context,
           builder: (dialogContext) => AlertDialog(
-            title: Text(title),
+            title: KodiText(title),
             content: SizedBox(
               width: 620,
               height: 420,
@@ -196,7 +187,7 @@ class LegacyFlutterUiBridge {
                 itemCount: options.length,
                 itemBuilder: (_, index) => ListTile(
                   selected: index == preselect,
-                  title: Text(options[index]),
+                  title: KodiText(options[index]),
                   onTap: () => Navigator.pop(dialogContext, index),
                 ),
               ),
@@ -233,6 +224,16 @@ class LegacyFlutterUiBridge {
 
   static String _string(LegacyRuntimeRequest request, String key) {
     return request.params[key]?.toString() ?? '';
+  }
+
+  static String _buttonLabel(
+    LegacyRuntimeRequest request,
+    String key,
+    String fallback,
+  ) {
+    final raw = _string(request, key);
+    if (raw.isEmpty) return fallback;
+    return KodiMarkup.strip(raw);
   }
 
   static int _int(Object? value, {int fallback = 0}) {
@@ -334,7 +335,7 @@ class _MultiSelectDialogState extends State<_MultiSelectDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.title),
+      title: KodiText(widget.title),
       content: SizedBox(
         width: 620,
         height: 420,
@@ -342,7 +343,7 @@ class _MultiSelectDialogState extends State<_MultiSelectDialog> {
           itemCount: widget.options.length,
           itemBuilder: (_, index) => CheckboxListTile(
             value: _selected.contains(index),
-            title: Text(widget.options[index]),
+            title: KodiText(widget.options[index]),
             onChanged: (checked) {
               setState(() {
                 if (checked == true) {
