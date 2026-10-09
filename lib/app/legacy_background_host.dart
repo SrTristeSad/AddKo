@@ -46,7 +46,6 @@ class LegacyBackgroundHost {
   final BackgroundMessageHandler onMessage;
   final BackgroundPlaybackHandler onPlayback;
   final PlaybackHostController playbackHost;
-
   late final LegacyPluginRuntime _runtime;
 
   Future<void> handleServiceEvent(
@@ -309,10 +308,12 @@ class LegacyBackgroundHost {
       var candidate = _bestAvailableAddon(targetAddonId);
       if (candidate == null) {
         // Kodi components such as inputstream.adaptive and
-        // inputstream.ffmpegdirect live in the official Omega repository.
+        // inputstream.ffmpegdirect live in the official Omega repository, not
+        // necessarily in the third-party repository that requested them.
         await repositoryStoreController.ensureKodiSystemCatalog();
         candidate = _bestAvailableAddon(targetAddonId);
       }
+
       if (candidate == null) {
         await repositoryStoreController.synchronizeAll(
           repositoryRegistry.sources,

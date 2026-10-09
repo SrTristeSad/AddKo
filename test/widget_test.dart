@@ -13,7 +13,7 @@ void main() {
   testWidgets(
     'launcher exposes visual Exit, Store and Settings actions',
     (tester) async {
-      final support = await Directory.systemTemp.createTemp('addko-widget-');
+      final support = Directory.systemTemp.createTempSync('addko-widget-');
       final registry = RepositoryRegistry();
       final store = _NoopRepositoryStoreController();
       final installer = AddonInstallController(
@@ -28,8 +28,8 @@ void main() {
         registry.dispose();
         store.dispose();
         installer.dispose();
-        if (await support.exists()) {
-          await support.delete(recursive: true);
+        if (support.existsSync()) {
+          support.deleteSync(recursive: true);
         }
       });
 
@@ -83,7 +83,7 @@ void main() {
     'repository dialog can add a URL without lifecycle assertions',
     (tester) async {
       final support =
-          await Directory.systemTemp.createTemp('addko-store-widget-');
+          Directory.systemTemp.createTempSync('addko-store-widget-');
       final registry = RepositoryRegistry();
       final store = _NoopRepositoryStoreController();
       final installer = AddonInstallController(
@@ -98,8 +98,8 @@ void main() {
         registry.dispose();
         store.dispose();
         installer.dispose();
-        if (await support.exists()) {
-          await support.delete(recursive: true);
+        if (support.existsSync()) {
+          support.deleteSync(recursive: true);
         }
       });
 

@@ -1,3 +1,261 @@
-import 'dart:async';import 'package:flutter/material.dart';import 'package:media_kit/media_kit.dart';import 'package:media_kit_video/media_kit_video.dart';import '../../core/player/playback_host_controller.dart';import '../../core/player/playback_request.dart';
-class PlayerPage extends StatefulWidget{const PlayerPage({required this.request,this.playbackHost,super.key});final PlaybackRequest request;final PlaybackHostController? playbackHost;@override State<PlayerPage>createState()=>_PlayerPageState();}
-class _PlayerPageState extends State<PlayerPage>{late final Player _player=Player();late final VideoController _controller=VideoController(_player);late final PlaybackHostController _host=widget.playbackHost??PlaybackHostController.shared;late PlaybackRequest _request=widget.request;late final Object _token;StreamSubscription<String>? _errors;String? _error;bool _opening=true;@override void initState(){super.initState();_token=_host.attach(onOpen:_openRequest,onPlay:_player.play,onPause:_player.pause,onStop:_player.stop,onSeek:_player.seek);_errors=_player.stream.error.listen((m){if(mounted)setState(()=>_error=m);});unawaited(_open());}Future<void>_openRequest(PlaybackRequest r)async{if(!mounted)return;setState((){_request=r;_error=null;_opening=true;});await _open();}Future<void>_open()async{if(_request.requiresKodiInputStream){if(mounted)setState(()=>_opening=false);return;}try{await _player.open(Media(_request.uri,httpHeaders:_request.headers.isEmpty?null:_request.headers),play:true);}on Object catch(e){if(mounted)setState(()=>_error=e.toString());}finally{if(mounted)setState(()=>_opening=false);}}@override void dispose(){_host.detach(_token);unawaited(_errors?.cancel());unawaited(_player.dispose());super.dispose();}@override Widget build(BuildContext c)=>Scaffold(backgroundColor:Colors.black,appBar:AppBar(backgroundColor:Colors.black,foregroundColor:Colors.white,title:Text(_request.title??'Reprodução')),body:_request.requiresKodiInputStream?Center(child:Padding(padding:const EdgeInsets.all(28),child:Text('Este vídeo precisa de ${_request.inputStreamAddon??'InputStream'}. O host binário Kodi ainda está em desenvolvimento.',textAlign:TextAlign.center,style:const TextStyle(color:Colors.white)))):Stack(fit:StackFit.expand,children:[Video(controller:_controller,fit:BoxFit.contain),if(_opening)const Center(child:CircularProgressIndicator()),if(_error!=null)Center(child:Text(_error!,style:const TextStyle(color:Colors.white)))]));}
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
+
+import '../../core/player/playback_host_controller.dart';
+import '../../core/player/playback_request.dart';
+
+class PlayerPage extends StatefulWidget {
+  const PlayerPage({
+    required this.request,
+    this.playbackHost,
+    super.key,
+  });
+
+  final PlaybackRequest request;
+  final PlaybackHostController? playbackHost;
+
+  @override
+  State<PlayerPage> createState() => _PlayerPageState();
+}
+
+class _PlayerPageState extends State<PlayerPage> {
+  late final Player _player = Player();
+  late final VideoController _controller = VideoController(_player);
+  late final PlaybackHostController _playbackHost =
+      widget.playbackHost ?? PlaybackHostController.shared;
+  late PlaybackRequest _request = widget.request;
+  late final Object _hostToken;
+
+  StreamSubscription<String>? _errorSubscription;
+  String? _error;
+  bool _opening = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _hostToken = _playbackHost.attach(
+      onOpen: _openRequest,
+      onPlay: _player.play,
+      onPause: _player.pause,
+      onStop: _player.stop,
+      onSeek: _player.seek,
+    );
+    _errorSubscription = _player.stream.error.listen((message) {
+      if (mounted) {
+        setState(() => _error = message);
+      }
+    });
+    unawaited(_open());
+  }
+
+  Future<void> _openRequest(PlaybackRequest request) async {
+    if (!mounted) return;
+    setState(() {
+      _request = request;
+      _error = null;
+      _opening = true;
+    });
+    await _open();
+  }
+
+  Future<void> _open() async {
+    final request = _request;
+    if (request.uri.trim().isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _opening = false;
+        _error = 'O addon não forneceu uma URL ou arquivo para reprodução.';
+      });
+      return;
+    }
+
+    // media_kit/libmpv already understands ordinary HTTP, HLS, DASH and many
+    // MPEG-TS streams. Kodi addons often request inputstream.adaptive or
+    // inputstream.ffmpegdirect even when the stream has no DRM. Do not block
+    // those streams while the full Kodi binary InputStream ABI is being wired.
+    // Only keep the hard gate for DRM, where the native Kodi/Widevine contract
+    // is actually required.
+    if (request.requiresKodiInputStream && request.hasDrmConfiguration) {
+      if (mounted) {
+        setState(() => _opening = false);
+      }
+      return;
+    }
+
+    try {
+      await _player.open(
+        Media(
+          request.uri,
+          httpHeaders: request.headers.isEmpty ? null : request.headers,
+          extras: {
+            if (request.mimeType != null) 'mimeType': request.mimeType,
+            if (request.title != null) 'title': request.title,
+            if (request.inputStreamAddon != null)
+              'kodiInputStream': request.inputStreamAddon,
+            if (request.manifestType != null)
+              'kodiManifestType': request.manifestType,
+          },
+        ),
+        play: true,
+      );
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _error = error.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _opening = false);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _playbackHost.detach(_hostToken);
+    unawaited(_errorSubscription?.cancel());
+    unawaited(_player.dispose());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final request = _request;
+    final needsKodiDrm =
+        request.requiresKodiInputStream && request.hasDrmConfiguration;
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text(request.title ?? 'Reprodução'),
+      ),
+      body: needsKodiDrm
+          ? _InputStreamRequired(request: request)
+          : Stack(
+              fit: StackFit.expand,
+              children: [
+                Video(
+                  controller: _controller,
+                  fit: BoxFit.contain,
+                ),
+                if (_opening)
+                  const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                if (_error case final error?)
+                  _PlaybackError(
+                    message: error,
+                    onRetry: () {
+                      setState(() {
+                        _error = null;
+                        _opening = true;
+                      });
+                      unawaited(_open());
+                    },
+                  ),
+              ],
+            ),
+    );
+  }
+}
+
+class _InputStreamRequired extends StatelessWidget {
+  const _InputStreamRequired({required this.request});
+
+  final PlaybackRequest request;
+
+  @override
+  Widget build(BuildContext context) {
+    final addon = request.inputStreamAddon ?? 'InputStream';
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.enhanced_encryption_rounded,
+                size: 64,
+                color: Colors.white,
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Este vídeo usa $addon com DRM',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: Colors.white,
+                    ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Streams InputStream sem DRM já são enviados diretamente ao backend de mídia. Este item contém configuração de licença/DRM e ainda precisa da ABI binária completa do Kodi ligada ao player.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70),
+              ),
+              if (request.manifestType case final manifest? when manifest.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'Manifesto: $manifest',
+                  style: const TextStyle(color: Colors.white54),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlaybackError extends StatelessWidget {
+  const _PlaybackError({
+    required this.message,
+    required this.onRetry,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: Colors.black87,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: Padding(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.error_outline_rounded,
+                  size: 60,
+                  color: Colors.white,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white),
+                ),
+                const SizedBox(height: 18),
+                FilledButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Tentar novamente'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

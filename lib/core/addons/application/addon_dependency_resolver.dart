@@ -58,27 +58,35 @@ class AddonDependencyResolver {
     void visit(RepositoryAddonEntry entry, {required bool explicitlySelected}) {
       final addonId = entry.manifest.id;
       final addonKey = key(addonId);
-      if (planned.contains(addonKey)) return;
+      if (planned.contains(addonKey)) {
+        return;
+      }
       if (!visiting.add(addonKey)) {
-        issues.add(AddonDependencyIssue(
-          addonId: addonId,
-          message: 'Dependência circular detectada.',
-        ));
+        issues.add(
+          AddonDependencyIssue(
+            addonId: addonId,
+            message: 'Dependência circular detectada.',
+          ),
+        );
         return;
       }
 
       for (final dependency in entry.manifest.dependencies) {
-        if (dependency.optional) continue;
+        if (dependency.optional) {
+          continue;
+        }
 
         final hostVersion = KodiHostCapabilities.versionFor(dependency.id);
         if (hostVersion != null) {
           if (!KodiVersion(hostVersion).isAtLeast(dependency.version)) {
-            issues.add(AddonDependencyIssue(
-              addonId: dependency.id,
-              message: dependency.version == null
-                  ? 'A capacidade do núcleo Kodi não está disponível.'
-                  : 'O addon exige ${dependency.version}, mas o núcleo AddKo/Kodi Omega fornece $hostVersion.',
-            ));
+            issues.add(
+              AddonDependencyIssue(
+                addonId: dependency.id,
+                message: dependency.version == null
+                    ? 'A capacidade do núcleo Kodi não está disponível.'
+                    : 'O addon exige ${dependency.version}, mas o núcleo AddKo/Kodi Omega fornece $hostVersion.',
+              ),
+            );
           }
           continue;
         }
@@ -95,12 +103,14 @@ class AddonDependencyResolver {
           allAvailable[key(dependency.id)] ?? const [],
         );
         if (candidate == null) {
-          issues.add(AddonDependencyIssue(
-            addonId: dependency.id,
-            message: dependency.version == null
-                ? 'Dependência obrigatória não encontrada nos repositórios disponíveis.'
-                : 'Versão ${dependency.version} ou superior não encontrada nos repositórios disponíveis.',
-          ));
+          issues.add(
+            AddonDependencyIssue(
+              addonId: dependency.id,
+              message: dependency.version == null
+                  ? 'Dependência obrigatória não encontrada nos repositórios disponíveis.'
+                  : 'Versão ${dependency.version} ou superior não encontrada nos repositórios disponíveis.',
+            ),
+          );
           continue;
         }
 
@@ -112,14 +122,17 @@ class AddonDependencyResolver {
       final current = installed[addonKey];
       final alreadySatisfied = current != null &&
           KodiVersion(current.manifest.version)
-              .compareTo(KodiVersion(entry.manifest.version)) >= 0;
+              .compareTo(KodiVersion(entry.manifest.version)) >=
+              0;
 
       if (entry.packageUri == null) {
         if (explicitlySelected || !alreadySatisfied) {
-          issues.add(AddonDependencyIssue(
-            addonId: addonId,
-            message: 'O repositório não informou uma URL de pacote ZIP instalável.',
-          ));
+          issues.add(
+            AddonDependencyIssue(
+              addonId: addonId,
+              message: 'O repositório não informou uma URL de pacote ZIP instalável.',
+            ),
+          );
         }
         planned.add(addonKey);
         return;
@@ -144,15 +157,23 @@ class AddonDependencyResolver {
     List<RepositoryAddonEntry> candidates,
   ) {
     RepositoryAddonEntry? selected;
+
     for (final candidate in candidates) {
       final candidateVersion = KodiVersion(candidate.manifest.version);
-      if (!candidateVersion.isAtLeast(dependency.version)) continue;
-      if (candidate.packageUri == null) continue;
+      if (!candidateVersion.isAtLeast(dependency.version)) {
+        continue;
+      }
+      if (candidate.packageUri == null) {
+        continue;
+      }
+
       if (selected == null ||
-          candidateVersion.compareTo(KodiVersion(selected.manifest.version)) > 0) {
+          candidateVersion.compareTo(KodiVersion(selected.manifest.version)) >
+              0) {
         selected = candidate;
       }
     }
+
     return selected;
   }
 }
