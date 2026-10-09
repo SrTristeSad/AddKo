@@ -107,6 +107,57 @@ def _execute_entrypoint(entrypoint: Path) -> None:
     exec(code, namespace, namespace)
 
 
+def _exception_details(error: BaseException, addon_root: Path) -> dict[str, object]:
+    """Return a compact traceback that points at the failing addon source.
+
+    Kodi addons are commonly packed behind helper modules. Showing only the
+    worker frame hides the actionable line. Keep the ordinary traceback and a
+    structured frame list, while separately selecting the deepest frame that
+    belongs to the addon directory.
+    """
+
+    extracted = traceback.extract_tb(error.__traceback__)
+    frames: list[dict[str, object]] = []
+    addon_location = ""
+
+    for frame in extracted:
+        source = (frame.line or "").strip()
+        frames.append(
+            {
+                "file": frame.filename,
+                "line": frame.lineno,
+                "function": frame.name,
+                "source": source,
+            }
+        )
+
+        try:
+            frame_path = Path(frame.filename).resolve()
+            relative = frame_path.relative_to(addon_root)
+        except (OSError, ValueError):
+            continue
+
+        addon_location = f"{relative}:{frame.lineno} in {frame.name}"
+        if source:
+            addon_location += f" -> {source}"
+
+    if not addon_location and frames:
+        last = frames[-1]
+        addon_location = (
+            f"{last['file']}:{last['line']} in {last['function']}"
+        )
+
+    return {
+        "exception_type": type(error).__name__,
+        "exception_message": str(error),
+        "addon_location": addon_location,
+        "traceback": "".join(
+            traceback.format_exception(type(error), error, error.__traceback__)
+        ),
+        "frames": frames,
+    }
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print("usage: addko_worker.py <context.json>", file=sys.stderr)
@@ -171,14 +222,17 @@ def main() -> int:
         emit(
             "invocation.error",
             message=f"Addon exited with code {code}",
+            exception_type="SystemExit",
+            exception_message=str(error),
             traceback="",
         )
         return code
     except BaseException as error:
+        details = _exception_details(error, addon_root)
         emit(
             "invocation.error",
             message=f"{type(error).__name__}: {error}",
-            traceback=traceback.format_exc(),
+            **details,
         )
         return 1
 
