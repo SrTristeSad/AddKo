@@ -40,17 +40,36 @@ class RepositoryAddonEntry {
   final Uri? iconUri;
 }
 
+/// Store groups derived from Kodi 21's official top-level addon type mappings.
+///
+/// Not every group has a functional host yet (for example PVR/game/VFS binary
+/// instances), but AddKo must still preserve and present those packages instead
+/// of flattening most of the Kodi ecosystem into "Outros".
 enum RepositoryAddonCategory {
   video('Vídeo'),
   audio('Música'),
   images('Imagens'),
   programs('Programas'),
-  services('Serviços'),
+  weather('Clima'),
+  lyrics('Letras'),
   subtitles('Legendas'),
+  services('Serviços'),
   repositories('Repositórios'),
-  modules('Módulos Python'),
+  modules('Módulos e bibliotecas Python'),
+  metadata('Scrapers e metadados'),
+  skins('Skins'),
+  webInterfaces('Interfaces web'),
+  resources('Recursos'),
   inputStream('InputStream'),
-  pvr('PVR'),
+  pvr('PVR / TV ao vivo'),
+  games('Jogos e emuladores'),
+  gameControllers('Controles de jogos'),
+  peripherals('Periféricos'),
+  audioCodecs('Codecs de áudio'),
+  imageDecoders('Decodificadores de imagem'),
+  vfs('VFS / sistemas de arquivos'),
+  screensavers('Protetores de tela'),
+  visualizations('Visualizações de música'),
   other('Outros');
 
   const RepositoryAddonCategory(this.label);
