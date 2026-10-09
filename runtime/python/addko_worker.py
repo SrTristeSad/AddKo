@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import re
 import sys
 import traceback
 from pathlib import Path
@@ -24,13 +25,7 @@ def emit(method: str, **params: object) -> None:
 
 
 def _install_kodi_api_fallbacks() -> None:
-    """Attach the shared Kodi compatibility fallback to every legacy module.
-
-    Dedicated APIs in the shim modules always win. The fallback is only used
-    when an addon reaches a Kodi symbol that has not been bridged explicitly.
-    This mirrors the official Kodi API surface without growing a second set of
-    Dart implementations for every minor helper.
-    """
+    """Attach the shared Kodi compatibility fallback to every legacy module."""
 
     from kodi_proxy import module_getattr
 
@@ -54,6 +49,50 @@ def _install_kodi_api_fallbacks() -> None:
             return module_getattr(_module_name, name)
 
         module.__getattr__ = fallback
+
+
+def _install_runtime_overrides(context: dict[str, object]) -> None:
+    """Bridge Kodi conditions that can be answered locally without RPC.
+
+    A large number of video addons use System.HasAddon()/AddonIsEnabled() on
+    every directory navigation. Returning False forever makes them repeatedly
+    request installation of inputstream.adaptive/ffmpegdirect and adds a large
+    delay. The installed addon registry is represented by addon.xml files on
+    disk, so answer these conditions immediately inside the Python worker.
+    """
+
+    try:
+        import xbmc
+    except Exception:
+        return
+
+    addons_root = Path(str(context.get("addons_root", "")))
+    installed_ids: set[str] = set()
+    if addons_root.is_dir():
+        try:
+            installed_ids = {
+                child.name.lower()
+                for child in addons_root.iterdir()
+                if child.is_dir() and (child / "addon.xml").is_file()
+            }
+        except OSError:
+            installed_ids = set()
+
+    original_get_cond_visibility = xbmc.getCondVisibility
+    addon_condition = re.compile(
+        r"^system\.(?:hasaddon|addonisenabled)\((.+)\)$",
+        re.IGNORECASE,
+    )
+
+    def get_cond_visibility(condition: str) -> bool:
+        raw = str(condition).strip()
+        match = addon_condition.match(raw)
+        if match is not None:
+            addon_id = match.group(1).strip().strip("\"'").lower()
+            return addon_id in installed_ids
+        return bool(original_get_cond_visibility(condition))
+
+    xbmc.getCondVisibility = get_cond_visibility
 
 
 def _execute_entrypoint(entrypoint: Path) -> None:
@@ -89,6 +128,7 @@ def main() -> int:
             sys.path.insert(0, value)
 
     _install_kodi_api_fallbacks()
+    _install_runtime_overrides(context)
 
     custom_argv = context.get("argv")
     if isinstance(custom_argv, list):
