@@ -9,5 +9,5 @@ call flutter test || exit /b 1
 call flutter build apk --release --target-platform android-arm64 --no-pub || exit /b 1
 python tools\android\verify_addko_apk.py build\app\outputs\flutter-apk\app-release.apk --abi arm64-v8a --strict-abi || exit /b 1
 if not exist dist mkdir dist
-copy /Y build\app\outputs\flutter-apk\app-release.apk dist\AddKo-25-arm64.apk >nul || exit /b 1
-echo [OK] dist\AddKo-25-arm64.apk
+copy /Y build\app\outputs\flutter-apk\app-release.apk dist\AddKo-26-arm64.apk >nul || exit /b 1
+echo [OK] dist\AddKo-26-arm64.apk

@@ -27,6 +27,9 @@ try:
     deadline = time.monotonic() + 180
     while time.monotonic() < deadline:
         logs = adb('logcat', '-d')
+        if ('>>> com.srtristesad.addko:kodi <<<' in logs or
+                ('JNI DETECTED ERROR IN APPLICATION' in logs and 'com.srtristesad.addko' in logs)):
+            raise RuntimeError('Native Kodi crashed during startup; see collected logcat')
         if 'Flutter first frame displayed' in logs and 'Kodi JSON-RPC ready' in logs:
             break
         time.sleep(3)

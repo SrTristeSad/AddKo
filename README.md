@@ -1,12 +1,18 @@
 # AddKo — Android native Kodi integration
 
-Version 0.2.1+25 brings the current native integration into this repository.
+Version 0.2.1+26 brings the current native integration into this repository.
 Android ARM64 uses Kodi 21.3, its CPython 3.11, InputStream Adaptive 21.5.25
 and FFmpegDirect 21.3.8. Flutter draws the application interface over the
 native activity. The launcher prepares the private runtime before starting
 the native activity in the :kodi process.
 
 ## Startup fixes
+
+The first ARM64 emulator run reproduced a native SIGABRT: libandroidjni
+constructed the input listener using the application package, while only
+the original JNI package contained that class. An application-package
+subclass now preserves the original registered native callbacks. The APK
+audit requires both application-package helpers.
 
 Native paths are configured in the native process before loading libkodi.
 An absent vendor launcher no longer causes a null dereference. The Flutter

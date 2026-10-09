@@ -37,6 +37,8 @@ with zipfile.ZipFile(args.apk) as apk:
         for p in (VENDOR / 'java').rglob('*.java')
     ]
     classes.append(b'Lcom/srtristesad/addko/KodiBootstrapActivity;')
+    classes.append(b'Lcom/srtristesad/addko/XBMCInputDeviceListener;')
+    classes.append(b'Lcom/srtristesad/addko/XBMCBroadcastReceiver;')
     for cls in classes:
         if cls not in dex:
             raise SystemExit('APK missing Kodi Android class: ' + cls.decode())

@@ -9,4 +9,4 @@ flutter test
 flutter build apk --release --target-platform android-arm64 --no-pub
 python3 tools/android/verify_addko_apk.py build/app/outputs/flutter-apk/app-release.apk --abi arm64-v8a --strict-abi
 mkdir -p dist
-cp build/app/outputs/flutter-apk/app-release.apk dist/AddKo-25-arm64.apk
+cp build/app/outputs/flutter-apk/app-release.apk dist/AddKo-26-arm64.apk
