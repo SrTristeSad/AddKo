@@ -25,6 +25,8 @@ try:
     if 'arm64-v8a' not in abis:
         raise RuntimeError('Test device cannot execute ARM64 Kodi: ' + abis)
     adb('install', '-r', sys.argv[1])
+    # Dismiss the emulator's first-use system overlay, keeping screenshots useful.
+    adb('shell', 'settings', 'put', 'secure', 'immersive_mode_confirmations', 'confirmed', check=False)
     adb('logcat', '-G', '16M', check=False)
     adb('logcat', '-c')
     stream_file = (OUTPUT / 'startup-stream.txt').open('w')
