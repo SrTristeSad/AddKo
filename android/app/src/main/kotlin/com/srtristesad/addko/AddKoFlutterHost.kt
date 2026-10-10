@@ -10,6 +10,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.xbmc.kodi.AddKoCoreBridge
 import org.xbmc.kodi.Main
+import java.io.File
+import java.io.RandomAccessFile
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -19,8 +21,13 @@ import java.util.concurrent.atomic.AtomicInteger
  * exists.
  *
  * IMPORTANT: this class no longer embeds Flutter inside Kodi. The real Flutter
- * frontend lives only in MainActivity, in the normal application process. This
- * hook only waits for Kodi JSON-RPC and opens the requested legacy addon.
+ * frontend lives only in MainActivity, in the normal application process.
+ *
+ * Kodi's SurfaceView becomes available before the native application has finished
+ * loading settings, addons and the GUI. Calling XBMCJsonRPC in that window can
+ * enter partially initialized C++ services and crash libkodi. Therefore this
+ * hook first waits for Kodi's own `GUI format` startup marker in kodi.log, without
+ * entering JNI, and only then touches the native JSON-RPC transport.
  */
 class AddKoFlutterHost(
     private val activity: Main,
@@ -28,6 +35,7 @@ class AddKoFlutterHost(
 ) {
     companion object {
         private const val TAG = "AddKoLegacy"
+        private const val GUI_READY_MARKER = "GUI format "
         private val sequence = AtomicInteger(1000)
     }
 
@@ -73,24 +81,81 @@ class AddKoFlutterHost(
 
     private fun ensureKodiRpc() {
         if (rpcReady) return
+
+        // Do not probe JNI for readiness. On Kodi 21 the Java SurfaceView is
+        // created before CServiceBroker/settings/GUI are fully initialized and a
+        // JSON-RPC call in that interval can SIGSEGV. Watch Kodi's own log instead.
+        waitForKodiGuiReady()
+        if (stopped) return
+
         var lastError: Throwable? = null
-        repeat(120) {
+        repeat(20) {
             if (stopped) return
             try {
                 val response = rpc("JSONRPC.Version")
                 if (response.has("result")) {
                     rpcReady = true
-                    Log.i(TAG, "Kodi JSON-RPC pronto")
+                    Log.i(TAG, "Kodi JSON-RPC pronto após inicialização da GUI")
                     return
                 }
+                lastError = IllegalStateException(response.toString())
             } catch (error: Throwable) {
                 lastError = error
             }
             TimeUnit.MILLISECONDS.sleep(500)
         }
         throw IllegalStateException(
-            "Kodi JSON-RPC não ficou pronto em 60 segundos.",
+            "Kodi inicializou a GUI, mas o JSON-RPC não ficou pronto.",
             lastError,
+        )
+    }
+
+    private fun waitForKodiGuiReady() {
+        val logFile = File(activity.cacheDir, "kodi-temp/kodi.log")
+        var offset = if (logFile.isFile) logFile.length() else 0L
+        var carry = ""
+
+        repeat(180) {
+            if (stopped) return
+
+            try {
+                if (logFile.isFile) {
+                    val length = logFile.length()
+                    // Kodi may rotate/truncate kodi.log at startup. If that
+                    // happens, restart reading at byte zero of the new file.
+                    if (length < offset) {
+                        offset = 0L
+                        carry = ""
+                    }
+                    if (length > offset) {
+                        val chunk = RandomAccessFile(logFile, "r").use { file ->
+                            file.seek(offset)
+                            val remaining = length - offset
+                            val bytes = ByteArray(remaining.coerceAtMost(1024L * 1024L).toInt())
+                            val read = file.read(bytes)
+                            if (read > 0) String(bytes, 0, read, Charsets.UTF_8) else ""
+                        }
+                        offset = length
+                        val text = carry + chunk
+                        if (text.contains(GUI_READY_MARKER)) {
+                            // Give the GUI thread one scheduling turn after the
+                            // marker before entering JSON-RPC from this worker.
+                            TimeUnit.MILLISECONDS.sleep(750)
+                            Log.i(TAG, "Kodi GUI pronta; liberando bridge legado")
+                            return
+                        }
+                        carry = text.takeLast(128)
+                    }
+                }
+            } catch (error: Throwable) {
+                Log.d(TAG, "Aguardando kodi.log ficar disponível", error)
+            }
+
+            TimeUnit.MILLISECONDS.sleep(500)
+        }
+
+        throw IllegalStateException(
+            "Kodi não concluiu a inicialização da GUI em 90 segundos.",
         )
     }
 
