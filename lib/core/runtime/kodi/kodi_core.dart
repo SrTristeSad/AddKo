@@ -1,8 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/services.dart';
 
-/// Direct JNI JSON-RPC calls into the core embedded under the AddKo frontend.
+/// Android bridge for the isolated Kodi legacy runtime.
+///
+/// The Flutter shell deliberately does not share a renderer/process with Kodi.
+/// This keeps the Store and the rest of AddKo alive even if a native Kodi addon,
+/// codec or GPU driver crashes the legacy runtime.
 class KodiCore {
   static const channel = MethodChannel('addko/kodi_core');
   static bool get supported => Platform.isAndroid;
@@ -20,26 +25,35 @@ class KodiCore {
   static Future<void> allowLocalFiles() =>
       channel.invokeMethod<void>('storage');
 
+  /// Compatibility no-op. Kodi now owns a separate Activity instead of taking
+  /// the renderer away from Flutter in the same Activity.
   static Future<void> setLegacyGui(bool enabled) =>
       channel.invokeMethod<void>('legacyGui', {'enabled': enabled});
 
   static Future<void> ensureReady() async {
-    for (var i = 0; i < 120; i++) {
-      final state = await status();
-      if (state['ready'] == true) return;
-      await Future<void>.delayed(const Duration(milliseconds: 500));
-    }
     final state = await status();
+    if (state['bundled'] == true) return;
     throw StateError(
-        'O núcleo não respondeu. ${state['error'] ?? 'Abra Configurações → Núcleo para ver o log.'}');
+      'O runtime Kodi não está empacotado neste APK. '
+      '${state['error'] ?? 'Refaça o build Android.'}',
+    );
   }
 
-  static Future<dynamic> rpc(String method,
-      [Map<String, dynamic> params = const {}]) async {
+  /// Direct JSON-RPC is intentionally unavailable from the Flutter process now.
+  /// This method is retained for diagnostics/older pages and returns the native
+  /// channel error instead of coupling Flutter to the Kodi process again.
+  static Future<dynamic> rpc(
+    String method, [
+    Map<String, dynamic> params = const {},
+  ]) async {
     final id = ++_sequence;
     final raw = await channel.invokeMethod<String>('rpc', {
-      'request': jsonEncode(
-          {'jsonrpc': '2.0', 'id': id, 'method': method, 'params': params}),
+      'request': jsonEncode({
+        'jsonrpc': '2.0',
+        'id': id,
+        'method': method,
+        'params': params,
+      }),
     });
     if (raw == null) throw StateError('Resposta vazia do núcleo.');
     final response = jsonDecode(raw);
@@ -55,46 +69,17 @@ class KodiCore {
     return response['result'];
   }
 
+  /// Kept for source compatibility. Discovery/enabling now happens inside the
+  /// isolated Kodi Activity after Kodi JSON-RPC itself is ready.
   static Future<void> prepareAddon(String id) async {
+    if (id.trim().isEmpty) throw ArgumentError.value(id, 'id', 'ID vazio');
     await ensureReady();
-    await rpc('Addons.ExecuteAddon', {
-      'addonid': 'script.addko.bridge',
-      'params': ['refresh', '']
-    });
-    Object? lastError;
-    for (var i = 0; i < 40; i++) {
-      try {
-        await rpc('Addons.GetAddonDetails', {
-          'addonid': id,
-          'properties': ['enabled']
-        });
-        await rpc('Addons.SetAddonEnabled', {'addonid': id, 'enabled': true});
-        return;
-      } catch (error) {
-        lastError = error;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-    }
-    throw StateError('O Kodi não conseguiu habilitar $id. $lastError');
   }
 
-  /// Opens a classic Kodi plugin inside Kodi's own GUI.
-  ///
-  /// Flutter remains the AddKo shell, but while this call activates the plugin
-  /// Kodi owns rendering and input. Android restores Flutter automatically when
-  /// the Kodi window returns to Home.
+  /// Opens a classic Kodi addon in a crash-isolated native Kodi Activity.
   static Future<void> openLegacyAddon(String id) async {
-    await prepareAddon(id);
-    await setLegacyGui(true);
-    try {
-      await rpc('GUI.ActivateWindow', {
-        'window': 'videos',
-        'parameters': ['plugin://$id/', 'return'],
-      });
-    } catch (_) {
-      await setLegacyGui(false);
-      rethrow;
-    }
+    await ensureReady();
+    await channel.invokeMethod<void>('openLegacyAddon', {'addonId': id});
   }
 
   static Future<List<Map<String, dynamic>>> directory(String url) async {
@@ -102,7 +87,7 @@ class KodiCore {
       'directory': url,
       'media': 'files',
       'properties': ['title', 'thumbnail', 'art', 'plot'],
-      'sort': {'method': 'none'}
+      'sort': {'method': 'none'},
     });
     if (result is! Map || result['files'] is! List) {
       throw StateError('O addon não retornou um diretório válido.');
@@ -114,13 +99,9 @@ class KodiCore {
 
   static Future<void> open({String? addonId, bool selfTest = false}) async {
     await ensureReady();
-    if (selfTest) {
-      await rpc('Addons.ExecuteAddon', {
-        'addonid': 'script.addko.bridge',
-        'params': ['selftest', '']
-      });
-    } else if (addonId != null) {
-      await prepareAddon(addonId);
-    }
+    await channel.invokeMethod<void>('openKodi', {
+      if (addonId != null) 'addonId': addonId,
+      'selfTest': selfTest,
+    });
   }
 }
