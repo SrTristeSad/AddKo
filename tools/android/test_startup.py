@@ -62,20 +62,20 @@ try:
         stderr=stream_file,
     )
 
-    # 1) The normal app must start as a FlutterActivity with no Kodi process.
+    # 1) The normal app must render a real Flutter frame with no Kodi process.
     (OUTPUT / 'launch.txt').write_text(
         adb('shell', 'am', 'start', '-W', '-n', PACKAGE + '/.MainActivity')
     )
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
         current = logs()
-        if 'Flutter launcher channel ready' in current:
+        if 'Flutter first frame displayed' in current:
             break
         if 'FATAL EXCEPTION' in current and PACKAGE in current:
             raise RuntimeError('Flutter launcher crashed; see collected logcat')
         time.sleep(2)
     else:
-        raise RuntimeError('Flutter launcher did not become ready within 90 seconds')
+        raise RuntimeError('Flutter did not render its first frame within 90 seconds')
 
     flutter_pid = adb('shell', 'pidof', PACKAGE).strip()
     if not flutter_pid:
@@ -134,7 +134,7 @@ try:
             timeout=45,
         )
 
-    print('PASS: Flutter stayed alive; isolated Kodi JSON-RPC started and survived 15s.')
+    print('PASS: Flutter rendered, stayed alive, and isolated Kodi survived 15s.')
 finally:
     if stream is not None:
         stream.terminate()
