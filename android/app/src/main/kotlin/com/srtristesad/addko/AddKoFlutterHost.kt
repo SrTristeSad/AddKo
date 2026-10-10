@@ -27,7 +27,11 @@ import java.io.RandomAccessFile
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-/** One activity: Kodi owns the native renderer/player; Flutter owns the frontend. */
+/**
+ * One activity hosts both renderers:
+ * - Flutter owns the AddKo launcher, store, settings and Plugin v2 UI.
+ * - Kodi owns the complete UI while a legacy Kodi addon is running.
+ */
 class AddKoFlutterHost(private val activity: Main, layout: RelativeLayout) :
     ExclusiveAppComponent<Activity>, LifecycleOwner {
     override val lifecycle = LifecycleRegistry(this)
@@ -41,6 +45,8 @@ class AddKoFlutterHost(private val activity: Main, layout: RelativeLayout) :
     @Volatile private var ready = false
     @Volatile private var stopped = false
     @Volatile private var lastError: String? = null
+    @Volatile private var legacyGui = false
+    private var legacyWindowObserved = false
     private var nativeDialog = false
     private val channel: KodiCoreChannel
 
@@ -52,9 +58,9 @@ class AddKoFlutterHost(private val activity: Main, layout: RelativeLayout) :
         layout.addView(view, RelativeLayout.LayoutParams(-1, -1))
         view.requestFocus()
         // NativeActivity's input queue consumes events before Flutter sees them.
-        // The native queue is restored only while an addon dialog is displayed.
+        // Flutter owns input by default. Kodi gets it back while legacy UI is active.
         activity.window.takeInputQueue(null)
-        channel = KodiCoreChannel(activity, ::request, ::status)
+        channel = KodiCoreChannel(activity, ::request, ::status, ::setLegacyGui)
         channel.register(engine)
         engine.renderer.addIsDisplayingFlutterUiListener(object : FlutterUiDisplayListener {
             override fun onFlutterUiDisplayed() { Log.i("AddKo", "Flutter first frame displayed") }
@@ -67,6 +73,7 @@ class AddKoFlutterHost(private val activity: Main, layout: RelativeLayout) :
     private fun status(): Map<String, Any?> = mapOf(
         "bundled" to File(activity.applicationInfo.nativeLibraryDir, "libkodi.so").isFile,
         "ready" to ready, "version" to "21.3-Omega", "embedded" to true,
+        "legacyGui" to legacyGui,
         "device" to Build.MODEL, "androidSdk" to Build.VERSION.SDK_INT,
         "abis" to Build.SUPPORTED_ABIS.toList(),
         "error" to lastError,
@@ -99,6 +106,23 @@ class AddKoFlutterHost(private val activity: Main, layout: RelativeLayout) :
         }
     }
 
+    private fun setLegacyGui(enabled: Boolean) {
+        handler.post {
+            if (stopped) return@post
+            legacyGui = enabled
+            legacyWindowObserved = false
+            applyRendererOwnership()
+            Log.i("AddKo", "Kodi legacy GUI ${if (enabled) "enabled" else "disabled"}")
+        }
+    }
+
+    private fun applyRendererOwnership() {
+        val kodiOwnsUi = legacyGui || nativeDialog
+        view.visibility = if (kodiOwnsUi) View.INVISIBLE else View.VISIBLE
+        activity.window.takeInputQueue(if (kodiOwnsUi) activity else null)
+        if (!kodiOwnsUi) view.requestFocus()
+    }
+
     private fun poll() {
         if (stopped || activity.mMainView?.mIsCreated != true) return
         try {
@@ -111,16 +135,28 @@ class AddKoFlutterHost(private val activity: Main, layout: RelativeLayout) :
             }
             val state = JSONObject(AddKoCoreBridge.requestJSON("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"GUI.GetProperties\",\"params\":{\"properties\":[\"currentwindow\"]}}"))
             val id = state.optJSONObject("result")?.optJSONObject("currentwindow")?.optInt("id", -1) ?: -1
-            // Stock Kodi addon dialogs remain native; menus and video controls
-            // belong to AddKo. Native WindowXML dialogs are also accessible.
-            val show = id >= 10000 && id !in setOf(10000, 10025, 10502, 12005, 12006, 12997, 12999)
+
+            // Outside legacy mode we still expose stock Kodi dialogs when an
+            // embedded service/addon opens one. Full legacy execution is handled
+            // by legacyGui and leaves every Kodi window visible.
+            val showDialog = id >= 10000 && id !in setOf(10000, 10025, 10502, 12005, 12006, 12997, 12999)
             handler.post {
-                if (!stopped && show != nativeDialog) {
-                    nativeDialog = show
-                    view.visibility = if (show) View.INVISIBLE else View.VISIBLE
-                    activity.window.takeInputQueue(if (show) activity else null)
-                    if (!show) view.requestFocus()
+                if (stopped) return@post
+
+                if (legacyGui) {
+                    if (id >= 0 && id != 10000) {
+                        legacyWindowObserved = true
+                    } else if (id == 10000 && legacyWindowObserved) {
+                        // The addon/window returned to Kodi Home. Hand the UI and
+                        // input queue back to Flutter without killing the core.
+                        legacyGui = false
+                        legacyWindowObserved = false
+                        Log.i("AddKo", "Legacy addon returned to Kodi Home; restoring Flutter")
+                    }
                 }
+
+                nativeDialog = showDialog
+                applyRendererOwnership()
             }
         } catch (error: Throwable) {
             lastError = error.toString()
@@ -144,7 +180,9 @@ class AddKoFlutterHost(private val activity: Main, layout: RelativeLayout) :
         lifecycle.currentState = Lifecycle.State.CREATED
     }
     fun onBackPressed(): Boolean {
-        if (nativeDialog) return false
+        // Let Kodi consume Back while its GUI owns the screen. Once the legacy
+        // window returns to Home, poll() restores Flutter automatically.
+        if (legacyGui || nativeDialog) return false
         engine.navigationChannel.popRoute()
         return true
     }
