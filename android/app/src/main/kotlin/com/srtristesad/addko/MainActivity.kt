@@ -4,7 +4,9 @@ import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -21,6 +23,19 @@ import java.io.File
 class MainActivity : FlutterActivity() {
     companion object {
         private const val CHANNEL = "addko/kodi_core"
+        private const val TAG = "AddKo"
+        private const val EXTRA_CI_SELF_TEST = "addko.ci_self_test"
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        maybeLaunchCiSelfTest(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        maybeLaunchCiSelfTest(intent)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -56,6 +71,19 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        Log.i(TAG, "Flutter launcher channel ready")
+    }
+
+    private fun maybeLaunchCiSelfTest(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_CI_SELF_TEST, false) != true) return
+        // Consume the flag so lifecycle re-entry cannot recursively reopen Kodi.
+        intent.removeExtra(EXTRA_CI_SELF_TEST)
+        launchKodiInternal(
+            addonId = null,
+            selfTest = true,
+            onSuccess = { Log.i(TAG, "Isolated Kodi self-test launched") },
+            onError = { error -> Log.e(TAG, "Failed to launch isolated Kodi self-test", error) },
+        )
     }
 
     private fun prepareProfile(result: MethodChannel.Result) {
@@ -76,6 +104,22 @@ class MainActivity : FlutterActivity() {
         selfTest: Boolean,
         result: MethodChannel.Result,
     ) {
+        launchKodiInternal(
+            addonId = addonId,
+            selfTest = selfTest,
+            onSuccess = { result.success(null) },
+            onError = { error ->
+                result.error("kodi_launch_failed", error.message ?: error.toString(), null)
+            },
+        )
+    }
+
+    private fun launchKodiInternal(
+        addonId: String?,
+        selfTest: Boolean,
+        onSuccess: () -> Unit,
+        onError: (Throwable) -> Unit,
+    ) {
         Thread {
             try {
                 // The Store writes addons directly into this shared app profile.
@@ -83,17 +127,19 @@ class MainActivity : FlutterActivity() {
                 // a complete directory tree from its first scan.
                 KodiProfile.prepare(applicationContext)
                 runOnUiThread {
-                    val intent = Intent(this, KodiBootstrapActivity::class.java).apply {
-                        addonId?.let { putExtra("addonId", it) }
-                        putExtra("selfTest", selfTest)
+                    try {
+                        val intent = Intent(this, KodiBootstrapActivity::class.java).apply {
+                            addonId?.let { putExtra("addonId", it) }
+                            putExtra("selfTest", selfTest)
+                        }
+                        startActivity(intent)
+                        onSuccess()
+                    } catch (error: Throwable) {
+                        onError(error)
                     }
-                    startActivity(intent)
-                    result.success(null)
                 }
             } catch (error: Throwable) {
-                runOnUiThread {
-                    result.error("kodi_launch_failed", error.message ?: error.toString(), null)
-                }
+                runOnUiThread { onError(error) }
             }
         }.start()
     }
