@@ -34,15 +34,25 @@ class AddKoFlutterHost(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
     @Volatile private var stopped = false
+    @Volatile private var rpcReady = false
 
     init {
-        val addonId = activity.intent.getStringExtra("addko.addon_id")?.trim()
+        handleIntent(activity.intent)
+    }
+
+    private fun handleIntent(intent: Intent) {
+        val addonId = intent.getStringExtra("addko.addon_id")?.trim()
             ?.takeIf { it.isNotEmpty() }
-        val selfTest = activity.intent.getBooleanExtra("addko.self_test", false)
+        val selfTest = intent.getBooleanExtra("addko.self_test", false)
+        if (addonId == null && !selfTest) return
+
+        // Consume extras so lifecycle redelivery does not reopen the same addon.
+        intent.removeExtra("addko.addon_id")
+        intent.removeExtra("addko.self_test")
 
         worker.execute {
             try {
-                waitForKodiRpc()
+                ensureKodiRpc()
                 if (stopped) return@execute
 
                 if (selfTest) {
@@ -61,13 +71,15 @@ class AddKoFlutterHost(
         }
     }
 
-    private fun waitForKodiRpc() {
+    private fun ensureKodiRpc() {
+        if (rpcReady) return
         var lastError: Throwable? = null
         repeat(120) {
             if (stopped) return
             try {
                 val response = rpc("JSONRPC.Version")
                 if (response.has("result")) {
+                    rpcReady = true
                     Log.i(TAG, "Kodi JSON-RPC pronto")
                     return
                 }
@@ -180,12 +192,17 @@ class AddKoFlutterHost(
     fun onPause() = Unit
     fun onStop() = Unit
     fun onBackPressed(): Boolean = false
-    fun onNewIntent(@Suppress("UNUSED_PARAMETER") intent: Intent) = Unit
+
+    fun onNewIntent(intent: Intent) {
+        handleIntent(intent)
+    }
+
     fun onActivityResult(
         @Suppress("UNUSED_PARAMETER") code: Int,
         @Suppress("UNUSED_PARAMETER") result: Int,
         @Suppress("UNUSED_PARAMETER") data: Intent?,
     ) = Unit
+
     fun onRequestPermissionsResult(
         @Suppress("UNUSED_PARAMETER") code: Int,
         @Suppress("UNUSED_PARAMETER") permissions: Array<String>,
