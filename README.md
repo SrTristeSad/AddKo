@@ -1,44 +1,43 @@
-# AddKo
+# AddKo — Android native Kodi integration
 
-AddKo é uma plataforma Flutter focada em executar addons legados do Kodi e, futuramente, um novo modelo de App Plugin em Python.
+Version 0.2.1+26 brings the current native integration into this repository.
+Android ARM64 uses Kodi 21.3, its CPython 3.11, InputStream Adaptive 21.5.25
+and FFmpegDirect 21.3.8. Flutter draws the application interface over the
+native activity. The launcher prepares the private runtime before starting
+the native activity in the :kodi process.
 
-## Objetivo da v0.1.0
+## Startup fixes
 
-A primeira etapa é compatibilidade com addons Kodi existentes, sem exigir alteração do addon:
+The first ARM64 emulator run reproduced a native SIGABRT: libandroidjni
+constructed the input listener using the application package, while only
+the original JNI package contained that class. An application-package
+subclass now preserves the original registered native callbacks. The APK
+audit requires both application-package helpers.
 
-- instalar addons por ZIP;
-- ler `addon.xml`;
-- abrir rotas `plugin://`;
-- executar o entrypoint Python do addon;
-- suportar dependências entre addons (`script.module.*`, `inputstream.*`, etc.);
-- oferecer uma Loja baseada em repositórios adicionados pelo usuário;
-- preservar a organização e os metadados fornecidos por cada repositório;
-- implementar gradualmente as APIs `xbmc`, `xbmcaddon`, `xbmcplugin`, `xbmcgui` e `xbmcvfs`;
-- suportar GUI legada e, mais adiante, addons binários como InputStream e PVR.
+Native paths are configured in the native process before loading libkodi.
+An absent vendor launcher no longer causes a null dereference. The Flutter
+host continues waiting for a slow native surface instead of abandoning
+startup after 12 seconds. MPV Android libraries have been removed; desktop
+MPV packages remain.
 
-## Arquitetura inicial
+## Reproducible runtime
 
-```text
-Flutter App
-├── Launcher de plugins
-├── Loja
-└── Configurações
-        │
-        ▼
-Addon Core
-├── Addon Manager
-├── Repository Manager
-├── Dependency Resolver
-└── plugin:// Router
-        │
-        ▼
-Kodi Compatibility Runtime
-├── Python Host
-├── xbmc*
-├── GUI bridge
-└── Binary Addon bridge (futuro)
-```
+Run `python3 tools/android/fetch_kodi_runtime.py` before building. It downloads
+pinned official packages, verifies SHA-256, stages assets and ARM64 libraries,
+applies the versioned integration overlays, then audits every inventoried
+file. Large binary payloads are not stored in Git. Sources and licenses:
+`third_party/kodi_21_3/PROVENANCE.json`, `LICENSE.md`, and `LICENSES/`. Kodi
+source is available at https://github.com/xbmc/xbmc/tree/21.3-Omega; InputStream
+sources at https://github.com/xbmc/inputstream.adaptive and
+https://github.com/xbmc/inputstream.ffmpegdirect (versions above).
 
-## Estado
+## GitHub Actions
 
-Projeto em desenvolvimento inicial. A branch `main` é a linha principal de desenvolvimento.
+The workflow builds and audits an ARM64 release APK, uploads it as an artifact,
+and attempts a startup smoke test on an API 35 Google APIs emulator with ARM
+translation. The test requires a Flutter frame, ready native JSON-RPC, and
+a stable native process for 15 seconds. Diagnostics are uploaded on failure.
+An emulator lacking ARM64 translation fails explicitly rather than reporting
+a successful startup. This does not verify playback, DRM, or every TV box.
+
+The startup regression is not considered validated until that test passes.

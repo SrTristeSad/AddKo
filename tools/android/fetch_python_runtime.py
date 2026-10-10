@@ -3,6 +3,10 @@
 
 The generated directory is consumed by android/app/build.gradle.kts and is not
 committed. Downloads are pinned by SHA-256 and cached under .cache/addko-python.
+
+For lean device builds set ADDKO_ANDROID_ABIS to a comma-separated ABI list,
+for example ``arm64-v8a``. Without it the script keeps staging every supported
+ABI so IDE/development builds remain multi-architecture compatible.
 """
 
 from __future__ import annotations
@@ -14,11 +18,13 @@ import os
 import shutil
 import tarfile
 import urllib.request
+import zipfile
 from pathlib import Path
 
 PYTHON_VERSION = "3.14.8"
 PYTHON_MINOR = "3.14"
 BASE_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}"
+CPYTHON_RAW_BASE = f"https://raw.githubusercontent.com/python/cpython/v{PYTHON_VERSION}/Lib"
 
 RUNTIMES = {
     "arm64-v8a": {
@@ -30,6 +36,11 @@ RUNTIMES = {
         "sha256": "58eb3b2d76ef57e076985a0a6b093cf08906d65ea4ab78cccc6d894d4250c972",
     },
 }
+
+REQUIRED_STDLIB_FILES = (
+    "zipfile/_path/__init__.py",
+    "zipfile/_path/glob.py",
+)
 
 
 def repo_root() -> Path:
@@ -69,6 +80,19 @@ def download(url: str, destination: Path, expected_sha256: str) -> None:
     temporary.replace(destination)
 
 
+def download_text(url: str, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "AddKo-build/0.1 (+https://github.com/SrTristeSad/AddKo)"},
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        data = response.read()
+    if not data or b"404: Not Found" in data[:64]:
+        raise RuntimeError(f"Failed to restore CPython stdlib file from {url}")
+    destination.write_bytes(data)
+
+
 def safe_extract(archive: Path, destination: Path) -> None:
     marker = destination / ".addko-extracted"
     if marker.exists():
@@ -104,27 +128,78 @@ def locate_prefix(extracted: Path) -> Path:
     return matches[0]
 
 
-def copy_tree_for_assets(source: Path, destination: Path) -> None:
-    if destination.exists():
-        shutil.rmtree(destination)
-    shutil.copytree(
-        source,
-        destination,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
-    )
+def ensure_required_stdlib(stdlib_root: Path) -> None:
+    for relative in REQUIRED_STDLIB_FILES:
+        target = stdlib_root / relative
+        if target.is_file() and target.stat().st_size > 0:
+            continue
+        print(f"[AddKo] restoring missing CPython stdlib file: {relative}")
+        download_text(f"{CPYTHON_RAW_BASE}/{relative}", target)
 
-    # Android's packaging tool may transparently decompress files ending in .gz.
-    # Match the workaround used by CPython's official Android testbed.
-    files = sorted((p for p in destination.rglob("*") if p.is_file()), reverse=True)
-    for path in files:
-        if path.name.endswith(".gz") or path.name.endswith("-"):
-            path.rename(path.with_name(path.name + "-"))
+    missing = [
+        relative
+        for relative in REQUIRED_STDLIB_FILES
+        if not (stdlib_root / relative).is_file()
+    ]
+    if missing:
+        raise RuntimeError(
+            "CPython Android runtime is missing required stdlib files: "
+            + ", ".join(missing)
+        )
+
+
+def create_stdlib_archive(source: Path, destination: Path) -> None:
+    """Package stdlib as one safe, maximally-compressed Android asset.
+
+    Android's aapt ignores some asset path components beginning with '_' or '.',
+    which breaks legitimate CPython modules such as zipfile/_path and many
+    _*.py modules. A single ZIP asset avoids all aapt filename filtering, and
+    the Android installer extracts the original names verbatim at runtime.
+    """
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(".zip.part")
+    temporary.unlink(missing_ok=True)
+
+    with zipfile.ZipFile(
+        temporary,
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+        compresslevel=9,
+        allowZip64=True,
+    ) as archive:
+        for path in sorted(source.rglob("*")):
+            if not path.is_file():
+                continue
+            relative = path.relative_to(source)
+            if "__pycache__" in relative.parts or path.suffix in {".pyc", ".pyo"}:
+                continue
+            archive.write(path, relative.as_posix())
+
+    temporary.replace(destination)
+
+    with zipfile.ZipFile(destination, "r") as archive:
+        names = set(archive.namelist())
+        missing = [relative for relative in REQUIRED_STDLIB_FILES if relative not in names]
+        if missing:
+            raise RuntimeError(
+                "Generated stdlib archive is missing required files: " + ", ".join(missing)
+            )
+        bad = archive.testzip()
+        if bad is not None:
+            raise RuntimeError(f"Corrupt stdlib archive entry: {bad}")
 
 
 def stage_abi(prefix: Path, abi: str, output_root: Path) -> None:
-    asset_prefix = output_root / "assets" / "addko_python" / PYTHON_VERSION / abi / "prefix"
     stdlib_source = prefix / "lib" / f"python{PYTHON_MINOR}"
-    copy_tree_for_assets(stdlib_source, asset_prefix / "lib" / f"python{PYTHON_MINOR}")
+    ensure_required_stdlib(stdlib_source)
+
+    asset_dir = output_root / "assets" / "addko_python" / PYTHON_VERSION / abi
+    if asset_dir.exists():
+        shutil.rmtree(asset_dir)
+    asset_dir.mkdir(parents=True, exist_ok=True)
+    stdlib_archive = asset_dir / "stdlib.zip"
+    create_stdlib_archive(stdlib_source, stdlib_archive)
+    print(f"[AddKo] packed stdlib asset: {stdlib_archive.name} ({stdlib_archive.stat().st_size} bytes)")
 
     jni_dir = output_root / "jniLibs" / abi
     if jni_dir.exists():
@@ -153,21 +228,58 @@ def parse_args() -> argparse.Namespace:
         "--abi",
         action="append",
         choices=sorted(RUNTIMES),
-        help="ABI to stage. May be repeated; defaults to all supported ABIs.",
+        help="ABI to stage. May be repeated; defaults to ADDKO_ANDROID_ABIS or all supported ABIs.",
     )
     parser.add_argument("--clean", action="store_true")
     return parser.parse_args()
 
 
+def selected_abis(explicit: list[str] | None) -> list[str]:
+    if explicit:
+        return list(dict.fromkeys(explicit))
+
+    configured = os.environ.get("ADDKO_ANDROID_ABIS", "").strip()
+    if not configured:
+        return list(RUNTIMES)
+
+    values = [
+        value.strip()
+        for raw in configured.split(",")
+        for value in raw.split()
+        if value.strip()
+    ]
+    unknown = [value for value in values if value not in RUNTIMES]
+    if unknown:
+        raise RuntimeError(
+            "Unsupported ABI in ADDKO_ANDROID_ABIS: " + ", ".join(sorted(set(unknown)))
+        )
+    if not values:
+        raise RuntimeError("ADDKO_ANDROID_ABIS did not contain a valid ABI")
+    return list(dict.fromkeys(values))
+
+
 def main() -> int:
     args = parse_args()
     output_root = args.output.resolve()
-    selected = args.abi or list(RUNTIMES)
+    selected = selected_abis(args.abi)
     cache_root = repo_root() / ".cache" / "addko-python" / PYTHON_VERSION
 
     if args.clean and output_root.exists():
         shutil.rmtree(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
+
+    # A previous multi-ABI build may leave stale assets/jni libraries behind.
+    # Remove ABI directories that are not part of this build so an ARM64 APK
+    # cannot accidentally ship a second CPython runtime.
+    for abi in RUNTIMES:
+        if abi in selected:
+            continue
+        stale_asset = output_root / "assets" / "addko_python" / PYTHON_VERSION / abi
+        stale_jni = output_root / "jniLibs" / abi
+        if stale_asset.exists():
+            shutil.rmtree(stale_asset)
+        if stale_jni.exists():
+            shutil.rmtree(stale_jni)
 
     staged = []
     for abi in selected:
@@ -191,6 +303,7 @@ def main() -> int:
             {
                 "python_version": PYTHON_VERSION,
                 "python_minor": PYTHON_MINOR,
+                "stdlib_format": "zip",
                 "abis": staged,
             },
             indent=2,

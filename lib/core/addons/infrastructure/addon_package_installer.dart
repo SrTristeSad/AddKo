@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -26,6 +27,8 @@ class AddonPackageInstaller {
 
   static const int _maxDownloadBytes = 256 * 1024 * 1024;
   static const int _maxExpandedBytes = 512 * 1024 * 1024;
+  static const Duration _downloadTimeout = Duration(seconds: 45);
+  static const String _userAgent = 'AddKo/0.1.4';
 
   final http.Client _client;
   final bool _ownsClient;
@@ -37,13 +40,35 @@ class AddonPackageInstaller {
     String? expectedAddonId,
     String? expectedVersion,
   }) async {
-    final response = await _client.get(
-      packageUri,
-      headers: const {'User-Agent': 'AddKo/0.1.0'},
-    );
+    if (packageUri.scheme != 'http' && packageUri.scheme != 'https') {
+      throw AddonInstallException(
+        'O pacote precisa usar HTTP ou HTTPS: $packageUri',
+      );
+    }
+
+    final http.Response response;
+    try {
+      response = await _client
+          .get(
+            packageUri,
+            headers: const {'User-Agent': _userAgent},
+          )
+          .timeout(_downloadTimeout);
+    } on TimeoutException {
+      throw AddonInstallException(
+        'Tempo esgotado ao baixar $packageUri (${_downloadTimeout.inSeconds}s).',
+      );
+    }
+
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw AddonInstallException(
         'HTTP ${response.statusCode} ao baixar $packageUri.',
+      );
+    }
+    final announcedLength = response.contentLength;
+    if (announcedLength != null && announcedLength > _maxDownloadBytes) {
+      throw const AddonInstallException(
+        'O pacote ultrapassa o limite de download de 256 MB.',
       );
     }
     if (response.bodyBytes.length > _maxDownloadBytes) {
@@ -86,7 +111,8 @@ class AddonPackageInstaller {
     final manifestText = _decodeArchiveFile(manifestFile.file);
     final manifest = manifestParser.parse(manifestText);
 
-    if (expectedAddonId != null && manifest.id != expectedAddonId) {
+    if (expectedAddonId != null &&
+        manifest.id.toLowerCase() != expectedAddonId.toLowerCase()) {
       throw AddonInstallException(
         'O pacote baixado declara ${manifest.id}, mas era esperado $expectedAddonId.',
       );
@@ -118,7 +144,7 @@ class AddonPackageInstaller {
     final staging = Directory(
       p.join(addonsRoot.path, '.staging-${manifest.id}-$stamp'),
     );
-    final target = Directory(p.join(addonsRoot.path, manifest.id));
+    final target = await _targetDirectory(addonsRoot, manifest.id);
     final backup = Directory(
       p.join(addonsRoot.path, '.backup-${manifest.id}-$stamp'),
     );
@@ -138,13 +164,20 @@ class AddonPackageInstaller {
         );
       }
 
-      final hasExisting = await target.exists();
-      if (hasExisting) {
-        await target.rename(backup.path);
-      }
+      await _moveExistingAside(target, backup);
 
       try {
         await staging.rename(target.path);
+      } on FileSystemException {
+        if (await target.exists()) {
+          await target.delete(recursive: true);
+          await staging.rename(target.path);
+        } else {
+          if (await backup.exists()) {
+            await backup.rename(target.path);
+          }
+          rethrow;
+        }
       } on Object {
         if (await backup.exists() && !await target.exists()) {
           await backup.rename(target.path);
@@ -174,6 +207,41 @@ class AddonPackageInstaller {
     }
   }
 
+  Future<Directory> _targetDirectory(Directory addonsRoot, String addonId) async {
+    final normalizedId = addonId.toLowerCase();
+    await for (final entity in addonsRoot.list(followLinks: false)) {
+      if (entity is! Directory) {
+        continue;
+      }
+      final name = p.basename(entity.path);
+      if (name.startsWith('.staging-') || name.startsWith('.backup-')) {
+        continue;
+      }
+      if (name.toLowerCase() == normalizedId) {
+        return entity;
+      }
+    }
+    return Directory(p.join(addonsRoot.path, addonId));
+  }
+
+  Future<void> _moveExistingAside(
+    Directory target,
+    Directory backup,
+  ) async {
+    if (!await target.exists()) {
+      return;
+    }
+
+    try {
+      await target.rename(backup.path);
+    } on FileSystemException {
+      if (!await target.exists()) {
+        return;
+      }
+      rethrow;
+    }
+  }
+
   _ManifestArchiveFile _findManifest(Archive archive) {
     final candidates = <_ManifestArchiveFile>[];
 
@@ -200,7 +268,19 @@ class AddonPackageInstaller {
     candidates.sort(
       (left, right) => _depth(left.rootPrefix).compareTo(_depth(right.rootPrefix)),
     );
-    return candidates.first;
+    final shallowestDepth = _depth(candidates.first.rootPrefix);
+    final shallowest = candidates
+        .where((candidate) => _depth(candidate.rootPrefix) == shallowestDepth)
+        .toList(growable: false);
+    final distinctRoots = shallowest
+        .map((candidate) => candidate.rootPrefix.toLowerCase())
+        .toSet();
+    if (distinctRoots.length > 1) {
+      throw const AddonInstallException(
+        'O ZIP contém mais de um addon.xml principal e não pode ser instalado com segurança.',
+      );
+    }
+    return shallowest.first;
   }
 
   Future<void> _extractArchive({

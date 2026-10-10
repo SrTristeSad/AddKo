@@ -11,10 +11,13 @@ import '../../core/repositories/application/repository_registry.dart';
 import '../../core/repositories/application/repository_store_controller.dart';
 import '../../core/runtime/legacy/legacy_plugin_runtime.dart';
 import '../../core/runtime/legacy/legacy_service_supervisor.dart';
+import '../../core/ui/kodi_text.dart';
 import '../legacy/legacy_addon_page.dart';
 import '../legacy/legacy_flutter_ui_bridge.dart';
 import '../settings/settings_page.dart';
 import '../store/store_page.dart';
+import '../kodi/kodi_core_page.dart';
+import '../../core/runtime/kodi/kodi_core.dart';
 
 class LauncherPage extends StatelessWidget {
   const LauncherPage({
@@ -45,32 +48,40 @@ class LauncherPage extends StatelessWidget {
                 builder: (context, _) {
                   return LayoutBuilder(
                     builder: (context, constraints) {
-                      final isLandscape =
+                      final landscape =
                           constraints.maxWidth > constraints.maxHeight;
-                      final crossAxisCount = isLandscape
-                          ? constraints.maxWidth >= 1100
-                              ? 4
-                              : 3
-                          : constraints.maxWidth >= 700
-                              ? 3
-                              : 2;
+                      final crossAxisCount = landscape
+                          ? (constraints.maxWidth >= 1100 ? 4 : 3)
+                          : (constraints.maxWidth >= 700 ? 3 : 2);
 
-                      final launchable = addonInstallController.installedAddons
+                      final addons = addonInstallController.installedAddons
                           .where((addon) => addon.manifest.isPythonPlugin)
                           .toList(growable: false);
-                      return GridView.count(
+
+                      return GridView(
                         padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
-                        crossAxisCount: crossAxisCount,
-                        crossAxisSpacing: 20,
-                        mainAxisSpacing: 20,
-                        childAspectRatio: isLandscape ? 1.22 : 0.82,
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: crossAxisCount,
+                          crossAxisSpacing: 20,
+                          mainAxisSpacing: 20,
+                          mainAxisExtent: 320,
+                        ),
                         children: [
-                          for (final addon in launchable)
-                            _installedAddonCard(context, addon),
-                          if (launchable.isEmpty)
+                          if (KodiCore.supported)
+                            _LauncherCard(
+                              title: 'Núcleo do AddKo',
+                              subtitle: 'Estado e diagnóstico',
+                              onOpen: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const KodiCorePage(),
+                                ),
+                              ),
+                            ),
+                          for (final addon in addons)
+                            _addonCard(context, addon),
+                          if (addons.isEmpty)
                             _EmptyAddonCard(
-                              initializationError:
-                                  addonInstallController.initializationError,
+                              error: addonInstallController.initializationError,
                             ),
                         ],
                       );
@@ -122,25 +133,42 @@ class LauncherPage extends StatelessWidget {
     exit(0);
   }
 
-  Widget _installedAddonCard(BuildContext context, InstalledAddon addon) {
+  Future<void> _openKodiLegacyAddon(
+      BuildContext context, InstalledAddon addon) async {
+    try {
+      await KodiCore.openLegacyAddon(addon.manifest.id);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Não foi possível abrir ${addon.manifest.name}: $error'),
+        ),
+      );
+    }
+  }
+
+  Widget _addonCard(BuildContext context, InstalledAddon addon) {
     final iconPath = addon.manifest.iconPath ?? 'icon.png';
     final iconFile = File(p.join(addon.installPath, iconPath));
 
     return _LauncherCard(
       title: addon.manifest.name,
       subtitle: '${addon.manifest.id} • v${addon.manifest.version}',
-      icon: Icons.extension_rounded,
       artwork: iconFile.existsSync()
           ? Image.file(
               iconFile,
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const Icon(
-                Icons.extension_rounded,
-                size: 68,
-              ),
+              errorBuilder: (_, __, ___) =>
+                  const Icon(Icons.extension_rounded, size: 68),
             )
           : null,
       onOpen: () {
+        if (KodiCore.supported) {
+          // Classic Kodi addons keep their original Kodi GUI. Flutter remains
+          // the shell and is restored automatically after the addon exits.
+          unawaited(_openKodiLegacyAddon(context, addon));
+          return;
+        }
         Navigator.of(context).push(
           MaterialPageRoute<void>(
             builder: (_) => LegacyAddonPage(
@@ -165,28 +193,28 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(28, 22, 28, 8),
       child: Row(
         children: [
-          Icon(
-            Icons.extension_rounded,
-            color: Theme.of(context).colorScheme.primary,
-            size: 34,
-          ),
+          Icon(Icons.extension_rounded, color: scheme.primary, size: 34),
           const SizedBox(width: 12),
           Text(
             'AddKo',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+            style: Theme.of(context)
+                .textTheme
+                .headlineMedium
+                ?.copyWith(fontWeight: FontWeight.w800),
           ),
           const Spacer(),
           Text(
-            'Kodi Legacy Runtime • v0.1.1',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+            'AddKo • integração do núcleo',
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: scheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -198,14 +226,12 @@ class _LauncherCard extends StatefulWidget {
   const _LauncherCard({
     required this.title,
     required this.subtitle,
-    required this.icon,
     required this.onOpen,
     this.artwork,
   });
 
   final String title;
   final String subtitle;
-  final IconData icon;
   final VoidCallback onOpen;
   final Widget? artwork;
 
@@ -222,7 +248,7 @@ class _LauncherCardState extends State<_LauncherCard> {
 
     return FocusableActionDetector(
       onShowFocusHighlight: (value) => setState(() => _focused = value),
-      actions: {
+      actions: <Type, Action<Intent>>{
         ActivateIntent: CallbackAction<ActivateIntent>(
           onInvoke: (_) {
             widget.onOpen();
@@ -243,36 +269,42 @@ class _LauncherCardState extends State<_LauncherCard> {
             ),
           ),
           child: InkWell(
-            borderRadius: BorderRadius.circular(22),
             onTap: widget.onOpen,
+            borderRadius: BorderRadius.circular(22),
             child: Padding(
               padding: const EdgeInsets.all(22),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
+                  KodiText(
                     widget.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     widget.subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: scheme.onSurfaceVariant),
                   ),
                   const Spacer(),
                   Center(
                     child: SizedBox.square(
                       dimension: 82,
                       child: widget.artwork ??
-                          Icon(widget.icon, size: 68, color: scheme.primary),
+                          Icon(
+                            Icons.extension_rounded,
+                            size: 68,
+                            color: scheme.primary,
+                          ),
                     ),
                   ),
                   const Spacer(),
@@ -292,49 +324,48 @@ class _LauncherCardState extends State<_LauncherCard> {
 }
 
 class _EmptyAddonCard extends StatelessWidget {
-  const _EmptyAddonCard({this.initializationError});
+  const _EmptyAddonCard({this.error});
 
-  final String? initializationError;
+  final String? error;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final hasError = initializationError != null;
+    final hasError = error != null && error!.trim().isNotEmpty;
 
     return Card(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(22),
-        side: BorderSide(color: scheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(22),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              hasError ? Icons.error_outline_rounded : Icons.extension_off_rounded,
-              size: 56,
-              color: hasError ? scheme.error : scheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              hasError ? 'Falha ao abrir addons locais' : 'Nenhum addon instalado',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              hasError
-                  ? initializationError!
-                  : 'Abra a Loja no rodapé para adicionar um repositório e instalar plugins.',
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: hasError ? scheme.error : scheme.onSurfaceVariant,
-                  ),
-            ),
-          ],
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                hasError
+                    ? Icons.error_outline_rounded
+                    : Icons.extension_off_rounded,
+                size: 56,
+                color: hasError ? scheme.error : scheme.onSurfaceVariant,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                hasError
+                    ? 'Falha ao abrir addons locais'
+                    : 'Nenhum addon instalado',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                hasError
+                    ? error!
+                    : 'Abra a Loja para adicionar um repositório ou instalar um ZIP.',
+                textAlign: TextAlign.center,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -363,100 +394,24 @@ class _BottomBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _DockButton(
+          IconButton.filledTonal(
             tooltip: 'Sair',
-            semanticLabel: 'Sair do AddKo',
-            icon: Icons.logout_rounded,
             onPressed: onExit,
+            icon: const Icon(Icons.logout_rounded),
           ),
           const Spacer(),
-          _DockButton(
+          IconButton.filled(
             tooltip: 'Loja',
-            semanticLabel: 'Abrir Loja',
-            icon: Icons.storefront_rounded,
-            prominent: true,
             onPressed: onStore,
+            icon: const Icon(Icons.storefront_rounded),
           ),
           const SizedBox(width: 14),
-          _DockButton(
+          IconButton.filledTonal(
             tooltip: 'Configurações',
-            semanticLabel: 'Abrir Configurações',
-            icon: Icons.settings_rounded,
             onPressed: onSettings,
+            icon: const Icon(Icons.settings_rounded),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _DockButton extends StatefulWidget {
-  const _DockButton({
-    required this.tooltip,
-    required this.semanticLabel,
-    required this.icon,
-    required this.onPressed,
-    this.prominent = false,
-  });
-
-  final String tooltip;
-  final String semanticLabel;
-  final IconData icon;
-  final VoidCallback onPressed;
-  final bool prominent;
-
-  @override
-  State<_DockButton> createState() => _DockButtonState();
-}
-
-class _DockButtonState extends State<_DockButton> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final background = widget.prominent
-        ? scheme.primaryContainer
-        : scheme.surfaceContainerHighest;
-    final foreground = widget.prominent
-        ? scheme.onPrimaryContainer
-        : scheme.onSurfaceVariant;
-
-    return Focus(
-      onFocusChange: (focused) => setState(() => _focused = focused),
-      child: Semantics(
-        button: true,
-        label: widget.semanticLabel,
-        child: Tooltip(
-          message: widget.tooltip,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
-            width: 58,
-            height: 58,
-            decoration: BoxDecoration(
-              color: background,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: _focused ? scheme.primary : scheme.outlineVariant,
-                width: _focused ? 2.5 : 1,
-              ),
-              boxShadow: _focused
-                  ? [
-                      BoxShadow(
-                        color: scheme.shadow.withValues(alpha: 0.2),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ]
-                  : null,
-            ),
-            child: IconButton(
-              tooltip: widget.tooltip,
-              onPressed: widget.onPressed,
-              icon: Icon(widget.icon, color: foreground, size: 29),
-            ),
-          ),
-        ),
       ),
     );
   }

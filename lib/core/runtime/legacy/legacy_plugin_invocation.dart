@@ -12,6 +12,7 @@ class LegacyPluginInvocation {
     required this.shimsPath,
     required this.pythonPaths,
     required this.specialPaths,
+    this.installedAddons = const {},
     this.argv,
   });
 
@@ -27,6 +28,7 @@ class LegacyPluginInvocation {
   final String shimsPath;
   final List<String> pythonPaths;
   final Map<String, String> specialPaths;
+  final Map<String, String> installedAddons;
   final List<String>? argv;
 
   Map<String, Object?> toJson() {
@@ -43,6 +45,7 @@ class LegacyPluginInvocation {
       'shims_path': shimsPath,
       'python_paths': pythonPaths,
       'special_paths': specialPaths,
+      'installed_addons': installedAddons,
       if (argv != null) 'argv': argv,
     };
   }

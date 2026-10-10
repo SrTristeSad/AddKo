@@ -72,7 +72,13 @@ class _PlayerPageState extends State<PlayerPage> {
       return;
     }
 
-    if (request.requiresKodiInputStream) {
+    // media_kit/libmpv already understands ordinary HTTP, HLS, DASH and many
+    // MPEG-TS streams. Kodi addons often request inputstream.adaptive or
+    // inputstream.ffmpegdirect even when the stream has no DRM. Do not block
+    // those streams while the full Kodi binary InputStream ABI is being wired.
+    // Only keep the hard gate for DRM, where the native Kodi/Widevine contract
+    // is actually required.
+    if (request.requiresKodiInputStream && request.hasDrmConfiguration) {
       if (mounted) {
         setState(() => _opening = false);
       }
@@ -87,6 +93,10 @@ class _PlayerPageState extends State<PlayerPage> {
           extras: {
             if (request.mimeType != null) 'mimeType': request.mimeType,
             if (request.title != null) 'title': request.title,
+            if (request.inputStreamAddon != null)
+              'kodiInputStream': request.inputStreamAddon,
+            if (request.manifestType != null)
+              'kodiManifestType': request.manifestType,
           },
         ),
         play: true,
@@ -113,6 +123,8 @@ class _PlayerPageState extends State<PlayerPage> {
   @override
   Widget build(BuildContext context) {
     final request = _request;
+    final needsKodiDrm =
+        request.requiresKodiInputStream && request.hasDrmConfiguration;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -121,7 +133,7 @@ class _PlayerPageState extends State<PlayerPage> {
         foregroundColor: Colors.white,
         title: Text(request.title ?? 'Reprodução'),
       ),
-      body: request.requiresKodiInputStream
+      body: needsKodiDrm
           ? _InputStreamRequired(request: request)
           : Stack(
               fit: StackFit.expand,
@@ -168,25 +180,23 @@ class _InputStreamRequired extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Icon(
-                Icons.extension_rounded,
+                Icons.enhanced_encryption_rounded,
                 size: 64,
                 color: Colors.white,
               ),
               const SizedBox(height: 18),
               Text(
-                'Este vídeo precisa de $addon',
+                'Este vídeo usa $addon com DRM',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       color: Colors.white,
                     ),
               ),
               const SizedBox(height: 12),
-              Text(
-                request.hasDrmConfiguration
-                    ? 'O addon forneceu configuração de InputStream/DRM. O AddKo preservou essas propriedades, mas a ABI binária do Kodi ainda precisa ser conectada ao player.'
-                    : 'O addon solicitou a camada InputStream do Kodi. A URL foi preservada e será entregue ao Binary Addon Host quando essa camada estiver habilitada.',
+              const Text(
+                'Streams InputStream sem DRM já são enviados diretamente ao backend de mídia. Este item contém configuração de licença/DRM e ainda precisa da ABI binária completa do Kodi ligada ao player.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70),
+                style: TextStyle(color: Colors.white70),
               ),
               if (request.manifestType case final manifest? when manifest.isNotEmpty) ...[
                 const SizedBox(height: 10),

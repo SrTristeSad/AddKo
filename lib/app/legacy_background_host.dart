@@ -32,7 +32,12 @@ class LegacyBackgroundHost {
     required this.onMessage,
     required this.onPlayback,
     PlaybackHostController? playbackHost,
-  }) : playbackHost = playbackHost ?? PlaybackHostController.shared;
+  }) : playbackHost = playbackHost ?? PlaybackHostController.shared {
+    _runtime = LegacyPluginRuntime(
+      addonInstallController: addonInstallController,
+      requestHandler: requestHandler,
+    );
+  }
 
   final RepositoryRegistry repositoryRegistry;
   final RepositoryStoreController repositoryStoreController;
@@ -41,11 +46,7 @@ class LegacyBackgroundHost {
   final BackgroundMessageHandler onMessage;
   final BackgroundPlaybackHandler onPlayback;
   final PlaybackHostController playbackHost;
-
-  LegacyPluginRuntime get _runtime => LegacyPluginRuntime(
-        addonInstallController: addonInstallController,
-        requestHandler: requestHandler,
-      );
+  late final LegacyPluginRuntime _runtime;
 
   Future<void> handleServiceEvent(
     String addonId,
@@ -143,9 +144,12 @@ class LegacyBackgroundHost {
       case 'updateaddonrepos':
         try {
           await repositoryRegistry.initialize();
-          await repositoryStoreController.synchronizeAll(
-            repositoryRegistry.sources,
-          );
+          await Future.wait([
+            repositoryStoreController.ensureKodiSystemCatalog(),
+            repositoryStoreController.synchronizeAll(
+              repositoryRegistry.sources,
+            ),
+          ]);
           onMessage('Repositórios atualizados por $sourceAddonId.');
         } on Object catch (error) {
           onMessage('Falha ao atualizar repositórios: $error');
@@ -160,9 +164,9 @@ class LegacyBackgroundHost {
         }
         return;
       case 'installaddon':
-        final targetId = command.argument(0)?.trim();
-        if (targetId != null && targetId.isNotEmpty) {
-          await _installAddon(sourceAddonId, targetId);
+        final target = command.argument(0)?.trim();
+        if (target != null && target.isNotEmpty) {
+          await _installAddon(sourceAddonId, target);
         }
         return;
       case 'runplugin':
@@ -285,13 +289,31 @@ class LegacyBackgroundHost {
 
   Future<void> _installAddon(
     String sourceAddonId,
-    String targetAddonId,
+    String rawTargetAddonId,
   ) async {
+    final targetAddonId = _normalizeAddonId(rawTargetAddonId);
+    if (targetAddonId.isEmpty) {
+      onMessage('$sourceAddonId pediu um addon sem identificador válido.');
+      return;
+    }
+
     try {
       await repositoryRegistry.initialize();
       await addonInstallController.initialize();
 
+      if (addonInstallController.installedById(targetAddonId) != null) {
+        return;
+      }
+
       var candidate = _bestAvailableAddon(targetAddonId);
+      if (candidate == null) {
+        // Kodi components such as inputstream.adaptive and
+        // inputstream.ffmpegdirect live in the official Omega repository, not
+        // necessarily in the third-party repository that requested them.
+        await repositoryStoreController.ensureKodiSystemCatalog();
+        candidate = _bestAvailableAddon(targetAddonId);
+      }
+
       if (candidate == null) {
         await repositoryStoreController.synchronizeAll(
           repositoryRegistry.sources,
@@ -301,7 +323,7 @@ class LegacyBackgroundHost {
 
       if (candidate == null) {
         onMessage(
-          '$sourceAddonId pediu $targetAddonId, mas ele não foi encontrado nos repositórios ativos.',
+          'Addon não encontrado nos repositórios disponíveis: $targetAddonId',
         );
         return;
       }
@@ -326,11 +348,33 @@ class LegacyBackgroundHost {
     }
   }
 
+  String _normalizeAddonId(String rawValue) {
+    var value = rawValue.trim();
+    if (value.length >= 2 &&
+        ((value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'")))) {
+      value = value.substring(1, value.length - 1).trim();
+    }
+    value = value.replaceAll('\\', '/');
+    while (value.endsWith('/')) {
+      value = value.substring(0, value.length - 1);
+    }
+    final slash = value.lastIndexOf('/');
+    if (slash >= 0) {
+      value = value.substring(slash + 1);
+    }
+    return value.trim();
+  }
+
   RepositoryAddonEntry? _bestAvailableAddon(String addonId) {
+    final normalizedId = addonId.toLowerCase();
     RepositoryAddonEntry? selected;
     for (final catalog in repositoryStoreController.catalogs) {
       for (final entry in catalog.addons) {
-        if (entry.manifest.id != addonId || entry.packageUri == null) continue;
+        if (entry.manifest.id.toLowerCase() != normalizedId ||
+            entry.packageUri == null) {
+          continue;
+        }
         if (selected == null ||
             KodiVersion(entry.manifest.version)
                     .compareTo(KodiVersion(selected.manifest.version)) >

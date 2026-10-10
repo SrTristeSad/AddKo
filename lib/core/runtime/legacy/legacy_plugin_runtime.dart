@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import '../../addons/application/addon_install_controller.dart';
 import '../../addons/domain/installed_addon.dart';
 import '../plugin_uri.dart';
+import 'addon_path_guard.dart';
 import 'embedded_python_executor.dart';
 import 'legacy_plugin_invocation.dart';
 import 'legacy_plugin_result.dart';
@@ -42,9 +43,21 @@ class LegacyPluginRuntime {
       return _failure(error.message.toString());
     }
 
-    final addon = addonInstallController.installedById(pluginUri.addonId);
+    var addon = addonInstallController.installedById(pluginUri.addonId);
+    if (addon == null) {
+      // Kodi add-ons are allowed to unpack/install another add-on directly into
+      // special://home/addons and then invoke it immediately. Refresh the disk
+      // registry once before declaring the target missing.
+      await addonInstallController.refreshInstalled();
+      addon = addonInstallController.installedById(pluginUri.addonId);
+    }
     if (addon == null) {
       return _failure('Addon ${pluginUri.addonId} não está instalado.');
+    }
+    if (!addonInstallController.hasRequiredDependencies(addon)) {
+      return _failure(
+        '${addon.manifest.name} está instalado, mas possui dependências obrigatórias incompletas. Abra a Loja e use Corrigir.',
+      );
     }
 
     final entrypoint = addon.manifest.pythonEntrypoint;
@@ -67,9 +80,18 @@ class LegacyPluginRuntime {
     List<String> arguments = const [],
   }) async {
     await addonInstallController.initialize();
-    final addon = addonInstallController.installedById(addonId);
+    var addon = addonInstallController.installedById(addonId);
+    if (addon == null) {
+      await addonInstallController.refreshInstalled();
+      addon = addonInstallController.installedById(addonId);
+    }
     if (addon == null) {
       return _failure('Addon $addonId não está instalado.');
+    }
+    if (!addonInstallController.hasRequiredDependencies(addon)) {
+      return _failure(
+        '${addon.manifest.name} possui dependências obrigatórias incompletas.',
+      );
     }
 
     final entrypoint = addon.manifest.pythonScriptEntrypoint;
@@ -79,7 +101,16 @@ class LegacyPluginRuntime {
       );
     }
 
-    final entrypointPath = p.normalize(p.join(addon.installPath, entrypoint));
+    final entrypointPath = AddonPathGuard.resolveInside(
+      addon.installPath,
+      entrypoint,
+    );
+    if (entrypointPath == null) {
+      return _failure(
+        '${addon.manifest.name} declara um caminho Python inseguro: "$entrypoint".',
+      );
+    }
+
     return _invokeAddon(
       addon: addon,
       entrypoint: entrypoint,
@@ -96,11 +127,29 @@ class LegacyPluginRuntime {
     required String query,
     List<String>? argv,
   }) async {
+    final entrypointPath = AddonPathGuard.resolveInside(
+      addon.installPath,
+      entrypoint,
+    );
+    if (entrypointPath == null) {
+      return _failure(
+        '${addon.manifest.name} declara um caminho Python inseguro: "$entrypoint".',
+      );
+    }
+    if (!await File(entrypointPath).exists()) {
+      return _failure(
+        '${addon.manifest.name} declara o arquivo Python "$entrypoint", mas ele não existe no pacote instalado.',
+      );
+    }
+
     final runtimeFiles = await _runtimeBundle.materialize();
     final directories = await addonInstallController.directories();
     final supportRoot = p.dirname(directories.addonsRootPath);
     final profilePath = p.join(directories.addonDataRootPath, addon.manifest.id);
     await Directory(profilePath).create(recursive: true);
+    // Legacy Kodi addons frequently access special://profile/Database directly
+    // instead of using JSON-RPC. Kodi always exposes this directory.
+    await Directory(p.join(supportRoot, 'Database')).create(recursive: true);
 
     final tempPath = p.join(Directory.systemTemp.path, 'addko');
     await Directory(tempPath).create(recursive: true);
@@ -108,7 +157,7 @@ class LegacyPluginRuntime {
     final invocation = LegacyPluginInvocation(
       addonId: addon.manifest.id,
       addonPath: addon.installPath,
-      entrypointPath: p.normalize(p.join(addon.installPath, entrypoint)),
+      entrypointPath: entrypointPath,
       pluginUrl: invocationUrl,
       handle: _nextHandle++,
       query: query,
@@ -122,6 +171,10 @@ class LegacyPluginRuntime {
         'special://profile': supportRoot,
         'special://userdata': supportRoot,
         'special://temp': tempPath,
+      },
+      installedAddons: {
+        for (final installed in addonInstallController.installedAddons)
+          installed.manifest.id: installed.manifest.version,
       },
       argv: argv,
     );
@@ -155,14 +208,14 @@ class LegacyPluginRuntime {
     final visited = <String>{};
 
     void collect(InstalledAddon current) {
-      if (!visited.add(current.manifest.id)) {
+      if (!visited.add(current.manifest.id.toLowerCase())) {
         return;
       }
 
       for (final dependency in current.manifest.dependencies) {
         if (dependency.optional ||
-            dependency.id.startsWith('xbmc.') ||
-            dependency.id.startsWith('kodi.')) {
+            dependency.id.toLowerCase().startsWith('xbmc.') ||
+            dependency.id.toLowerCase().startsWith('kodi.')) {
           continue;
         }
         final installed = addonInstallController.installedById(dependency.id);
@@ -177,8 +230,16 @@ class LegacyPluginRuntime {
           }
           final library = extension.library?.trim();
           if (library != null && library.isNotEmpty) {
-            result.add(p.normalize(p.join(installed.installPath, library)));
-            addedLibrary = true;
+            final libraryPath = AddonPathGuard.resolveInside(
+              installed.installPath,
+              library,
+            );
+            if (libraryPath != null &&
+                FileSystemEntity.typeSync(libraryPath) !=
+                    FileSystemEntityType.notFound) {
+              result.add(libraryPath);
+              addedLibrary = true;
+            }
           }
         }
         if (!addedLibrary) {
@@ -192,8 +253,8 @@ class LegacyPluginRuntime {
   }
 
   String _queryFor(String rawPluginUrl) {
-    final uri = Uri.parse(rawPluginUrl);
-    return uri.hasQuery ? '?${uri.query}' : '';
+    final queryIndex = rawPluginUrl.indexOf('?');
+    return queryIndex == -1 ? '' : rawPluginUrl.substring(queryIndex);
   }
 
   LegacyPluginResult _failure(String message) {

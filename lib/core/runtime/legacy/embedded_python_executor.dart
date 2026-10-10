@@ -303,6 +303,11 @@ _exit_path = ${literal(exitPath)}
 _bridge_port = $port
 _bridge_token = ${literal(token)}
 
+# The invocation path must be interpreter-local. Android can run several Kodi
+# services/add-ons concurrently in CPython subinterpreters and os.environ is
+# process-global, so relying on ADDKO_CONTEXT_FILE alone can cross-wire them.
+sys._addko_context_file = _context
+
 _old_stdout = sys.stdout
 _old_stderr = sys.stderr
 _old_stdin = sys.stdin
@@ -319,6 +324,7 @@ for _name in (
     'xbmcgui',
     'xbmcplugin',
     'xbmcvfs',
+    'xbmcwsgi',
 ):
     sys.modules.pop(_name, None)
 

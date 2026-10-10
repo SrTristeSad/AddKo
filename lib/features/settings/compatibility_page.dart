@@ -1,268 +1,129 @@
+import '../kodi/kodi_core_page.dart';
+import '../../core/runtime/kodi/kodi_core.dart';
+
 import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../../core/addons/domain/kodi_host_capabilities.dart';
 import '../../core/runtime/legacy/android_python_runtime.dart';
 import '../../core/runtime/legacy/embedded_python_host.dart';
 import '../../core/runtime/legacy/embedded_python_self_test.dart';
 
 class CompatibilityPage extends StatefulWidget {
   const CompatibilityPage({super.key});
-
   @override
-  State<CompatibilityPage> createState() => _CompatibilityPageState();
+  State<CompatibilityPage> createState() => _State();
 }
 
-class _CompatibilityPageState extends State<CompatibilityPage> {
-  EmbeddedPythonProbe _probe = EmbeddedPythonProbe.read();
-  AndroidPythonRuntimeInfo? _androidRuntime;
-  EmbeddedPythonSelfTestResult? _selfTest;
-  String? _prepareError;
-  bool _preparing = false;
-  bool _testing = false;
-
+class _State extends State<CompatibilityPage> {
+  EmbeddedPythonProbe probe = EmbeddedPythonProbe.read();
+  AndroidPythonRuntimeInfo? runtime;
+  EmbeddedPythonSelfTestResult? test;
+  bool busy = false;
+  String? error;
   @override
   void initState() {
     super.initState();
-    if (Platform.isAndroid) {
-      unawaited(_prepareAndroidRuntime());
-    }
+    if (Platform.isAndroid && !KodiCore.supported) unawaited(_prepare());
   }
 
-  Future<void> _prepareAndroidRuntime() async {
-    if (_preparing) return;
-    setState(() {
-      _preparing = true;
-      _prepareError = null;
-    });
+  Future<void> _prepare() async {
+    if (busy) return;
+    setState(() => busy = true);
     try {
-      final info = await AndroidPythonRuntime.prepare();
-      if (!mounted) return;
-      setState(() {
-        _androidRuntime = info;
-        _probe = EmbeddedPythonProbe.read();
-      });
-    } on Object catch (error) {
-      if (!mounted) return;
-      setState(() => _prepareError = error.toString());
-    } finally {
-      if (mounted) setState(() => _preparing = false);
+      runtime = await AndroidPythonRuntime.prepare();
+      probe = EmbeddedPythonProbe.read();
+    } catch (e) {
+      error = e.toString();
     }
+    if (mounted) setState(() => busy = false);
   }
 
-  Future<void> _refresh() async {
-    if (Platform.isAndroid) await _prepareAndroidRuntime();
-    if (!mounted) return;
-    setState(() => _probe = EmbeddedPythonProbe.read());
-  }
-
-  Future<void> _runSelfTest() async {
-    if (_testing) return;
-    setState(() {
-      _testing = true;
-      _selfTest = null;
-    });
-    final result = await runEmbeddedPythonSelfTest();
-    if (!mounted) return;
-    setState(() {
-      _testing = false;
-      _selfTest = result;
-      _probe = EmbeddedPythonProbe.read();
-    });
+  Future<void> _run() async {
+    setState(() => busy = true);
+    test = await runEmbeddedPythonSelfTest();
+    if (mounted) setState(() => busy = false);
   }
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Compatibilidade Kodi'),
-        actions: [
-          IconButton(
-            tooltip: 'Verificar novamente',
-            onPressed: _preparing ? null : () => unawaited(_refresh()),
-            icon: _preparing
-                ? const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh_rounded),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          _StatusCard(
-            icon: Icons.memory_rounded,
-            title: 'Host nativo do Python',
-            ok: _probe.hostLibraryLoaded,
-            detail: _probe.hostLibraryLoaded
-                ? 'libaddko_python_host carregada.'
-                : 'A biblioteca nativa ainda não está disponível nesta plataforma/build.',
-          ),
-          if (Platform.isAndroid)
-            _StatusCard(
-              icon: Icons.folder_zip_rounded,
-              title: 'Runtime Android extraído',
-              ok: _androidRuntime != null,
-              neutralWhenFalse: _preparing,
-              detail: _androidRuntime != null
-                  ? 'Python ${_androidRuntime!.version} • ${_androidRuntime!.abi}\n${_androidRuntime!.home}'
-                  : _preparing
-                      ? 'Preparando a biblioteca padrão do CPython...'
-                      : (_prepareError ?? 'Runtime ainda não preparado.'),
-            ),
-          _StatusCard(
-            icon: Icons.code_rounded,
-            title: 'CPython embarcado',
-            ok: _probe.pythonLibraryLoaded,
-            detail: _probe.pythonLibraryLoaded
-                ? (_probe.version.isEmpty ? 'CPython encontrado.' : _probe.version)
-                : 'libpython não foi encontrada para a ABI atual.',
-          ),
-          _StatusCard(
-            icon: Icons.play_circle_outline_rounded,
-            title: 'Runtime inicializado',
-            ok: _probe.initialized,
-            neutralWhenFalse: true,
-            detail: _probe.initialized
-                ? 'O interpretador está ativo${_probe.home.isEmpty ? '.' : ' em ${_probe.home}.'}'
-                : 'O interpretador será inicializado no primeiro addon executado.',
-          ),
-          if (Platform.isAndroid)
-            Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.science_rounded),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Teste real do runtime',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ),
-                        FilledButton.icon(
-                          onPressed: _testing ? null : () => unawaited(_runSelfTest()),
-                          icon: _testing
-                              ? const SizedBox.square(
-                                  dimension: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.play_arrow_rounded),
-                          label: const Text('TESTAR'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      _selfTest == null
-                          ? 'Executa um subinterpretador e importa módulos nativos e padrão usados por addons.'
-                          : '${_selfTest!.passed ? 'OK' : 'FALHOU'} • ${_selfTest!.message}',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: _selfTest == null
-                                ? scheme.onSurfaceVariant
-                                : _selfTest!.passed
-                                    ? scheme.primary
-                                    : scheme.error,
-                          ),
-                    ),
-                    if (_selfTest?.version.isNotEmpty == true ||
-                        _selfTest?.abi.isNotEmpty == true) ...[
-                      const SizedBox(height: 6),
+  Widget build(BuildContext c) => KodiCore.supported
+      ? const KodiCorePage()
+      : Scaffold(
+          appBar: AppBar(title: const Text('Compatibilidade Kodi')),
+          body: ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              _card(
+                c,
+                'Host nativo do Python',
+                probe.hostLibraryLoaded,
+                probe.hostLibraryLoaded
+                    ? 'libaddko_python_host carregada.'
+                    : 'Biblioteca nativa indisponível.',
+              ),
+              if (Platform.isAndroid)
+                _card(
+                  c,
+                  'Runtime Android extraído',
+                  runtime != null,
+                  runtime == null
+                      ? (error ?? 'Preparando...')
+                      : 'Python ${runtime!.version} • ${runtime!.abi}',
+                ),
+              _card(
+                c,
+                'CPython embarcado',
+                probe.pythonLibraryLoaded,
+                probe.pythonLibraryLoaded
+                    ? probe.version
+                    : 'libpython não encontrada.',
+              ),
+              Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        '${_selfTest!.version} • ${_selfTest!.abi}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
+                        'Núcleo Kodi 21 (Omega)',
+                        style: Theme.of(c).textTheme.titleMedium,
                       ),
+                      const SizedBox(height: 8),
+                      for (final e in KodiHostCapabilities.versions.entries)
+                        Text('${e.key} • ${e.value}'),
                     ],
-                  ],
+                  ),
                 ),
               ),
-            ),
-          if (_probe.error.trim().isNotEmpty)
-            Card(
-              margin: const EdgeInsets.only(top: 6),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.info_outline_rounded,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: SelectableText(
-                        _probe.error,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                      ),
-                    ),
-                  ],
+              Card(
+                child: ListTile(
+                  title: const Text('Teste real do runtime'),
+                  subtitle: Text(
+                    test == null
+                        ? 'Importa módulos padrão do CPython.'
+                        : '${test!.passed ? 'OK' : 'FALHOU'} • ${test!.message}',
+                  ),
+                  trailing: FilledButton(
+                    onPressed: busy ? null : () => unawaited(_run()),
+                    child: const Text('TESTAR'),
+                  ),
                 ),
               ),
-            ),
-        ],
+            ],
+          ),
+        );
+  Widget _card(BuildContext c, String t, bool ok, String d) => Card(
+    margin: const EdgeInsets.only(bottom: 12),
+    child: ListTile(
+      leading: Icon(
+        ok ? Icons.check_circle : Icons.info_outline,
+        color: ok ? Theme.of(c).colorScheme.primary : null,
       ),
-    );
-  }
-}
-
-class _StatusCard extends StatelessWidget {
-  const _StatusCard({
-    required this.icon,
-    required this.title,
-    required this.ok,
-    required this.detail,
-    this.neutralWhenFalse = false,
-  });
-
-  final IconData icon;
-  final String title;
-  final bool ok;
-  final String detail;
-  final bool neutralWhenFalse;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final statusColor = ok
-        ? scheme.primary
-        : neutralWhenFalse
-            ? scheme.onSurfaceVariant
-            : scheme.error;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-        leading: CircleAvatar(
-          backgroundColor: statusColor.withValues(alpha: 0.12),
-          child: Icon(icon, color: statusColor),
-        ),
-        title: Text(title),
-        subtitle: Text(detail),
-        trailing: Icon(
-          ok
-              ? Icons.check_circle_rounded
-              : neutralWhenFalse
-                  ? Icons.schedule_rounded
-                  : Icons.error_outline_rounded,
-          color: statusColor,
-        ),
-      ),
-    );
-  }
+      title: Text(t),
+      subtitle: Text(d),
+    ),
+  );
 }

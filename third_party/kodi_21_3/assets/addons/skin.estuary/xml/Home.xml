@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AddKo owns navigation. Kodi keeps its renderer for video and native addon dialogs. -->
+<window><defaultcontrol always="true">1</defaultcontrol><controls>
+<control type="image" id="1"><left>0</left><top>0</top><width>1920</width><height>1080</height><texture colordiffuse="FF000000">colors/white.png</texture></control>
+</controls></window>

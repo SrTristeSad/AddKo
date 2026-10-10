@@ -1,0 +1,12 @@
+[
+  {
+    "id": "inputstream.adaptive",
+    "sha256": "5bec8b8ca1f1ca8264e32455cb34b2939e523f9bdb18cd65d7383d18afdf04cb",
+    "version": "21.5.25"
+  },
+  {
+    "id": "inputstream.ffmpegdirect",
+    "sha256": "26b0f54cfd1964ab78c802a218c2bd6053d959cdee1f65ddc8d6145807efdc80",
+    "version": "21.3.8"
+  }
+]

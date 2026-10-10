@@ -31,6 +31,7 @@ void main() {
     expect(manifest.name, 'Example');
     expect(manifest.version, '1.2.3');
     expect(manifest.isPythonPlugin, isTrue);
+    expect(manifest.isPythonExecutable, isTrue);
     expect(manifest.pythonEntrypoint, 'default.py');
     expect(manifest.dependencies, hasLength(2));
     expect(manifest.dependencies.last.optional, isTrue);
@@ -48,6 +49,7 @@ void main() {
 
     expect(manifest.isPythonPlugin, isFalse);
     expect(manifest.isPythonScript, isTrue);
+    expect(manifest.isPythonExecutable, isTrue);
     expect(manifest.pythonScriptEntrypoint, 'service.py');
   });
 
@@ -64,7 +66,59 @@ void main() {
     final manifest = parser.parse(xml);
 
     expect(manifest.isPythonService, isTrue);
+    expect(manifest.isPythonExecutable, isTrue);
     expect(manifest.pythonServiceEntrypoint, 'service.py');
     expect(manifest.pythonServiceStartMode, 'startup');
+  });
+
+  test('recognizes Kodi Omega python specialty extension points', () {
+    const xml = '''
+<addon id="service.subtitles.example" name="Subtitle Example" version="1.0.0" provider-name="AddKo">
+  <extension point="xbmc.subtitle.module" library="main.py" />
+</addon>
+''';
+
+    final manifest = parser.parse(xml);
+
+    expect(manifest.isPythonExecutable, isTrue);
+    expect(manifest.pythonEntrypointFor('xbmc.subtitle.module'), 'main.py');
+    expect(
+      manifest.pythonExecutableExtensions.single.point,
+      'xbmc.subtitle.module',
+    );
+  });
+
+  test('recognizes Kodi binary addon extension and Android library', () {
+    const xml = '''
+<addon id="inputstream.example" name="InputStream Example" version="1.0.0" provider-name="AddKo">
+  <requires>
+    <import addon="kodi.binary.instance.inputstream" version="3.3.0" />
+  </requires>
+  <extension point="kodi.inputstream" library_android="libinputstream.example.so" name="example" />
+</addon>
+''';
+
+    final manifest = parser.parse(xml);
+    final extension = manifest.binaryExtensions.single;
+
+    expect(manifest.isBinaryAddon, isTrue);
+    expect(extension.point, 'kodi.inputstream');
+    expect(
+      manifest.binaryLibraryFor(extension, platform: 'android'),
+      'libinputstream.example.so',
+    );
+  });
+
+  test('recognizes web interfaces without treating them as python plugins', () {
+    const xml = '''
+<addon id="webinterface.example" name="Web Example" version="1.0.0" provider-name="AddKo">
+  <extension point="xbmc.webinterface" entry="index.html" />
+</addon>
+''';
+
+    final manifest = parser.parse(xml);
+
+    expect(manifest.isWebInterface, isTrue);
+    expect(manifest.isPythonPlugin, isFalse);
   });
 }

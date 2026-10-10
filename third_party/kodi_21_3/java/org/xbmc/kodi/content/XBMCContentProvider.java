@@ -1,0 +1,12 @@
+package org.xbmc.kodi.content;
+
+import android.content.ContentProvider;
+
+/**
+ * Created by koyin on 17/12/2017.
+ */
+
+public abstract class XBMCContentProvider extends ContentProvider
+{
+  public static final String AUTHORITY_ROOT = "com.srtristesad.addko.kodi";
+}

@@ -26,6 +26,31 @@ void main() {
     expect(plan.canInstall, isTrue);
   });
 
+  test('treats Kodi Omega binary globals as host-provided virtual addons', () {
+    final root = _entry('''
+<addon id="inputstream.demo" name="Binary Demo" version="1.0.0" provider-name="AddKo">
+  <requires>
+    <import addon="kodi.binary.global.main" version="2.0.2" />
+    <import addon="kodi.binary.global.general" version="1.0.5" />
+    <import addon="kodi.binary.global.gui" version="5.15.0" />
+    <import addon="kodi.binary.global.filesystem" version="1.1.9" />
+    <import addon="kodi.binary.global.tools" version="1.0.4" />
+    <import addon="kodi.binary.instance.inputstream" version="3.3.0" />
+  </requires>
+  <extension point="kodi.inputstream" library_android-aarch64="inputstream.demo.so" />
+</addon>
+''');
+
+    final plan = const AddonDependencyResolver().resolve(
+      root: root,
+      catalogs: const [],
+      installedAddons: const [],
+    );
+
+    expect(plan.canInstall, isTrue);
+    expect(plan.issues, isEmpty);
+  });
+
   test('rejects an xbmc host API version newer than AddKo provides', () {
     final root = _entry('''
 <addon id="plugin.video.future" name="Future" version="1.0.0" provider-name="AddKo">

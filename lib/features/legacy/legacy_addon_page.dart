@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/addons/domain/installed_addon.dart';
 import '../../core/addons/domain/kodi_version.dart';
@@ -36,6 +37,7 @@ class LegacyAddonPage extends StatefulWidget {
 
 class _LegacyAddonPageState extends State<LegacyAddonPage> {
   final List<String> _history = [];
+  final Map<String, LegacyPluginResult> _listingCache = {};
 
   LegacyPluginResult? _result;
   String? _currentUrl;
@@ -47,12 +49,28 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
     unawaited(_open('plugin://${widget.addon.manifest.id}/', pushHistory: false));
   }
 
-  Future<void> _open(String url, {bool pushHistory = true}) async {
+  Future<void> _open(
+    String url, {
+    bool pushHistory = true,
+    bool preferCache = false,
+  }) async {
     if (_loading && _currentUrl == url) {
       return;
     }
 
     final previousUrl = _currentUrl;
+    if (preferCache) {
+      final cached = _listingCache[url];
+      if (cached != null) {
+        setState(() {
+          _loading = false;
+          _currentUrl = url;
+          _result = cached;
+        });
+        return;
+      }
+    }
+
     setState(() {
       _loading = true;
       _currentUrl = url;
@@ -63,8 +81,22 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
       return;
     }
 
-    if (pushHistory && previousUrl != null && result.succeeded) {
+    // Kodi's updateListing flag means "replace the current container" rather
+    // than create another navigation level. Respect it so plugins that paginate
+    // or refresh in place do not build a broken back-stack.
+    if (pushHistory &&
+        previousUrl != null &&
+        result.succeeded &&
+        !result.updateListing) {
       _history.add(previousUrl);
+    }
+
+    if (result.succeeded &&
+        result.directoryEnded &&
+        result.directorySucceeded &&
+        result.cacheToDisc &&
+        result.resolvedItem == null) {
+      _listingCache[url] = result;
     }
 
     setState(() {
@@ -135,6 +167,7 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
       case 'container.refresh':
         final current = _currentUrl;
         if (current != null) {
+          _listingCache.remove(current);
           await _open(current, pushHistory: false);
         }
         return;
@@ -206,10 +239,23 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
     }
   }
 
-  Future<void> _installAddonFromRepositories(String addonId) async {
+  Future<void> _installAddonFromRepositories(String rawAddonId) async {
+    final addonId = _normalizeAddonId(rawAddonId);
+    if (addonId.isEmpty) {
+      _showMessage('O addon solicitou uma dependência sem identificador válido.');
+      return;
+    }
+
     try {
       await widget.repositoryRegistry.initialize();
       await widget.runtime.addonInstallController.initialize();
+
+      if (widget.runtime.addonInstallController.installedById(addonId) != null) {
+        return;
+      }
+
+      // Binary video components such as inputstream.adaptive and
+      // inputstream.ffmpegdirect live in the official Kodi Omega catalog.
       await widget.repositoryStoreController.ensureKodiSystemCatalog();
 
       var candidate = _bestAvailableAddon(addonId);
@@ -242,6 +288,7 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
         return;
       }
 
+      _listingCache.clear();
       _showMessage('${candidate.manifest.name} instalado pela Loja do AddKo.');
     } on Object catch (error) {
       if (!mounted) return;
@@ -249,11 +296,31 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
     }
   }
 
+  String _normalizeAddonId(String rawValue) {
+    var value = rawValue.trim();
+    if (value.length >= 2 &&
+        ((value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'")))) {
+      value = value.substring(1, value.length - 1).trim();
+    }
+    value = value.replaceAll('\\', '/');
+    while (value.endsWith('/')) {
+      value = value.substring(0, value.length - 1);
+    }
+    final slash = value.lastIndexOf('/');
+    if (slash >= 0) {
+      value = value.substring(slash + 1);
+    }
+    return value.trim();
+  }
+
   RepositoryAddonEntry? _bestAvailableAddon(String addonId) {
+    final normalizedId = addonId.toLowerCase();
     RepositoryAddonEntry? selected;
     for (final catalog in widget.repositoryStoreController.catalogs) {
       for (final entry in catalog.addons) {
-        if (entry.manifest.id != addonId || entry.packageUri == null) {
+        if (entry.manifest.id.toLowerCase() != normalizedId ||
+            entry.packageUri == null) {
           continue;
         }
         if (selected == null ||
@@ -298,6 +365,7 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
   Future<void> _refreshLocalAddons() async {
     try {
       await widget.runtime.addonInstallController.refreshInstalled();
+      _listingCache.clear();
       if (!mounted) return;
       _showMessage('Lista local de addons atualizada.');
     } on Object catch (error) {
@@ -336,10 +404,13 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
   }
 
   void _showRuntimeCommandError(LegacyPluginResult result) {
+    final location = result.errorLocation?.trim();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          result.errorMessage ?? 'Falha ao executar comando do addon.',
+          location?.isNotEmpty == true
+              ? '${result.errorMessage ?? 'Falha ao executar comando do addon.'}\n$location'
+              : result.errorMessage ?? 'Falha ao executar comando do addon.',
         ),
       ),
     );
@@ -374,7 +445,7 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
       return true;
     }
     final previous = _history.removeLast();
-    await _open(previous, pushHistory: false);
+    await _open(previous, pushHistory: false, preferCache: true);
     return false;
   }
 
@@ -418,7 +489,10 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
               tooltip: 'Atualizar',
               onPressed: _currentUrl == null || _loading
                   ? null
-                  : () => unawaited(_open(_currentUrl!, pushHistory: false)),
+                  : () {
+                      _listingCache.remove(_currentUrl);
+                      unawaited(_open(_currentUrl!, pushHistory: false));
+                    },
               icon: const Icon(Icons.refresh_rounded),
             ),
             const SizedBox(width: 8),
@@ -441,17 +515,32 @@ class _LegacyAddonPageState extends State<LegacyAddonPage> {
     if (!result.succeeded) {
       return _RuntimeError(
         message: result.errorMessage ?? 'Falha desconhecida ao executar o addon.',
+        errorType: result.errorType,
+        location: result.errorLocation,
         logs: result.logs,
         onRetry: _currentUrl == null
             ? null
-            : () => unawaited(_open(_currentUrl!, pushHistory: false)),
+            : () {
+                _listingCache.remove(_currentUrl);
+                unawaited(_open(_currentUrl!, pushHistory: false));
+              },
       );
     }
 
     if (result.items.isEmpty) {
       return Stack(
         children: [
-          const Center(child: Text('O addon não adicionou itens a esta pasta.')),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Text(
+                result.directoryEnded
+                    ? 'O addon concluiu esta pasta sem retornar itens.'
+                    : 'O addon terminou sem chamar endOfDirectory e sem adicionar itens.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
           if (_loading) const LinearProgressIndicator(),
         ],
       );
@@ -597,6 +686,9 @@ class _Artwork extends StatelessWidget {
         child: Image.network(
           value,
           fit: BoxFit.cover,
+          cacheWidth: 112,
+          cacheHeight: 112,
+          filterQuality: FilterQuality.low,
           errorBuilder: (_, __, ___) => Icon(fallback, size: 38),
         ),
       );
@@ -611,61 +703,112 @@ class _RuntimeError extends StatelessWidget {
     required this.message,
     required this.logs,
     required this.onRetry,
+    this.errorType,
+    this.location,
   });
 
   final String message;
+  final String? errorType;
+  final String? location;
   final List<String> logs;
   final VoidCallback? onRetry;
 
+  String get _diagnosticText {
+    final parts = <String>[
+      if (errorType?.trim().isNotEmpty == true) 'Tipo: ${errorType!.trim()}',
+      'Erro: $message',
+      if (location?.trim().isNotEmpty == true) 'Local: ${location!.trim()}',
+      if (logs.isNotEmpty) '',
+      if (logs.isNotEmpty) ...logs,
+    ];
+    return parts.join('\n');
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760),
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.error_outline_rounded,
-                size: 58,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              if (logs.isNotEmpty) ...[
-                const SizedBox(height: 18),
-                ExpansionTile(
-                  title: const Text('Log do addon'),
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      constraints: const BoxConstraints(maxHeight: 260),
-                      padding: const EdgeInsets.all(12),
-                      child: SingleChildScrollView(
-                        child: SelectableText(logs.join('\n')),
+    final locationText = location?.trim();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 860),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(28, 24, 28, 36),
+              children: [
+                Icon(
+                  Icons.error_outline_rounded,
+                  size: 58,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                if (locationText?.isNotEmpty == true) ...[
+                  const SizedBox(height: 10),
+                  SelectableText(
+                    locationText!,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                ],
+                if (logs.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  ExpansionTile(
+                    title: const Text('Log do addon'),
+                    trailing: const Icon(Icons.expand_more_rounded),
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        constraints: BoxConstraints(
+                          maxHeight: constraints.maxHeight * 0.48,
+                        ),
+                        padding: const EdgeInsets.all(12),
+                        child: SingleChildScrollView(
+                          child: SelectableText(logs.join('\n')),
+                        ),
                       ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 18),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 12,
+                  runSpacing: 10,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        await Clipboard.setData(
+                          ClipboardData(text: _diagnosticText),
+                        );
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Diagnóstico copiado.'),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_rounded),
+                      label: const Text('Copiar diagnóstico'),
                     ),
+                    if (onRetry != null)
+                      FilledButton.icon(
+                        onPressed: onRetry,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('Tentar novamente'),
+                      ),
                   ],
                 ),
               ],
-              if (onRetry != null) ...[
-                const SizedBox(height: 18),
-                FilledButton.icon(
-                  onPressed: onRetry,
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Tentar novamente'),
-                ),
-              ],
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
