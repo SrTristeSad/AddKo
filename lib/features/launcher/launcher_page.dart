@@ -17,7 +17,6 @@ import '../legacy/legacy_flutter_ui_bridge.dart';
 import '../settings/settings_page.dart';
 import '../store/store_page.dart';
 import '../kodi/kodi_core_page.dart';
-import '../kodi/native_addon_page.dart';
 import '../../core/runtime/kodi/kodi_core.dart';
 
 class LauncherPage extends StatelessWidget {
@@ -134,6 +133,20 @@ class LauncherPage extends StatelessWidget {
     exit(0);
   }
 
+  Future<void> _openKodiLegacyAddon(
+      BuildContext context, InstalledAddon addon) async {
+    try {
+      await KodiCore.openLegacyAddon(addon.manifest.id);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Não foi possível abrir ${addon.manifest.name}: $error'),
+        ),
+      );
+    }
+  }
+
   Widget _addonCard(BuildContext context, InstalledAddon addon) {
     final iconPath = addon.manifest.iconPath ?? 'icon.png';
     final iconFile = File(p.join(addon.installPath, iconPath));
@@ -151,8 +164,9 @@ class LauncherPage extends StatelessWidget {
           : null,
       onOpen: () {
         if (KodiCore.supported) {
-          Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => NativeAddonPage(addon: addon)));
+          // Classic Kodi addons keep their original Kodi GUI. Flutter remains
+          // the shell and is restored automatically after the addon exits.
+          unawaited(_openKodiLegacyAddon(context, addon));
           return;
         }
         Navigator.of(context).push(
