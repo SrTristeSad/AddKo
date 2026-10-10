@@ -6,22 +6,42 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final calls = <Map<String, dynamic>>[];
   dynamic Function(Map<String, dynamic>) respond = (_) => 'OK';
+
   setUp(() {
     calls.clear();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(KodiCore.channel, (call) async {
-      if (call.method == 'status') return {'ready': true};
+      if (call.method == 'status') {
+        return {'bundled': true, 'ready': true, 'isolated': true};
+      }
+      if (call.method == 'openLegacyAddon' || call.method == 'openKodi') {
+        calls.add({
+          'method': call.method,
+          'params': Map<String, dynamic>.from(call.arguments as Map),
+        });
+        return null;
+      }
+      if (call.method == 'legacyGui') {
+        return null;
+      }
+
       final request = Map<String, dynamic>.from(
-          jsonDecode((call.arguments as Map)['request'] as String) as Map);
+        jsonDecode((call.arguments as Map)['request'] as String) as Map,
+      );
       calls.add(request);
-      return jsonEncode(
-          {'jsonrpc': '2.0', 'id': request['id'], 'result': respond(request)});
+      return jsonEncode({
+        'jsonrpc': '2.0',
+        'id': request['id'],
+        'result': respond(request),
+      });
     });
     respond = (_) => 'OK';
   });
+
   tearDown(() => TestDefaultBinaryMessengerBinding
       .instance.defaultBinaryMessenger
       .setMockMethodCallHandler(KodiCore.channel, null));
+
   test('native directory preserves plugin folder URLs and content order',
       () async {
     respond = (_) => {
@@ -44,20 +64,28 @@ void main() {
     expect(calls.single['method'], 'Files.GetDirectory');
     expect((calls.single['params'] as Map)['sort'], {'method': 'none'});
   });
-  test('enabling scans native manager without activating Kodi menus', () async {
-    await KodiCore.prepareAddon('plugin.video.example');
-    expect(calls.map((e) => e['method']), [
-      'Addons.ExecuteAddon',
-      'Addons.GetAddonDetails',
-      'Addons.SetAddonEnabled'
-    ]);
-    expect((calls.first['params'] as Map)['params'], ['refresh', '']);
+
+  test('legacy addon launch uses isolated Android activity contract', () async {
+    await KodiCore.openLegacyAddon('plugin.video.example');
+    expect(calls, hasLength(1));
+    expect(calls.single['method'], 'openLegacyAddon');
+    expect(
+      (calls.single['params'] as Map)['addonId'],
+      'plugin.video.example',
+    );
   });
+
+  test('prepare addon only validates isolated runtime availability', () async {
+    await KodiCore.prepareAddon('plugin.video.example');
+    expect(calls, isEmpty);
+  });
+
   test('invalid directory result produces visible failure', () async {
     respond = (_) => 'OK';
     await expectLater(
         KodiCore.directory('plugin://example/'), throwsStateError);
   });
+
   test('playback gives unresolved plugin URL to the native player', () async {
     await KodiCore.rpc('Player.Open', {
       'item': {'file': 'plugin://example/?play=1'}
@@ -65,6 +93,7 @@ void main() {
     expect((calls.single['params'] as Map)['item'],
         {'file': 'plugin://example/?play=1'});
   });
+
   test('native errors are propagated, not converted to success', () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(KodiCore.channel, (call) async {
@@ -78,6 +107,7 @@ void main() {
     });
     await expectLater(KodiCore.rpc('Player.Open'), throwsStateError);
   });
+
   test('rejects mismatched native response IDs', () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
