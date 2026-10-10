@@ -16,8 +16,13 @@ class KodiCore {
 
   static Future<Map<String, dynamic>> status() async =>
       await channel.invokeMapMethod<String, dynamic>('status') ?? {};
+
   static Future<void> allowLocalFiles() =>
       channel.invokeMethod<void>('storage');
+
+  static Future<void> setLegacyGui(bool enabled) =>
+      channel.invokeMethod<void>('legacyGui', {'enabled': enabled});
+
   static Future<void> ensureReady() async {
     for (var i = 0; i < 120; i++) {
       final state = await status();
@@ -38,12 +43,15 @@ class KodiCore {
     });
     if (raw == null) throw StateError('Resposta vazia do núcleo.');
     final response = jsonDecode(raw);
-    if (response is! Map || response['id'] != id)
+    if (response is! Map || response['id'] != id) {
       throw StateError('Resposta inválida do núcleo.');
-    if (response.containsKey('error'))
+    }
+    if (response.containsKey('error')) {
       throw StateError('$method: ${response['error']}');
-    if (!response.containsKey('result'))
+    }
+    if (!response.containsKey('result')) {
       throw StateError('$method: resultado ausente.');
+    }
     return response['result'];
   }
 
@@ -70,6 +78,25 @@ class KodiCore {
     throw StateError('O Kodi não conseguiu habilitar $id. $lastError');
   }
 
+  /// Opens a classic Kodi plugin inside Kodi's own GUI.
+  ///
+  /// Flutter remains the AddKo shell, but while this call activates the plugin
+  /// Kodi owns rendering and input. Android restores Flutter automatically when
+  /// the Kodi window returns to Home.
+  static Future<void> openLegacyAddon(String id) async {
+    await prepareAddon(id);
+    await setLegacyGui(true);
+    try {
+      await rpc('GUI.ActivateWindow', {
+        'window': 'videos',
+        'parameters': ['plugin://$id/', 'return'],
+      });
+    } catch (_) {
+      await setLegacyGui(false);
+      rethrow;
+    }
+  }
+
   static Future<List<Map<String, dynamic>>> directory(String url) async {
     final result = await rpc('Files.GetDirectory', {
       'directory': url,
@@ -77,8 +104,9 @@ class KodiCore {
       'properties': ['title', 'thumbnail', 'art', 'plot'],
       'sort': {'method': 'none'}
     });
-    if (result is! Map || result['files'] is! List)
+    if (result is! Map || result['files'] is! List) {
       throw StateError('O addon não retornou um diretório válido.');
+    }
     return (result['files'] as List)
         .map((e) => Map<String, dynamic>.from(e as Map))
         .toList();
