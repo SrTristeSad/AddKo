@@ -14,6 +14,7 @@ dependencies:
     sdk: flutter
   path: ^1.9.1
   path_provider: ^2.1.5
+  pub_semver: ^2.2.0
   video_player: ^2.9.5
 
 dev_dependencies:
