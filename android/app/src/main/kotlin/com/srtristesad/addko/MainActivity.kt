@@ -1,6 +1,7 @@
 package com.srtristesad.addko
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -15,6 +16,13 @@ class MainActivity : FlutterActivity() {
         private const val CHANNEL = "addko/system"
         private const val PICK_ADDKO_REQUEST = 5101
         private const val MAX_PACKAGE_BYTES = 16L * 1024L * 1024L
+        private val BLOCKED_URI_SCHEMES = setOf(
+            "file",
+            "content",
+            "data",
+            "javascript",
+            "intent",
+        )
     }
 
     private var pendingPickerResult: MethodChannel.Result? = null
@@ -26,9 +34,41 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "pickAddko" -> openAddkoPicker(result)
+                    "openUri" -> openExternalUri(call.argument<String>("uri"), result)
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    private fun openExternalUri(raw: String?, result: MethodChannel.Result) {
+        val uri = try {
+            raw?.trim()?.takeIf { it.isNotEmpty() }?.let(Uri::parse)
+        } catch (_: Throwable) {
+            null
+        }
+
+        val scheme = uri?.scheme?.lowercase()
+        if (uri == null || scheme.isNullOrBlank() || scheme in BLOCKED_URI_SCHEMES) {
+            result.error("invalid_uri", "URI externo inválido ou não permitido.", null)
+            return
+        }
+
+        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+            addCategory(Intent.CATEGORY_BROWSABLE)
+        }
+
+        try {
+            startActivity(intent)
+            result.success(true)
+        } catch (_: ActivityNotFoundException) {
+            result.success(false)
+        } catch (error: Throwable) {
+            result.error(
+                "open_uri_failed",
+                error.message ?: error.javaClass.simpleName,
+                null,
+            )
+        }
     }
 
     private fun openAddkoPicker(result: MethodChannel.Result) {
