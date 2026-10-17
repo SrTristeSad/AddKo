@@ -281,6 +281,7 @@ class _HomePageState extends State<_HomePage> {
               initialDocument: document,
               allowNetworkImages: plugin.manifest.permissions
                   .contains(PluginPermission.network),
+              pluginRoot: plugin.directory.path,
               onAction: session.call,
             ),
           ),

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -8,6 +9,8 @@ class PluginUiDocument {
   static const int maxNodes = 256;
   static const int maxDepth = 16;
   static const int maxFields = 64;
+  static const int maxNavigationDepth = 32;
+  static const int maxTabs = 8;
   static const int maxTextLength = 16 * 1024;
   static const int maxActionPayloadBytes = 8 * 1024;
   static const int maxFormPayloadBytes = 64 * 1024;
@@ -117,6 +120,7 @@ class PluginUiNode {
       'checkbox',
       'switch',
       'select',
+      'tabs',
     };
     if (!allowed.contains(type)) {
       throw PluginUiException('Componente de UI não suportado: $type');
@@ -146,7 +150,16 @@ class PluginUiNode {
       }
     }
 
-    final properties = <String, Object?>{};
+    final navigation = _enumString(
+      map['navigation'],
+      field: '$type.navigation',
+      fallback: 'replace',
+      allowed: const <String>{'replace', 'push', 'pop'},
+    );
+
+    final properties = <String, Object?>{
+      'navigation': navigation,
+    };
     final children = <PluginUiNode>[];
 
     if (action != null) {
@@ -177,8 +190,10 @@ class PluginUiNode {
         field: 'button.label',
         max: 256,
       );
-      if (action == null) {
-        throw const PluginUiException('button.action é obrigatório.');
+      if (action == null && navigation != 'pop') {
+        throw const PluginUiException(
+          'button.action é obrigatório, exceto com navigation="pop".',
+        );
       }
       properties['enabled'] = map['enabled'] is bool ? map['enabled'] : true;
       properties['variant'] = _enumString(
@@ -188,11 +203,16 @@ class PluginUiNode {
         allowed: const <String>{'primary', 'tonal', 'outline', 'text'},
       );
     } else if (type == 'image') {
-      properties['src'] = _boundedString(
+      final source = _boundedString(
         map['src'],
         field: 'image.src',
         max: 2048,
       );
+      properties['src'] = source;
+      final assetPath = _assetPathFromSource(source);
+      if (assetPath != null) {
+        properties['assetPath'] = assetPath;
+      }
       properties['alt'] = _optionalBoundedString(
         map['alt'],
         field: 'image.alt',
@@ -298,8 +318,7 @@ class PluginUiNode {
       properties['value'] = map['value'] is bool ? map['value'] : false;
       properties['enabled'] = map['enabled'] is bool ? map['enabled'] : true;
     } else if (type == 'select') {
-      final name = _fieldName(map, type, budget);
-      properties['name'] = name;
+      properties['name'] = _fieldName(map, type, budget);
       properties['label'] = _optionalBoundedString(
         map['label'],
         field: 'select.label',
@@ -335,6 +354,50 @@ class PluginUiNode {
       }
       properties['options'] = List<String>.unmodifiable(options);
       properties['value'] = selected;
+    } else if (type == 'tabs') {
+      final rawTabs = map['tabs'];
+      if (rawTabs is! List ||
+          rawTabs.isEmpty ||
+          rawTabs.length > PluginUiDocument.maxTabs) {
+        throw const PluginUiException(
+          'tabs.tabs deve conter entre 1 e 8 abas.',
+        );
+      }
+
+      final labels = <String>[];
+      for (final rawTab in rawTabs) {
+        if (rawTab is! Map) {
+          throw const PluginUiException('tabs.tabs contém item inválido.');
+        }
+        final tab = _stringMap(rawTab);
+        final label = _boundedString(
+          tab['label'],
+          field: 'tabs.tabs.label',
+          max: 64,
+        );
+        if (labels.contains(label)) {
+          throw PluginUiException('Rótulo de aba duplicado: $label');
+        }
+        final child = tab['child'];
+        if (child is! Map) {
+          throw const PluginUiException('tabs.tabs.child deve ser um componente.');
+        }
+        labels.add(label);
+        children.add(
+          PluginUiNode._parse(
+            _stringMap(child),
+            depth: depth + 1,
+            budget: budget,
+          ),
+        );
+      }
+      properties['labels'] = List<String>.unmodifiable(labels);
+      properties['index'] = _boundedNumber(
+        map['index'],
+        fallback: 0,
+        min: 0,
+        max: labels.length - 1,
+      ).toInt();
     }
 
     return PluginUiNode._(
@@ -389,11 +452,13 @@ class PluginUiPage extends StatefulWidget {
     required this.initialDocument,
     required this.onAction,
     required this.allowNetworkImages,
+    this.pluginRoot,
   });
 
   final PluginUiDocument initialDocument;
   final PluginUiAction onAction;
   final bool allowNetworkImages;
+  final String? pluginRoot;
 
   @override
   State<PluginUiPage> createState() => _PluginUiPageState();
@@ -402,6 +467,7 @@ class PluginUiPage extends StatefulWidget {
 class _PluginUiPageState extends State<PluginUiPage> {
   late PluginUiDocument _document;
   late Map<String, Object?> _formValues;
+  final List<_PluginUiSnapshot> _history = <_PluginUiSnapshot>[];
   bool _busy = false;
   int _documentVersion = 0;
 
@@ -432,9 +498,48 @@ class _PluginUiPageState extends State<PluginUiPage> {
     });
   }
 
+  void _pushDocument(PluginUiDocument next) {
+    if (_history.length >= PluginUiDocument.maxNavigationDepth) {
+      throw const PluginUiException(
+        'A navegação excedeu o limite de 32 telas.',
+      );
+    }
+    setState(() {
+      _history.add(
+        _PluginUiSnapshot(
+          document: _document,
+          formValues: Map<String, Object?>.of(_formValues),
+        ),
+      );
+      _document = next;
+      _formValues = Map<String, Object?>.of(next.initialFormValues);
+      _documentVersion += 1;
+    });
+  }
+
+  void _popDocument() {
+    if (_history.isEmpty) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    final previous = _history.removeLast();
+    setState(() {
+      _document = previous.document;
+      _formValues = Map<String, Object?>.of(previous.formValues);
+      _documentVersion += 1;
+    });
+  }
+
   Future<void> _runAction(PluginUiNode node) async {
+    if (_busy) return;
+    final navigation = node.string('navigation') ?? 'replace';
     final action = node.action;
-    if (action == null || _busy) return;
+
+    if (navigation == 'pop' && action == null) {
+      _popDocument();
+      return;
+    }
+    if (action == null) return;
 
     setState(() => _busy = true);
     try {
@@ -450,8 +555,18 @@ class _PluginUiPageState extends State<PluginUiPage> {
       }
 
       final result = await widget.onAction(action, arguments);
+      if (!mounted) return;
+
+      if (navigation == 'pop') {
+        _popDocument();
+        return;
+      }
+
       final next = PluginUiDocument.tryParse(result);
-      if (next != null && mounted) {
+      if (next == null) return;
+      if (navigation == 'push') {
+        _pushDocument(next);
+      } else {
         _replaceDocument(next);
       }
     } on Object catch (error) {
@@ -468,7 +583,16 @@ class _PluginUiPageState extends State<PluginUiPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_document.title)),
+      appBar: AppBar(
+        leading: _history.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Voltar',
+                onPressed: _busy ? null : _popDocument,
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+        title: Text(_document.title),
+      ),
       body: SafeArea(
         child: Stack(
           children: [
@@ -479,6 +603,7 @@ class _PluginUiPageState extends State<PluginUiPage> {
                   node: _document.body,
                   onAction: _runAction,
                   allowNetworkImages: widget.allowNetworkImages,
+                  pluginRoot: widget.pluginRoot,
                   formValues: _formValues,
                   onFormChanged: _setFormValue,
                   documentVersion: _documentVersion,
@@ -499,11 +624,22 @@ class _PluginUiPageState extends State<PluginUiPage> {
   }
 }
 
+class _PluginUiSnapshot {
+  const _PluginUiSnapshot({
+    required this.document,
+    required this.formValues,
+  });
+
+  final PluginUiDocument document;
+  final Map<String, Object?> formValues;
+}
+
 class _PluginUiNodeView extends StatelessWidget {
   const _PluginUiNodeView({
     required this.node,
     required this.onAction,
     required this.allowNetworkImages,
+    required this.pluginRoot,
     required this.formValues,
     required this.onFormChanged,
     required this.documentVersion,
@@ -512,6 +648,7 @@ class _PluginUiNodeView extends StatelessWidget {
   final PluginUiNode node;
   final Future<void> Function(PluginUiNode node) onAction;
   final bool allowNetworkImages;
+  final String? pluginRoot;
   final Map<String, Object?> formValues;
   final PluginUiFormChanged onFormChanged;
   final int documentVersion;
@@ -519,15 +656,7 @@ class _PluginUiNodeView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final children = <Widget>[
-      for (final child in node.children)
-        _PluginUiNodeView(
-          node: child,
-          onAction: onAction,
-          allowNetworkImages: allowNetworkImages,
-          formValues: formValues,
-          onFormChanged: onFormChanged,
-          documentVersion: documentVersion,
-        ),
+      for (final child in node.children) _childView(child),
     ];
 
     switch (node.type) {
@@ -617,9 +746,31 @@ class _PluginUiNodeView extends StatelessWidget {
         return _switch();
       case 'select':
         return _select();
+      case 'tabs':
+        return _PluginUiTabs(
+          key: ValueKey<String>(
+            'tabs:$documentVersion:${node.strings('labels').join('|')}',
+          ),
+          labels: node.strings('labels'),
+          children: node.children,
+          initialIndex: (node.number('index') ?? 0).toInt(),
+          childBuilder: _childView,
+        );
       default:
         return const SizedBox.shrink();
     }
+  }
+
+  Widget _childView(PluginUiNode child) {
+    return _PluginUiNodeView(
+      node: child,
+      onAction: onAction,
+      allowNetworkImages: allowNetworkImages,
+      pluginRoot: pluginRoot,
+      formValues: formValues,
+      onFormChanged: onFormChanged,
+      documentVersion: documentVersion,
+    );
   }
 
   Widget _textField() {
@@ -713,50 +864,146 @@ class _PluginUiNodeView extends StatelessWidget {
 
   Widget _image(BuildContext context) {
     final source = node.string('src')!;
-    final uri = Uri.tryParse(source);
-    final isNetwork =
-        uri != null && (uri.scheme == 'https' || uri.scheme == 'http');
+    final assetPath = node.string('assetPath');
     final height = (node.number('height') ?? 220).toDouble();
-    if (!isNetwork || !allowNetworkImages) {
-      return Container(
-        height: height,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outlineVariant,
-          ),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          allowNetworkImages
-              ? 'Fonte de imagem não suportada'
-              : 'Imagem de rede bloqueada: permissão network necessária',
-          textAlign: TextAlign.center,
-        ),
-      );
-    }
-
     final fit = switch (node.string('fit')) {
       'contain' => BoxFit.contain,
       'fill' => BoxFit.fill,
       _ => BoxFit.cover,
     };
-    final image = Image.network(
-      source,
-      height: height,
-      width: double.infinity,
-      fit: fit,
-      semanticLabel: node.string('alt'),
-      errorBuilder: (context, error, stackTrace) => SizedBox(
-        height: height,
-        child: const Center(
-          child: Text('Não foi possível carregar a imagem.'),
-        ),
-      ),
-    );
+
+    Widget image;
+    if (assetPath != null) {
+      final root = pluginRoot;
+      if (root == null || root.isEmpty) {
+        image = _imagePlaceholder(
+          context,
+          height,
+          'Asset local indisponível fora de um pacote instalado.',
+        );
+      } else {
+        final file = File(_resolveAssetFile(root, assetPath));
+        image = Image.file(
+          file,
+          height: height,
+          width: double.infinity,
+          fit: fit,
+          semanticLabel: node.string('alt'),
+          errorBuilder: (context, error, stackTrace) => _imagePlaceholder(
+            context,
+            height,
+            'Não foi possível carregar o asset local.',
+          ),
+        );
+      }
+    } else {
+      final uri = Uri.tryParse(source);
+      final isNetwork =
+          uri != null && (uri.scheme == 'https' || uri.scheme == 'http');
+      if (!isNetwork) {
+        image = _imagePlaceholder(
+          context,
+          height,
+          'Fonte de imagem não suportada.',
+        );
+      } else if (!allowNetworkImages) {
+        image = _imagePlaceholder(
+          context,
+          height,
+          'Imagem de rede bloqueada: permissão network necessária',
+        );
+      } else {
+        image = Image.network(
+          source,
+          height: height,
+          width: double.infinity,
+          fit: fit,
+          semanticLabel: node.string('alt'),
+          errorBuilder: (context, error, stackTrace) => _imagePlaceholder(
+            context,
+            height,
+            'Não foi possível carregar a imagem.',
+          ),
+        );
+      }
+    }
+
     return node.action == null
         ? image
         : InkWell(onTap: () => onAction(node), child: image);
+  }
+
+  Widget _imagePlaceholder(
+    BuildContext context,
+    double height,
+    String message,
+  ) {
+    return Container(
+      height: height,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(message, textAlign: TextAlign.center),
+    );
+  }
+}
+
+class _PluginUiTabs extends StatefulWidget {
+  const _PluginUiTabs({
+    super.key,
+    required this.labels,
+    required this.children,
+    required this.initialIndex,
+    required this.childBuilder,
+  });
+
+  final List<String> labels;
+  final List<PluginUiNode> children;
+  final int initialIndex;
+  final Widget Function(PluginUiNode child) childBuilder;
+
+  @override
+  State<_PluginUiTabs> createState() => _PluginUiTabsState();
+}
+
+class _PluginUiTabsState extends State<_PluginUiTabs> {
+  late int _index;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (var index = 0; index < widget.labels.length; index += 1)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(widget.labels[index]),
+                    selected: index == _index,
+                    onSelected: (_) => setState(() => _index = index),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        widget.childBuilder(widget.children[_index]),
+      ],
+    );
   }
 }
 
@@ -805,6 +1052,41 @@ String _fieldName(
   }
   budget.addField(name);
   return name;
+}
+
+String? _assetPathFromSource(String source) {
+  if (!source.startsWith('asset:')) return null;
+
+  var path = source.substring('asset:'.length);
+  if (path.startsWith('//')) {
+    path = path.substring(2);
+  }
+  if (path.isEmpty ||
+      path.length > 512 ||
+      path.startsWith('/') ||
+      path.contains('\\') ||
+      path.contains(':') ||
+      path.contains('\u0000')) {
+    throw const PluginUiException('image.src contém asset local inválido.');
+  }
+
+  final segments = path.split('/');
+  if (segments.length < 2 ||
+      segments.first != 'assets' ||
+      segments.any((segment) =>
+          segment.isEmpty || segment == '.' || segment == '..')) {
+    throw const PluginUiException(
+      'Assets locais precisam usar asset:assets/... sem traversal.',
+    );
+  }
+  return segments.join('/');
+}
+
+String _resolveAssetFile(String root, String assetPath) {
+  final suffix = assetPath.split('/').join(Platform.pathSeparator);
+  return root.endsWith(Platform.pathSeparator)
+      ? '$root$suffix'
+      : '$root${Platform.pathSeparator}$suffix';
 }
 
 Map<String, Object?> _stringMap(Map raw) {

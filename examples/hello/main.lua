@@ -14,37 +14,77 @@ local function page()
             type = "column",
             children = {
                 {
+                    type = "image",
+                    src = "asset:assets/logo.png",
+                    alt = "Logo local do exemplo AddKo",
+                    fit = "contain",
+                    height = 120,
+                },
+                {
                     type = "text",
                     style = "headline",
+                    align = "center",
                     text = "Hello from Lua",
                 },
                 {
-                    type = "text",
-                    text = "Runtime: " .. tostring(addko.platform.os) .. " / " .. tostring(addko.platform.arch),
-                },
-                {
-                    type = "card",
-                    child = {
-                        type = "text",
-                        align = "center",
-                        text = "Cliques nesta sessão: " .. tostring(count),
+                    type = "tabs",
+                    tabs = {
+                        {
+                            label = "Início",
+                            child = {
+                                type = "column",
+                                children = {
+                                    {
+                                        type = "text",
+                                        text = "Runtime: " .. tostring(addko.platform.os) .. " / " .. tostring(addko.platform.arch),
+                                    },
+                                    {
+                                        type = "card",
+                                        child = {
+                                            type = "text",
+                                            align = "center",
+                                            text = "Cliques nesta sessão: " .. tostring(count),
+                                        },
+                                    },
+                                    {
+                                        type = "button",
+                                        variant = "primary",
+                                        label = "Somar +1",
+                                        action = "increment",
+                                    },
+                                },
+                            },
+                        },
+                        {
+                            label = "Perfil",
+                            child = {
+                                type = "column",
+                                children = {
+                                    {
+                                        type = "text",
+                                        style = "title",
+                                        text = profile.nickname,
+                                    },
+                                    {
+                                        type = "text",
+                                        text = "Tema: " .. profile.theme,
+                                    },
+                                    {
+                                        type = "button",
+                                        label = "Editar perfil",
+                                        action = "profile_form",
+                                        navigation = "push",
+                                    },
+                                },
+                            },
+                        },
                     },
-                },
-                {
-                    type = "button",
-                    variant = "primary",
-                    label = "Somar +1",
-                    action = "increment",
-                },
-                {
-                    type = "button",
-                    label = "Editar perfil",
-                    action = "profile_form",
                 },
                 {
                     type = "button",
                     label = "Abrir detalhes",
                     action = "details",
+                    navigation = "push",
                 },
             },
         },
@@ -108,7 +148,7 @@ function Plugin.profile_form()
                 {
                     type = "button",
                     label = "Cancelar",
-                    action = "home",
+                    navigation = "pop",
                 },
             },
         },
@@ -167,11 +207,12 @@ function Plugin.details()
                     label = "Busca de demonstração",
                     hint = "Digite e pressione buscar",
                     action = "search",
+                    navigation = "push",
                 },
                 {
                     type = "button",
                     label = "Voltar",
-                    action = "home",
+                    navigation = "pop",
                 },
             },
         },
@@ -194,7 +235,7 @@ function Plugin.search(form)
                 {
                     type = "button",
                     label = "Voltar aos detalhes",
-                    action = "details",
+                    navigation = "pop",
                 },
             },
         },

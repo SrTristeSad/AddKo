@@ -34,7 +34,7 @@ The declared `entry` must point to a `.lua` file inside the same package.
 - `media`
 - `background`
 
-Unknown permissions are rejected instead of silently granted. Declaring a permission does not grant a Lua API yet; host APIs will be introduced separately and must check the plugin permission before performing privileged work.
+Unknown permissions are rejected instead of silently granted. Declaring a permission does not bypass the sandbox: every privileged host operation still verifies the installed plugin permission before executing.
 
 ## Installation rules implemented now
 
@@ -56,6 +56,68 @@ A valid package is extracted into a staging directory first. When updating an in
 
 ## Runtime
 
-Each plugin execution creates an isolated Lua state through the native AddKo runtime. The current milestone executes the declared entrypoint and returns its Lua result to the host.
+Each installed plugin opens an isolated persistent Lua state. The AddKo host injects APIs for capabilities such as UI, networking, scoped storage and media instead of exposing Android, Flutter, arbitrary native libraries, `io`, `os`, `package` or `debug` directly.
 
-The host API for UI, navigation, networking, storage and media is intentionally not frozen yet. Those capabilities will be injected by AddKo rather than exposing Android, Flutter, native libraries, `io`, `os`, `package` or `debug` directly.
+Lua host calls can yield through the AddKo coroutine scheduler while Dart performs asynchronous work, then resume in the same plugin session.
+
+## Declarative UI
+
+A plugin method such as `start()` can return a page:
+
+```lua
+return {
+    type = "page",
+    title = "Example",
+    body = {
+        type = "text",
+        text = "Hello",
+    },
+}
+```
+
+Current components include text, buttons, cards, rows, columns, lists, grids, images, spacers, dividers, form controls and tabs. Flutter validates the tree before rendering it.
+
+### Navigation
+
+Interactive components can choose how a returned page is applied:
+
+- `navigation = "replace"` — default; replace the current document;
+- `navigation = "push"` — push the current document onto the mini-app navigation stack and show the returned page;
+- `navigation = "pop"` — return to the previous mini-app document. A button using `pop` does not need an `action`.
+
+The in-app navigation stack is bounded to 32 documents.
+
+### Tabs
+
+A local tab container does not require a Lua round-trip to switch tabs:
+
+```lua
+{
+    type = "tabs",
+    tabs = {
+        {
+            label = "Home",
+            child = { type = "text", text = "Home" },
+        },
+        {
+            label = "Profile",
+            child = { type = "text", text = "Profile" },
+        },
+    },
+}
+```
+
+A single `tabs` component is limited to 8 tabs.
+
+### Package-local images
+
+Images stored inside the plugin package use the `asset:` scheme and must remain under the package `assets/` directory:
+
+```lua
+{
+    type = "image",
+    src = "asset:assets/logo.png",
+}
+```
+
+Local assets do not require the `network` permission. Absolute paths, backslashes, `.` / `..`, empty path segments and any path outside `assets/` are rejected. Network images continue to require the `network` permission.

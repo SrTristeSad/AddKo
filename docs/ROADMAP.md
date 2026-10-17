@@ -21,31 +21,32 @@
 ## Phase 2 — package loader
 
 - [x] initial manifest domain validation;
-- [ ] `.addko` ZIP parser;
-- [ ] zip-slip and decompression-bomb protection;
-- [ ] package size/resource limits;
-- [ ] install staging + atomic commit/rollback;
-- [ ] installed plugin registry;
-- [ ] uninstall/update flow.
+- [x] `.addko` ZIP parser;
+- [x] zip-slip and decompression-bomb protection;
+- [x] package size/resource limits;
+- [x] install staging + atomic commit/rollback;
+- [x] installed plugin registry;
+- [ ] uninstall flow;
+- [x] update/replace flow.
 
 ## Phase 3 — AddKo host API
 
 - [ ] versioned host API;
-- [ ] UI tree protocol;
-- [ ] event callbacks;
-- [ ] navigation;
-- [ ] scoped storage;
-- [ ] permission-gated HTTP;
-- [ ] asynchronous Lua coroutine scheduler;
+- [x] UI tree protocol;
+- [x] event callbacks;
+- [x] in-app push/replace/pop navigation;
+- [x] scoped storage;
+- [x] permission-gated HTTP;
+- [x] asynchronous Lua coroutine scheduler;
 - [ ] structured errors/logging.
 
 ## Phase 4 — mini-app platform
 
-- [ ] lists and grids;
-- [ ] forms;
-- [ ] tabs;
-- [ ] images;
-- [ ] audio/video media API;
+- [x] lists and grids;
+- [x] forms;
+- [x] tabs;
+- [x] network and package-local images;
+- [x] initial audio/video media API;
 - [ ] local database API;
 - [ ] authentication helpers;
 - [ ] background services with quotas;

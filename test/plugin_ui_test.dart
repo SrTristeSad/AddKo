@@ -85,6 +85,56 @@ void main() {
     );
   });
 
+  test('parses tabs and validates their bounds', () {
+    final document = PluginUiDocument.fromMap(<String, Object?>{
+      'type': 'page',
+      'title': 'Tabs',
+      'body': <String, Object?>{
+        'type': 'tabs',
+        'index': 1,
+        'tabs': <Object?>[
+          <String, Object?>{
+            'label': 'Home',
+            'child': <String, Object?>{'type': 'text', 'text': 'A'},
+          },
+          <String, Object?>{
+            'label': 'Profile',
+            'child': <String, Object?>{'type': 'text', 'text': 'B'},
+          },
+        ],
+      },
+    });
+
+    expect(document.body.type, 'tabs');
+    expect(document.body.strings('labels'), <String>['Home', 'Profile']);
+    expect(document.body.number('index'), 1);
+    expect(document.body.children, hasLength(2));
+  });
+
+  test('rejects local asset traversal', () {
+    expect(
+      () => PluginUiDocument.fromMap(<String, Object?>{
+        'type': 'page',
+        'title': 'Bad asset',
+        'body': <String, Object?>{
+          'type': 'image',
+          'src': 'asset:assets/../secret.png',
+        },
+      }),
+      throwsA(isA<PluginUiException>()),
+    );
+
+    final safe = PluginUiDocument.fromMap(<String, Object?>{
+      'type': 'page',
+      'title': 'Safe asset',
+      'body': <String, Object?>{
+        'type': 'image',
+        'src': 'asset:assets/logo.png',
+      },
+    });
+    expect(safe.body.string('assetPath'), 'assets/logo.png');
+  });
+
   test('rejects unsafe action method names', () {
     expect(
       () => PluginUiDocument.fromMap(<String, Object?>{
@@ -150,6 +200,89 @@ void main() {
     expect(calledMethod, 'next_page');
     expect(find.text('Second'), findsOneWidget);
     expect(find.text('Changed by Lua'), findsOneWidget);
+  });
+
+  testWidgets('push and pop keep an internal mini-app navigation stack', (tester) async {
+    final first = PluginUiDocument.fromMap(<String, Object?>{
+      'type': 'page',
+      'title': 'Home',
+      'body': <String, Object?>{
+        'type': 'button',
+        'label': 'Details',
+        'action': 'details',
+        'navigation': 'push',
+      },
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PluginUiPage(
+          initialDocument: first,
+          allowNetworkImages: false,
+          onAction: (method, arguments) async {
+            return <String, Object?>{
+              'type': 'page',
+              'title': 'Details',
+              'body': <String, Object?>{
+                'type': 'button',
+                'label': 'Back inside app',
+                'navigation': 'pop',
+              },
+            };
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Details').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Back inside app'), findsOneWidget);
+
+    await tester.tap(find.text('Back inside app'));
+    await tester.pumpAndSettle();
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Details'), findsOneWidget);
+  });
+
+  testWidgets('tabs switch locally without calling Lua', (tester) async {
+    final document = PluginUiDocument.fromMap(<String, Object?>{
+      'type': 'page',
+      'title': 'Tabs',
+      'body': <String, Object?>{
+        'type': 'tabs',
+        'tabs': <Object?>[
+          <String, Object?>{
+            'label': 'One',
+            'child': <String, Object?>{'type': 'text', 'text': 'First tab'},
+          },
+          <String, Object?>{
+            'label': 'Two',
+            'child': <String, Object?>{'type': 'text', 'text': 'Second tab'},
+          },
+        ],
+      },
+    });
+
+    var calls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PluginUiPage(
+          initialDocument: document,
+          allowNetworkImages: false,
+          onAction: (method, arguments) async {
+            calls += 1;
+            return null;
+          },
+        ),
+      ),
+    );
+
+    expect(find.text('First tab'), findsOneWidget);
+    expect(find.text('Second tab'), findsNothing);
+    await tester.tap(find.text('Two'));
+    await tester.pumpAndSettle();
+    expect(find.text('Second tab'), findsOneWidget);
+    expect(calls, 0);
   });
 
   testWidgets('form values are submitted to the Lua action', (tester) async {
