@@ -26,7 +26,7 @@
 - [x] package size/resource limits;
 - [x] install staging + atomic commit/rollback;
 - [x] installed plugin registry;
-- [ ] uninstall flow;
+- [x] uninstall flow with optional data cleanup and dependency protection;
 - [x] update/replace flow.
 
 ## Phase 3 — AddKo host API
