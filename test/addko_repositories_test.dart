@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:addko/src/repositories/addko_repositories.dart';
+import 'package:addko/src/repositories/catalog_version.dart';
 import 'package:addko/src/ui/addko_repository_store.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ void main() {
   Map<String, Object?> catalog({
     String? checksum,
     String file = 'packages/demo.addko',
+    String category = 'Outros',
   }) =>
       <String, Object?>{
         'schema': 1,
@@ -25,6 +27,7 @@ void main() {
             'name': 'Miniapp Demo',
             'version': '1.0.0',
             'description': 'Demo de repositório',
+            'category': category,
             'file': file,
             'sha256': checksum ?? sha256.convert(bytes).toString(),
           },
@@ -159,6 +162,86 @@ void main() {
     expect(await failing.savedUrls(), <Uri>[url]);
   });
 
+
+  test('categorizes addons and validates checksum-pinned images', () async {
+    final png = <int>[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1];
+    final index = catalog(category: 'Jogos');
+    final addon = (index['addons'] as List).first as Map<String, Object?>;
+    addon['icon'] = 'icons/controller.png';
+    addon['icon_sha256'] = sha256.convert(png).toString();
+    final manager = AddKoRepositoryManager(
+      File('${temp.path}/repositories.json'),
+      fetcher: (uri, maxBytes) async {
+        if (uri.path.endsWith('.json')) return utf8.encode(jsonEncode(index));
+        if (uri.path.endsWith('.png')) return png;
+        return bytes;
+      },
+    );
+    final parsed = (await manager.loadIndex(url)).addons.single;
+    expect(parsed.category, 'Jogos');
+    expect(parsed.icon.toString(),
+        'https://catalog.example.com/addko/icons/controller.png');
+    expect(await manager.downloadIcon(parsed), png);
+
+    addon['icon_sha256'] = '0' * 64;
+    await expectLater(
+      manager.downloadIcon(parsed),
+      throwsA(isA<RepositoryException>()),
+    );
+    addon.remove('icon_sha256');
+    await expectLater(
+      manager.loadIndex(url),
+      throwsA(isA<RepositoryException>()),
+    );
+    addon['icon_sha256'] = sha256.convert(png).toString();
+    addon['icon'] = '../controller.png';
+    await expectLater(
+      manager.loadIndex(url),
+      throwsA(isA<RepositoryException>()),
+    );
+  });
+
+  test('compares update status only when version order is sound', () {
+    expect(catalogVersionStatus('1.2.0', null),
+        CatalogVersionStatus.notInstalled);
+    expect(catalogVersionStatus('1.2.0', '1.2.0'),
+        CatalogVersionStatus.installed);
+    expect(catalogVersionStatus('1.10.0', '1.9.0'),
+        CatalogVersionStatus.updateAvailable);
+    expect(catalogVersionStatus('1.0.0', '2.0.0'),
+        CatalogVersionStatus.installedNewer);
+    expect(catalogVersionStatus('1.0.0', '1.0.0-beta.1'),
+        CatalogVersionStatus.updateAvailable);
+    expect(catalogVersionStatus('beta', 'alpha'),
+        CatalogVersionStatus.differentVersion);
+  });
+
+  testWidgets('store distinguishes updates from installed versions',
+      (tester) async {
+    final repo = _MemoryRepositories(
+      await service(catalog(category: 'Jogos')).loadIndex(url),
+    )..added = true;
+    await tester.pumpWidget(MaterialApp(
+      home: AddKoRepositoryStore(
+        repositories: repo,
+        installedVersions: const <String, String>{
+          'com.addko.demo': '0.9.0',
+        },
+        onInstallPackage: () {},
+        onInstallAddon: (_) async => true,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Atualização disponível'), findsOneWidget);
+    expect(find.text('Jogos'), findsWidgets);
+    await tester.tap(find.text('Detalhes'));
+    await tester.pumpAndSettle();
+    expect(find.text('Versão instalada: 0.9.0'), findsOneWidget);
+    expect(find.text('Atualizar'), findsOneWidget);
+    await tester.tap(find.text('Fechar'));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('store adds repository and installs a listed addon',
       (tester) async {
     final manager = _MemoryRepositories(await service(catalog()).loadIndex(url));
@@ -184,10 +267,15 @@ void main() {
 
     expect(find.text('Catálogo da comunidade'), findsOneWidget);
     expect(find.text('Miniapp Demo'), findsOneWidget);
+    await tester.ensureVisible(find.text('Detalhes'));
+    await tester.tap(find.text('Detalhes'));
+    await tester.pumpAndSettle();
+    expect(find.text('Versão instalada: Nenhuma'), findsOneWidget);
     await tester.ensureVisible(find.text('Instalar'));
     await tester.tap(find.text('Instalar'));
     await tester.pumpAndSettle();
     expect(requested?.id, 'com.addko.demo');
+    expect(find.text('Instalado'), findsOneWidget);
   });
 }
 
