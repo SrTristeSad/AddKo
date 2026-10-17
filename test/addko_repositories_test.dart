@@ -7,6 +7,13 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+Future<void> settleRepositoryIo(WidgetTester tester) async {
+  await tester.runAsync(() async {
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+  });
+  await tester.pumpAndSettle();
+}
+
 void main() {
   late Directory temp;
   final url = Uri.parse('https://catalog.example.com/addko/index.json');
@@ -173,20 +180,20 @@ void main() {
         },
       ),
     ));
-    await tester.pumpAndSettle();
+    await settleRepositoryIo(tester);
 
     expect(find.text('Sua loja ainda está vazia'), findsOneWidget);
     await tester.tap(find.text('Adicionar repositório'));
-    await tester.pumpAndSettle();
+    await settleRepositoryIo(tester);
     await tester.enterText(find.byType(TextField), url.toString());
     await tester.tap(find.text('Validar e adicionar'));
-    await tester.pumpAndSettle();
+    await settleRepositoryIo(tester);
 
     expect(find.text('Catálogo da comunidade'), findsOneWidget);
     expect(find.text('Miniapp Demo'), findsOneWidget);
     await tester.ensureVisible(find.text('Instalar'));
     await tester.tap(find.text('Instalar'));
-    await tester.pumpAndSettle();
+    await settleRepositoryIo(tester);
     expect(requested?.id, 'com.addko.demo');
   });
 }
