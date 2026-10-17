@@ -6,6 +6,9 @@ import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/runtime/basic_plugin_host.dart';
 import 'package:addko/src/runtime/lua_plugin_session.dart';
 import 'package:addko/src/runtime/lua_runtime.dart';
+import 'package:addko/src/runtime/media_plugin_host.dart';
+import 'package:addko/src/runtime/plugin_host.dart';
+import 'package:addko/src/runtime/plugin_player.dart';
 
 class InstalledPlugin {
   const InstalledPlugin({
@@ -38,7 +41,7 @@ class InstalledPlugin {
   ///
   /// Unlike [runEntrypoint], this keeps the Lua state alive, injects the
   /// generic AddKo host API and supports coroutine-based asynchronous calls.
-  Future<LuaPluginSession> openSession() async {
+  Future<LuaPluginSession> openSession({PluginPlayer? player}) async {
     final supportRoot = directory.parent.parent;
     final dataDirectory = Directory(
       _resolvePackagePath(
@@ -48,11 +51,18 @@ class InstalledPlugin {
     );
     await dataDirectory.create(recursive: true);
 
-    final host = BasicPluginHost(
-      manifest: manifest,
-      pluginDirectory: directory,
-      dataDirectory: dataDirectory,
-    );
+    final PluginHost host = player == null
+        ? BasicPluginHost(
+            manifest: manifest,
+            pluginDirectory: directory,
+            dataDirectory: dataDirectory,
+          )
+        : MediaPluginHost(
+            manifest: manifest,
+            pluginDirectory: directory,
+            dataDirectory: dataDirectory,
+            player: player,
+          );
 
     final locale = _locale();
     return LuaPluginSession.open(
