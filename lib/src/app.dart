@@ -10,10 +10,12 @@ import 'package:addko/src/plugins/plugin_package.dart';
 import 'package:addko/src/runtime/lua_plugin_session.dart';
 import 'package:addko/src/runtime/lua_runtime.dart';
 import 'package:addko/src/runtime/plugin_dependency_host.dart';
+import 'package:addko/src/ui/addko_launcher.dart';
 import 'package:addko/src/ui/plugin_game_surface.dart';
 import 'package:addko/src/ui/plugin_host_dialogs.dart';
 import 'package:addko/src/ui/plugin_ui.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 final Object _dependencyStackZoneKey = Object();
 
@@ -485,6 +487,40 @@ class _HomePageState extends State<_HomePage> {
     await session.close();
   }
 
+  void _openStore() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => AddKoStoreShell(
+          busy: _busy,
+          onInstallPackage: () => unawaited(_installPackage()),
+        ),
+      ),
+    );
+  }
+
+  void _openSettings() {
+    final status = _message == null
+        ? _runtimeStatus
+        : '$_runtimeStatus\nÚltima atividade: $_message';
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => AddKoSettingsShell(
+          runtimeStatus: status,
+          busy: _busy,
+          onInstallPackage: () => unawaited(_installPackage()),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exitApp() async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      await SystemNavigator.pop();
+      return;
+    }
+    exit(0);
+  }
+
   @override
   void dispose() {
     for (final session in _sessions.values) {
@@ -499,110 +535,14 @@ class _HomePageState extends State<_HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('AddKo'),
-        actions: [
-          IconButton(
-            tooltip: 'Instalar .addko',
-            onPressed: _busy ? null : _installPackage,
-            icon: const Icon(Icons.add_box_outlined),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 840),
-            child: ListView(
-              padding: const EdgeInsets.all(24),
-              children: [
-                Text(
-                  'Apps, jogos e experiências Lua',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'O AddKo executa pacotes .addko próprios em um runtime Lua persistente. '
-                  'Um pacote pode ser app, ferramenta, leitor, jogo ou emulador; Kodi e Python não fazem parte deste runtime.',
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-                const SizedBox(height: 20),
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.memory_rounded),
-                    title: const Text('Runtime'),
-                    subtitle: Text(_runtimeStatus),
-                  ),
-                ),
-                AddKoVideoSurface(player: _player),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: _busy ? null : _installPackage,
-                  icon: const Icon(Icons.install_mobile_rounded),
-                  label: const Text('Instalar pacote .addko'),
-                ),
-                if (_message != null) ...[
-                  const SizedBox(height: 12),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(_message!),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Instalados',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ),
-                    if (_busy)
-                      const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (!_busy && _plugins.isEmpty)
-                  const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text(
-                        'Nenhum mini-app instalado. Escolha um arquivo .addko para começar.',
-                      ),
-                    ),
-                  ),
-                for (final plugin in _plugins)
-                  Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.extension_rounded),
-                      title: Text(plugin.manifest.name),
-                      subtitle: Text(
-                        '${plugin.manifest.id} • ${plugin.manifest.version}'
-                        '${plugin.manifest.dependencies.isEmpty ? '' : ' • depende de ${plugin.manifest.dependencies.length}'}',
-                      ),
-                      trailing: FilledButton.tonalIcon(
-                        onPressed: _busy ? null : () => _runPlugin(plugin),
-                        icon: const Icon(Icons.play_arrow_rounded),
-                        label: Text(
-                          _sessions.containsKey(plugin.manifest.id)
-                              ? 'Reiniciar'
-                              : 'Abrir',
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return AddKoLauncher(
+      plugins: _plugins,
+      busy: _busy,
+      activePluginIds: _sessions.keys.toSet(),
+      onOpenPlugin: (plugin) => unawaited(_runPlugin(plugin)),
+      onOpenStore: _openStore,
+      onOpenSettings: _openSettings,
+      onExit: () => unawaited(_exitApp()),
     );
   }
 }
