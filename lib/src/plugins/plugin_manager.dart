@@ -56,7 +56,6 @@ class PluginManager {
           InstalledPlugin(directory: entity, manifest: manifest),
         );
       } on Object {
-        // A partially corrupted plugin must not prevent the catalog from loading.
         continue;
       }
     }
@@ -251,8 +250,7 @@ class PluginManager {
         try {
           await backup.delete(recursive: true);
         } on Object {
-          // The new plugin is already active. A stale backup is harmless and can
-          // be cleaned on a future maintenance pass.
+          // A nova versão já está ativa; o backup órfão pode ser limpo depois.
         }
       }
 
@@ -343,7 +341,7 @@ String _validateArchivePath(String raw, {required bool isDirectory}) {
       raw.length > 512 ||
       raw.startsWith('/') ||
       raw.contains(r'\') ||
-      raw.contains('\u0000') ||
+      raw.codeUnits.contains(0) ||
       RegExp(r'^[A-Za-z]:').hasMatch(raw)) {
     throw PluginPackageException('Caminho inseguro no pacote: $raw');
   }
