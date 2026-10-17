@@ -22,7 +22,7 @@ class InstalledPlugin {
     }
 
     final source = await file.readAsString(encoding: utf8);
-    final runtime = LuaRuntime.open();
+    final runtime = LuaRuntime.open(pluginRoot: directory.path);
     try {
       return runtime.evaluate(source);
     } finally {
