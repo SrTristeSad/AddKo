@@ -47,7 +47,8 @@ end
 local started = plugin.start()
 assert(started.type == "page")
 assert(started.title == "Vídeo por Torrent")
-assert(has_text(started.body, "Motor conectado"))
+assert(has_text(started.body, "Motor não verificado"))
+assert(#calls == 0) -- ENTRAR never initializes the native engine
 assert(has_text(started.body, "AJKRETO5SBORCFLSLNVJMZF2XNSTJC3N"))
 local function find_type(node, kind)
     if type(node) ~= "table" then return nil end
@@ -65,6 +66,10 @@ assert(filled and filled.name == "uri")
 assert(filled.value:find("AJKRETO5SBORCFLSLNVJMZF2XNSTJC3N", 1, true))
 assert(filled.value:find("tracker.opentrackr.org", 1, true))
 assert(latest_play() == nil) -- never launch torrent on page load
+
+local checked = plugin.refresh()
+assert(has_text(checked.body, "Motor conectado"))
+assert(calls[#calls].method == "health")
 
 local bundled = plugin.test_magnet()
 assert(has_text(bundled.body, "Reprodução iniciada"))

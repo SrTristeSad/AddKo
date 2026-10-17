@@ -9,6 +9,8 @@ local TEST_HASH = "AJKRETO5SBORCFLSLNVJMZF2XNSTJC3N"
 local last_uri = TEST_MAGNET
 local status_message = nil
 local listed_torrents = nil
+local engine_ready = nil
+local engine_message = 'Ainda não verificado. Toque em Verificar novamente para consultar o motor.'
 
 local function text(value, style)
     return {
@@ -77,24 +79,27 @@ local function service(method, payload)
     return addko.plugins.call(LUELEMENT, method, payload or {})
 end
 
-local function status()
+local function check_engine()
     local ok, result = pcall(service, "health", {})
     if not ok then
-        return false, "Não foi possível consultar o Luelement: " .. truncate(result, 260)
+        engine_ready = false
+        engine_message = "Falha ao consultar Luelement: " .. truncate(result, 260)
+    elseif type(result) == "table" and result.ready == true then
+        engine_ready = true
+        engine_message = "Luelement e motor Elementum prontos."
+    else
+        engine_ready = false
+        engine_message = "Motor indisponível. Confira Luelement 0.2.1-dev e o APK Android ARM64 completo."
     end
-    if type(result) == "table" and result.ready == true then
-        return true, "Luelement e motor Elementum prontos."
-    end
-    return false, "Motor indisponível. Instale o Luelement 0.2.1-dev e use a build AddKo ARM64 completa com Elementum incluído. Nenhum APK auxiliar é necessário."
 end
 
 local function render()
-    local ready, engine_message = status()
+    local ready = engine_ready
     local children = {
         text("Vídeo por Torrent", "headline"),
         text("Exemplo de addon Lua que usa o Luelement como serviço, sem implementar BitTorrent no AddKo.", "caption"),
         card({
-            text(ready and "Motor conectado" or "Motor não conectado", "title"),
+            text(ready == nil and "Motor não verificado" or (ready and "Motor conectado" or "Motor não conectado"), "title"),
             text(engine_message, "caption"),
             button("Verificar novamente", "refresh"),
         }),
@@ -166,6 +171,7 @@ end
 
 function Plugin.refresh()
     status_message = nil
+    check_engine()
     return render()
 end
 
@@ -186,6 +192,8 @@ function Plugin.play(form)
     if not ok then
         status_message = "Falha ao reproduzir: " .. truncate(result, 320)
     elseif type(result) == "table" and result.started == true then
+        engine_ready = true
+        engine_message = "Luelement e motor Elementum prontos."
         status_message = "Reprodução iniciada no player do AddKo."
     else
         status_message = "O Luelement não confirmou o início da reprodução."
@@ -197,6 +205,8 @@ function Plugin.list_torrents()
     local ok, result = pcall(service, "torrents", {})
     if ok and type(result) == "table" then
         listed_torrents = result
+        engine_ready = true
+        engine_message = "Luelement e motor Elementum prontos."
         status_message = "Lista atualizada."
     else
         listed_torrents = nil
