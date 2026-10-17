@@ -36,7 +36,7 @@ void main() {
     List<int>? downloaded,
   }) {
     return AddKoRepositoryManager(
-      File(temp.path + '/repositories.json'),
+      File('${temp.path}/repositories.json'),
       fetcher: (uri, limit) async =>
           uri.path.endsWith('.json')
               ? utf8.encode(jsonEncode(index))
@@ -147,7 +147,7 @@ void main() {
     final manager = service(catalog());
     await manager.add(url.toString());
     final failing = AddKoRepositoryManager(
-      File(temp.path + '/repositories.json'),
+      File('${temp.path}/repositories.json'),
       fetcher: (uri, limit) async {
         throw const RepositoryException('Servidor indisponível.');
       },
