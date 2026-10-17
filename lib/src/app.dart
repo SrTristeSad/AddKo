@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:addko/src/platform/system_file_picker.dart';
 import 'package:addko/src/plugins/plugin_manager.dart';
 import 'package:addko/src/plugins/plugin_package.dart';
+import 'package:addko/src/runtime/lua_plugin_session.dart';
 import 'package:addko/src/runtime/lua_runtime.dart';
 import 'package:flutter/material.dart';
 
@@ -33,6 +35,7 @@ class _HomePage extends StatefulWidget {
 class _HomePageState extends State<_HomePage> {
   PluginManager? _manager;
   List<InstalledPlugin> _plugins = const <InstalledPlugin>[];
+  final Map<String, LuaPluginSession> _sessions = <String, LuaPluginSession>{};
   String _runtimeStatus = 'Verificando runtime Lua...';
   String? _message;
   bool _busy = true;
@@ -124,25 +127,54 @@ class _HomePageState extends State<_HomePage> {
 
     setState(() {
       _busy = true;
-      _message = 'Executando ${plugin.manifest.name}...';
+      _message = 'Iniciando ${plugin.manifest.name}...';
     });
 
+    LuaPluginSession? pendingSession;
     try {
-      final result = await plugin.runEntrypoint();
+      await _closePluginSession(plugin.manifest.id);
+      pendingSession = await plugin.openSession();
+      final result = await pendingSession.start();
+      _sessions[plugin.manifest.id] = pendingSession;
+      pendingSession = null;
+
       if (!mounted) return;
       setState(() {
-        _message = result.isEmpty
-            ? '${plugin.manifest.name} executou sem retorno.'
-            : '${plugin.manifest.name}: $result';
+        _message = '${plugin.manifest.name}: $result';
       });
     } on Object catch (error) {
+      if (pendingSession != null) {
+        await pendingSession.close();
+      }
       if (!mounted) return;
-      setState(() => _message = 'Erro ao executar plugin: $error');
+      setState(() => _message = 'Erro ao iniciar plugin: $error');
     } finally {
       if (mounted) {
         setState(() => _busy = false);
       }
     }
+  }
+
+  Future<void> _closePluginSession(String pluginId) async {
+    final session = _sessions.remove(pluginId);
+    if (session == null) return;
+    try {
+      await session.stop();
+    } on Object {
+      // Fecha o estado Lua mesmo quando o hook stop do plugin falha.
+    }
+    await session.close();
+  }
+
+  @override
+  void dispose() {
+    for (final session in _sessions.values) {
+      unawaited(
+        session.stop().catchError((_) => null).whenComplete(session.close),
+      );
+    }
+    _sessions.clear();
+    super.dispose();
   }
 
   @override
@@ -171,7 +203,7 @@ class _HomePageState extends State<_HomePage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'O AddKo agora instala pacotes .addko próprios. '
+                  'O AddKo instala pacotes .addko próprios com runtime Lua persistente. '
                   'Kodi e Python não fazem parte deste runtime.',
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
@@ -236,7 +268,11 @@ class _HomePageState extends State<_HomePage> {
                       trailing: FilledButton.tonalIcon(
                         onPressed: _busy ? null : () => _runPlugin(plugin),
                         icon: const Icon(Icons.play_arrow_rounded),
-                        label: const Text('Abrir'),
+                        label: Text(
+                          _sessions.containsKey(plugin.manifest.id)
+                              ? 'Reiniciar'
+                              : 'Abrir',
+                        ),
                       ),
                     ),
                   ),
