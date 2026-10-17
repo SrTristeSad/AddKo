@@ -47,6 +47,7 @@ class LuaPluginSession {
         ')',
       );
       runtime.evaluate(_systemHostApi);
+      runtime.evaluate(_nativeEngineApi);
       runtime.evaluate(_pluginsHostApi);
 
       final module = _entryModule(entry);
@@ -214,6 +215,38 @@ function addko.system.open_uri(uri)
         error(tostring(reply.error or 'system.open_uri failed'))
     end
     return reply.value
+end
+''';
+
+const String _nativeEngineApi = r'''
+addko.engines = addko.engines or {}
+
+local function native_request(action, id)
+    local reply = coroutine.yield({
+        kind = 'host',
+        op = 'native_engine.' .. action,
+        args = { engine = id },
+    })
+    if type(reply) ~= 'table' or reply.ok ~= true then
+        error(tostring(reply and reply.error or 'native engine operation failed'))
+    end
+    return reply.value
+end
+
+function addko.engines.available(id)
+    return native_request('available', id)
+end
+
+function addko.engines.start(id)
+    return native_request('start', id)
+end
+
+function addko.engines.stop(id)
+    return native_request('stop', id)
+end
+
+function addko.engines.status(id)
+    return native_request('status', id)
 end
 ''';
 

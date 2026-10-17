@@ -663,6 +663,7 @@ String _permissionTitle(PluginPermission permission) {
     PluginPermission.storage => 'Armazenamento',
     PluginPermission.media => 'Mídia',
     PluginPermission.background => 'Segundo plano',
+    PluginPermission.nativeEngine => 'Motor nativo aprovado',
   };
 }
 
@@ -676,5 +677,7 @@ String _permissionDescription(PluginPermission permission) {
       'Pode solicitar recursos de reprodução de mídia quando o host oferecer essa capacidade.',
     PluginPermission.background =>
       'Pode manter serviços e tarefas de longa duração enquanto a sessão do mini-app estiver ativa.',
+    PluginPermission.nativeEngine =>
+      'Pode iniciar motores nativos aprovados que já vêm assinados no APK do AddKo. Não permite carregar bibliotecas externas.',
   };
 }

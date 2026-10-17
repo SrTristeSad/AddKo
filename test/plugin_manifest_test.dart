@@ -91,4 +91,42 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('native engines require a declared permission and bounded IDs', () {
+    final manifest = <String, Object?>{
+      'id': 'io.addko.native.test',
+      'name': 'Engine example',
+      'version': '1.0.0',
+      'entry': 'main.lua',
+      'permissions': <String>['native_engine'],
+      'native_engines': <String>['elementum'],
+    };
+    expect(
+      PluginManifest.fromJson(manifest).nativeEngines,
+      contains('elementum'),
+    );
+    expect(
+      () => PluginManifest.fromJson(<String, Object?>{
+        ...manifest,
+        'permissions': <String>[],
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => PluginManifest.fromJson(<String, Object?>{
+        ...manifest,
+        'native_engines': <String>['../../unsafe'],
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => PluginManifest.fromJson(<String, Object?>{
+        ...manifest,
+        'native_engines': <String>['elementum', 'elementum'],
+      }),
+      throwsFormatException,
+    );
+  });
+
+
 }

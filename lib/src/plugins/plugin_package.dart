@@ -6,6 +6,7 @@ import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/runtime/basic_plugin_host.dart';
 import 'package:addko/src/runtime/desktop_process_plugin_host.dart';
 import 'package:addko/src/runtime/lua_plugin_session.dart';
+import 'package:addko/src/runtime/native_engine_plugin_host.dart';
 import 'package:addko/src/runtime/lua_runtime.dart';
 import 'package:addko/src/runtime/media_plugin_host.dart';
 import 'package:addko/src/runtime/plugin_dependency_host.dart';
@@ -83,6 +84,13 @@ class InstalledPlugin {
         dataDirectory: dataDirectory,
       );
     }
+
+    // Native modules must be built into the signed Android APK. Lua may only
+    // request engine IDs explicitly declared in the addon manifest.
+    host = NativeEnginePluginHost(
+      inner: host,
+      manifest: manifest,
+    );
 
     if (dependencyCaller != null && manifest.dependencies.isNotEmpty) {
       host = PluginDependencyHost(
