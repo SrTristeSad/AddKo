@@ -252,8 +252,12 @@ class _HomePageState extends State<_HomePage> {
       await _closePluginSession(plugin.manifest.id);
       pendingSession = await plugin.openSession(
         player: _player,
-        uiHandler: (operation, arguments) =>
-            handlePluginHostUi(context, operation, arguments),
+        uiHandler: (operation, arguments) => handlePluginHostUi(
+          context,
+          operation,
+          arguments,
+          player: _player,
+        ),
       );
       final result = await pendingSession.start();
       final document = PluginUiDocument.tryParse(result);
