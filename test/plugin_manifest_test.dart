@@ -13,6 +13,26 @@ void main() {
 
     expect(manifest.id, 'com.addko.hello');
     expect(manifest.permissions, contains(PluginPermission.storage));
+    expect(manifest.dependencies, isEmpty);
+  });
+
+  test('parses declared plugin dependencies', () {
+    final manifest = PluginManifest.fromJson(<String, Object?>{
+      'id': 'com.addko.catalog',
+      'name': 'Catalog',
+      'version': '1.0.0',
+      'entry': 'main.lua',
+      'permissions': <Object?>['network'],
+      'dependencies': <Object?>[
+        'io.addko.luelement',
+        'com.example.metadata',
+      ],
+    });
+
+    expect(
+      manifest.dependencies,
+      containsAll(<String>['io.addko.luelement', 'com.example.metadata']),
+    );
   });
 
   test('rejects path traversal in entry', () {
@@ -36,6 +56,37 @@ void main() {
         'version': '1.0.0',
         'entry': 'main.lua',
         'permissions': <Object?>['root'],
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test('rejects self dependency', () {
+    expect(
+      () => PluginManifest.fromJson(<String, Object?>{
+        'id': 'com.addko.self',
+        'name': 'Self',
+        'version': '1.0.0',
+        'entry': 'main.lua',
+        'permissions': <Object?>[],
+        'dependencies': <Object?>['com.addko.self'],
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test('rejects duplicated dependency', () {
+    expect(
+      () => PluginManifest.fromJson(<String, Object?>{
+        'id': 'com.addko.duplicate',
+        'name': 'Duplicate',
+        'version': '1.0.0',
+        'entry': 'main.lua',
+        'permissions': <Object?>[],
+        'dependencies': <Object?>[
+          'io.addko.luelement',
+          'io.addko.luelement',
+        ],
       }),
       throwsFormatException,
     );
