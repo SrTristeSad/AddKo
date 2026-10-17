@@ -65,8 +65,8 @@ void main() {
     final outside = File('${root.path}${Platform.pathSeparator}outside-bin');
     await outside.writeAsString('not executable');
 
-    expect(
-      () => host.invoke('process.spawn', <String, Object?>{
+    await expectLater(
+      host.invoke('process.spawn', <String, Object?>{
         'path': outside.path,
         'args': const <String>[],
       }),
