@@ -38,7 +38,9 @@ class LuaRuntime {
     this._version,
   );
 
-  static const int _outputCapacity = 16 * 1024;
+  // Plugin routes can return full catalog pages. 16 KiB was enough for the
+  // original smoke test but not for a real Plugin v2 response.
+  static const int _outputCapacity = 1024 * 1024;
 
   final Pointer<Void> _handle;
   final _DestroyDart _destroy;
