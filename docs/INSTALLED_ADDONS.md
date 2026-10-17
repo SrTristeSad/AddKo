@@ -15,3 +15,6 @@ O usuário pode consultar ID, versão, permissões reais do manifesto instalado,
 A limpeza dos dados pode ser irreversível. Se falhar após começar, o aplicativo não informa que os dados foram apagados com sucesso. Diretórios simbólicos usados como raiz dos dados são rejeitados.
 
 O fluxo preserva a home original: os controles administrativos aparecem apenas nas Configurações.
+## Plugins de serviço
+
+Uma ferramenta para outros addons usa `"type": "service"` no manifesto. Serviços não aparecem no launcher; são listados em Configurações → Gerenciar addons. A existência de uma dependência instalada não obriga o AddKo a ativá-la imediatamente: o serviço é inicializado sob demanda, quando o addon consumidor usa `addko.plugins.call`. Addons que dependem do serviço impedem sua desinstalação enquanto permanecerem instalados.

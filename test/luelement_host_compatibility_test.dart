@@ -141,8 +141,10 @@ void main() {
       final result = await session.start();
       expect(result, isA<Map>());
       final doc = result as Map;
-      expect(doc['type'], 'page');
-      expect(doc['title'], 'Luelement');
+      expect(doc['type'], 'service');
+      expect(doc['id'], 'io.addko.luelement');
+      expect(doc['ready'], true);
+      expect(manifest.kind, PluginKind.service);
       expect(fake.starts, 1);
       expect(fake.callbackId, isNotNull);
 
