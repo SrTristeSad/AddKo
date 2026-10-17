@@ -54,6 +54,13 @@ jobs:
           python3 tools/build_test_lua.py build/test_native/libaddko_lua.so
       - name: Test AddKo against real Luelement Lua
         run: flutter test test/luelement_host_compatibility_test.dart --dart-define=LUELEMENT_PATH=.ci/luelement --dart-define=LUA_TEST_LIBRARY=build/test_native/libaddko_lua.so
+      - name: Build video-torrent example package
+        run: python3 tools/build_torrent_video_example.py
+      - name: Test video-torrent example Lua
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.4
+          lua examples/torrent_video/tests/run.lua
       - name: Build Android ARM64
         run: flutter build apk --release --target-platform android-arm64 --no-pub
       - name: Verify native engine inside APK

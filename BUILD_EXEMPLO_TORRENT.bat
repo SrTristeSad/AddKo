@@ -21,7 +21,7 @@ if not errorlevel 1 (
 if errorlevel 1 goto :end
 
 echo.
-echo Pacote criado: dist\VideoTorrent-0.1.0.addko
+echo Pacote criado: dist\VideoTorrent-0.1.1.addko
 :end
 echo.
 pause

@@ -3,7 +3,10 @@
 local LUELEMENT = "io.addko.luelement"
 local Plugin = {}
 
-local last_uri = ""
+-- Diagnostic input supplied by user. Playback only starts after pressing a button.
+local TEST_MAGNET = "magnet:?xt=urn:btih:AJKRETO5SBORCFLSLNVJMZF2XNSTJC3N&tr=udp%3A%2F%2Ftracker.openbittorrent.com%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.internetwarriors.net%3A1337%2Fannounce"
+local TEST_HASH = "AJKRETO5SBORCFLSLNVJMZF2XNSTJC3N"
+local last_uri = TEST_MAGNET
 local status_message = nil
 local listed_torrents = nil
 
@@ -82,7 +85,7 @@ local function status()
     if type(result) == "table" and result.ready == true then
         return true, "Luelement e motor Elementum prontos."
     end
-    return false, "Motor indisponível. Instale e abra o Luelement; no Android, instale também o Luelement Engine."
+    return false, "Motor indisponível. Instale o Luelement 0.2.1-dev e use a build AddKo ARM64 completa com Elementum incluído. Nenhum APK auxiliar é necessário."
 end
 
 local function render()
@@ -96,7 +99,12 @@ local function render()
             button("Verificar novamente", "refresh"),
         }),
         { type = "divider" },
-        text("Abrir vídeo", "title"),
+        text("Magnet de teste já preenchido", "title"),
+        text("Hash: " .. TEST_HASH, "caption"),
+        text("Conteúdo e disponibilidade de seeds ainda não verificados. A tentativa de streaming começa apenas quando você tocar no botão.", "caption"),
+        button("Testar este magnet", "test_magnet", { variant = "primary" }),
+        { type = "divider" },
+        text("Outro magnet ou URL .torrent", "title"),
         {
             type = "textarea",
             name = "uri",
@@ -159,6 +167,11 @@ end
 function Plugin.refresh()
     status_message = nil
     return render()
+end
+
+-- This explicitly invoked action does not run during Plugin.start().
+function Plugin.test_magnet()
+    return Plugin.play({ uri = TEST_MAGNET })
 end
 
 function Plugin.play(form)

@@ -48,6 +48,28 @@ local started = plugin.start()
 assert(started.type == "page")
 assert(started.title == "Vídeo por Torrent")
 assert(has_text(started.body, "Motor conectado"))
+assert(has_text(started.body, "AJKRETO5SBORCFLSLNVJMZF2XNSTJC3N"))
+local function find_type(node, kind)
+    if type(node) ~= "table" then return nil end
+    if node.type == kind then return node end
+    if node.children then
+        for _, child in ipairs(node.children) do
+            local found = find_type(child, kind)
+            if found then return found end
+        end
+    end
+    if node.child then return find_type(node.child, kind) end
+end
+local filled = find_type(started.body, "textarea")
+assert(filled and filled.name == "uri")
+assert(filled.value:find("AJKRETO5SBORCFLSLNVJMZF2XNSTJC3N", 1, true))
+assert(filled.value:find("tracker.opentrackr.org", 1, true))
+assert(latest_play() == nil) -- never launch torrent on page load
+
+local bundled = plugin.test_magnet()
+assert(has_text(bundled.body, "Reprodução iniciada"))
+assert(latest_play().uri == filled.value)
+assert(latest_play().uri:find("urn:btih:AJKRETO5SBORCFLSLNVJMZF2XNSTJC3N", 1, true))
 
 local before = #calls
 local invalid = plugin.play({ uri = "file:///private/example.torrent" })
@@ -77,4 +99,4 @@ ready = false
 local offline = plugin.refresh()
 assert(has_text(offline.body, "Motor não conectado"))
 
-print("OK: 7 cenários do addon Video por Torrent")
+print("OK: 9 cenários do addon Video por Torrent")
