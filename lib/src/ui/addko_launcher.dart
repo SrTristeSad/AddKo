@@ -194,11 +194,13 @@ class AddKoSettingsShell extends StatelessWidget {
     required this.runtimeStatus,
     required this.busy,
     required this.onInstallPackage,
+    required this.onManageAddons,
   });
 
   final String runtimeStatus;
   final bool busy;
   final VoidCallback onInstallPackage;
+  final VoidCallback onManageAddons;
 
   @override
   Widget build(BuildContext context) {
@@ -211,6 +213,18 @@ class AddKoSettingsShell extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(24),
               children: [
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.extension_rounded),
+                    title: const Text('Gerenciar addons'),
+                    subtitle: const Text(
+                      'Ver permissões, dependências, atualizações e desinstalar.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: busy ? null : onManageAddons,
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.memory_rounded),
