@@ -601,7 +601,7 @@ class _HomePageState extends State<_HomePage> {
           repositories: repositories,
           onRemove: _uninstallManagedPlugin,
           onReload: _reloadManagedPlugins,
-          onOpenStore: () => unawaited(_openStore()),
+          onOpenStore: _openStore,
         ),
       ),
     );
