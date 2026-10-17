@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/runtime/plugin_host.dart';
+import 'package:path/path.dart' as p;
 
 class BasicPluginHost extends PluginHost {
   BasicPluginHost({
@@ -11,6 +12,9 @@ class BasicPluginHost extends PluginHost {
     required this.pluginDirectory,
     required this.dataDirectory,
   });
+
+  static const int maxHttpResponseBytes = 8 * 1024 * 1024;
+  static const int maxDownloadBytes = 64 * 1024 * 1024;
 
   final PluginManifest manifest;
   final Directory pluginDirectory;
@@ -71,22 +75,22 @@ class BasicPluginHost extends PluginHost {
         return _httpDownload(args);
       case 'fs.exists':
         _require(_storage, 'storage');
-        return _exists(_readablePath(args['path']));
+        return _exists(await _readablePath(args['path']));
       case 'fs.mkdirp':
         _require(_storage, 'storage');
-        final directory = Directory(_writablePath(args['path']));
+        final directory = Directory(await _writablePath(args['path']));
         await directory.create(recursive: true);
         return true;
       case 'fs.write_text':
         _require(_storage, 'storage');
-        final path = _writablePath(args['path']);
+        final path = await _writablePath(args['path']);
         final file = File(path);
         await file.parent.create(recursive: true);
         await file.writeAsString(args['text']?.toString() ?? '', flush: true);
         return true;
       case 'fs.write_bytes':
         _require(_storage, 'storage');
-        final path = _writablePath(args['path']);
+        final path = await _writablePath(args['path']);
         final raw = args['bytes'];
         if (raw is! List) {
           throw const PluginHostException(
@@ -191,9 +195,17 @@ class BasicPluginHost extends PluginHost {
     final response = await request.close().timeout(
           Duration(seconds: timeoutSeconds),
         );
-    final bytes = await response.fold<List<int>>(
-      <int>[],
-      (buffer, data) => buffer..addAll(data),
+    if (response.contentLength > maxHttpResponseBytes) {
+      await response.drain<void>();
+      throw const PluginHostException(
+        'Resposta HTTP excede o limite de 8 MiB.',
+      );
+    }
+
+    final bytes = await _readBoundedResponse(
+      response,
+      maxBytes: maxHttpResponseBytes,
+      message: 'Resposta HTTP excede o limite de 8 MiB.',
     );
 
     final responseHeaders = <String, String>{};
@@ -211,7 +223,7 @@ class BasicPluginHost extends PluginHost {
 
   Future<Map<String, Object?>> _httpDownload(Map<String, Object?> args) async {
     final uri = _uri(args['url']);
-    final destination = _writablePath(args['path']);
+    final destination = await _writablePath(args['path']);
     final timeoutSeconds = _int(
       args['timeout_seconds'] ?? 180,
       min: 1,
@@ -234,11 +246,29 @@ class BasicPluginHost extends PluginHost {
       };
     }
 
+    if (response.contentLength > maxDownloadBytes) {
+      await response.drain<void>();
+      throw const PluginHostException(
+        'Download excede o limite de 64 MiB.',
+      );
+    }
+
     final file = File(destination);
     await file.parent.create(recursive: true);
     final sink = file.openWrite();
+    var total = 0;
     try {
-      await response.pipe(sink);
+      await for (final data in response) {
+        total += data.length;
+        if (total > maxDownloadBytes) {
+          throw const PluginHostException(
+            'Download excede o limite de 64 MiB.',
+          );
+        }
+        sink.add(data);
+      }
+      await sink.flush();
+      await sink.close();
     } on Object {
       await sink.close();
       if (await file.exists()) {
@@ -319,19 +349,28 @@ class BasicPluginHost extends PluginHost {
     return type != FileSystemEntityType.notFound;
   }
 
-  String _readablePath(Object? raw) {
-    final path = _absolute(raw);
-    if (_isInside(path, pluginDirectory.path) ||
-        _isInside(path, dataDirectory.path)) {
-      return path;
+  Future<String> _readablePath(Object? raw) async {
+    final candidate = _absolute(raw);
+    final pluginRoot = _absoluteRoot(pluginDirectory.path);
+    final dataRoot = _absoluteRoot(dataDirectory.path);
+
+    if (_isInside(candidate, pluginRoot)) {
+      await _rejectSymlinkSegments(candidate, pluginRoot);
+      return candidate;
+    }
+    if (_isInside(candidate, dataRoot)) {
+      await _rejectSymlinkSegments(candidate, dataRoot);
+      return candidate;
     }
     throw const PluginHostException('Acesso fora do escopo do plugin.');
   }
 
-  String _writablePath(Object? raw) {
-    final path = _absolute(raw);
-    if (_isInside(path, dataDirectory.path)) {
-      return path;
+  Future<String> _writablePath(Object? raw) async {
+    final candidate = _absolute(raw);
+    final dataRoot = _absoluteRoot(dataDirectory.path);
+    if (_isInside(candidate, dataRoot)) {
+      await _rejectSymlinkSegments(candidate, dataRoot);
+      return candidate;
     }
     throw const PluginHostException(
       'Plugin só pode gravar no próprio diretório de dados.',
@@ -343,16 +382,39 @@ class BasicPluginHost extends PluginHost {
     if (value == null || value.isEmpty) {
       throw const PluginHostException('Caminho vazio.');
     }
-    return File(value).absolute.path;
+    return p.normalize(p.absolute(value));
   }
 
-  bool _isInside(String path, String root) {
-    final absoluteRoot = Directory(root).absolute.path;
-    if (path == absoluteRoot) return true;
-    final prefix = absoluteRoot.endsWith(Platform.pathSeparator)
-        ? absoluteRoot
-        : '$absoluteRoot${Platform.pathSeparator}';
-    return path.startsWith(prefix);
+  String _absoluteRoot(String root) => p.normalize(p.absolute(root));
+
+  bool _isInside(String candidate, String root) {
+    return candidate == root || p.isWithin(root, candidate);
+  }
+
+  Future<void> _rejectSymlinkSegments(String candidate, String root) async {
+    final rootType = await FileSystemEntity.type(root, followLinks: false);
+    if (rootType == FileSystemEntityType.link) {
+      throw const PluginHostException(
+        'Raiz de armazenamento não pode ser link simbólico.',
+      );
+    }
+
+    final relative = p.relative(candidate, from: root);
+    if (relative == '.') return;
+
+    var current = root;
+    for (final segment in p.split(relative)) {
+      current = p.join(current, segment);
+      final type = await FileSystemEntity.type(current, followLinks: false);
+      if (type == FileSystemEntityType.link) {
+        throw const PluginHostException(
+          'Links simbólicos não podem atravessar o sandbox do plugin.',
+        );
+      }
+      if (type == FileSystemEntityType.notFound) {
+        return;
+      }
+    }
   }
 
   Uri _uri(Object? value) {
@@ -401,6 +463,21 @@ class PluginHostException implements Exception {
 
   @override
   String toString() => 'PluginHostException: $message';
+}
+
+Future<List<int>> _readBoundedResponse(
+  HttpClientResponse response, {
+  required int maxBytes,
+  required String message,
+}) async {
+  final bytes = <int>[];
+  await for (final data in response) {
+    if (bytes.length > maxBytes - data.length) {
+      throw PluginHostException(message);
+    }
+    bytes.addAll(data);
+  }
+  return bytes;
 }
 
 Map<String, Object?> _map(Object? value) {
