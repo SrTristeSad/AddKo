@@ -45,7 +45,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: SrTristeSad/Luelement
-          ref: 2cc1381d384eefefeab4f6ec7416cf2b3dc71935
+          ref: c4a0a2a1aa2cdd4d26c8e6b772790054f0f4a647
           path: .ci/luelement
           persist-credentials: false
       - name: Compile sandbox Lua runtime for Linux integration
