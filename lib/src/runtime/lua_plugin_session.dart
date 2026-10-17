@@ -41,6 +41,11 @@ class LuaPluginSession {
         '${_luaQuote(jsonEncode(bootstrapConfig))}'
         ')',
       );
+      runtime.evaluate(
+        'addko.capabilities = addko.json.decode('
+        '${_luaQuote(jsonEncode(host.capabilities))}'
+        ')',
+      );
 
       final module = _entryModule(entry);
       runtime.evaluate(
@@ -97,7 +102,7 @@ class LuaPluginSession {
     while (true) {
       final decoded = jsonDecode(wire);
       if (decoded is! Map) {
-        throw LuaPluginProtocolException(
+        throw const LuaPluginProtocolException(
           'Resposta do scheduler Lua não é um objeto JSON.',
         );
       }
