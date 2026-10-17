@@ -1,6 +1,6 @@
 # AddKo plugin format — draft 0
 
-The target installable extension is `.addko`, a validated ZIP package owned by AddKo.
+The installable extension is `.addko`. A package is a ZIP archive owned and validated by AddKo; it is not a Kodi addon and it does not contain Python.
 
 ## Minimal package
 
@@ -10,6 +10,8 @@ my-plugin.addko
 ├── main.lua
 └── assets/
 ```
+
+`manifest.json` must exist at the archive root. Paths use `/` as the separator.
 
 ## Minimal manifest
 
@@ -23,6 +25,8 @@ my-plugin.addko
 }
 ```
 
+The declared `entry` must point to a `.lua` file inside the same package.
+
 ## Initial permission vocabulary
 
 - `network`
@@ -30,12 +34,28 @@ my-plugin.addko
 - `media`
 - `background`
 
-Unknown permissions are rejected instead of silently granted.
+Unknown permissions are rejected instead of silently granted. Declaring a permission does not grant a Lua API yet; host APIs will be introduced separately and must check the plugin permission before performing privileged work.
 
-## Planned lifecycle
+## Installation rules implemented now
 
-The host will expose a small lifecycle rather than Android/Flutter internals. The exact Lua API is intentionally not frozen yet; it will be versioned before external plugins are supported.
+Before extraction AddKo rejects:
 
-## Security requirements
+- packages larger than 16 MiB;
+- more than 512 archive entries;
+- more than 32 MiB total declared extracted data;
+- individual files larger than 8 MiB;
+- `manifest.json` larger than 64 KiB;
+- absolute paths, drive-letter paths, `.` / `..` traversal and backslash paths;
+- duplicate paths, including case-only duplicates;
+- symbolic links;
+- missing or invalid root `manifest.json`;
+- missing/non-file Lua entrypoints;
+- unknown permissions.
 
-Before a package becomes installable, AddKo must validate archive paths, manifest schema, package size, entrypoint location, duplicate paths, decompression limits and requested permissions. Plugins must never be able to load arbitrary native libraries.
+A valid package is extracted into a staging directory first. When updating an installed plugin, the old directory is moved aside and the staged package replaces it only after validation and extraction complete.
+
+## Runtime
+
+Each plugin execution creates an isolated Lua state through the native AddKo runtime. The current milestone executes the declared entrypoint and returns its Lua result to the host.
+
+The host API for UI, navigation, networking, storage and media is intentionally not frozen yet. Those capabilities will be injected by AddKo rather than exposing Android, Flutter, native libraries, `io`, `os`, `package` or `debug` directly.
