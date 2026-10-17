@@ -32,6 +32,7 @@
 ## Phase 3 — AddKo host API
 
 - [ ] versioned host API;
+- [x] initial manifest-scoped native engines API (APK-bundled only);
 - [x] UI tree protocol;
 - [x] event callbacks;
 - [x] in-app push/replace/pop navigation;
