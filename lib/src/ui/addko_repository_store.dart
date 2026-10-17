@@ -211,9 +211,13 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
   IconData _categoryIcon(String category) {
     final name = category.toLowerCase();
     if (name.contains('video') || name.contains('vídeo') ||
-        name.contains('filme')) return Icons.movie_outlined;
+        name.contains('filme')) {
+      return Icons.movie_outlined;
+    }
     if (name.contains('jogo') || name.contains('game') ||
-        name.contains('emulad')) return Icons.sports_esports_outlined;
+        name.contains('emulad')) {
+      return Icons.sports_esports_outlined;
+    }
     if (name.contains('music') || name.contains('músic') ||
         name.contains('radio') || name.contains('rádio')) {
       return Icons.music_note_outlined;
@@ -230,10 +234,14 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
 
   Future<Uint8List?> _icon(RepositoryAddon addon) {
     final url = addon.icon;
-    if (url == null) return Future<Uint8List?>.value();
+    if (url == null) {
+      return Future<Uint8List?>.value();
+    }
     final cacheKey = '${url.toString()}/${addon.iconSha256}';
     final existing = _iconFutures[cacheKey];
-    if (existing != null) return existing;
+    if (existing != null) {
+      return existing;
+    }
     // Never retain unbounded icon futures across massive catalogs.
     if (_iconFutures.length >= 48) {
       _iconFutures.remove(_iconFutures.keys.first);
@@ -257,7 +265,9 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
         future: _icon(addon),
         builder: (context, snapshot) {
           final bytes = snapshot.data;
-          if (bytes == null) return Center(child: placeholder);
+          if (bytes == null) {
+            return Center(child: placeholder);
+          }
           return ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: Image.memory(
