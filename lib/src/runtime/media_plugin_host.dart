@@ -7,6 +7,7 @@ class MediaPluginHost extends BasicPluginHost {
     required super.manifest,
     required super.pluginDirectory,
     required super.dataDirectory,
+    super.uiHandler,
     required this.player,
   });
 
