@@ -130,7 +130,7 @@ class LuaPluginSession {
         );
       }
 
-      final Map<String, Object?> reply;
+      Map<String, Object?> reply;
       try {
         final value = await _host.invoke(operation, decoded['args']);
         reply = <String, Object?>{
