@@ -270,7 +270,11 @@ void main() {
 
     expect(find.text('Catálogo da comunidade'), findsOneWidget);
     expect(find.text('Miniapp Demo'), findsOneWidget);
+    // Dismiss the repository-added snackbar before tapping the lower card.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Detalhes'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Detalhes'));
     await tester.pumpAndSettle();
     expect(find.text('Versão instalada: Nenhuma'), findsOneWidget);
