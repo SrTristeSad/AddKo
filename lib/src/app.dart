@@ -9,6 +9,7 @@ import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/plugins/plugin_package.dart';
 import 'package:addko/src/runtime/lua_plugin_session.dart';
 import 'package:addko/src/runtime/lua_runtime.dart';
+import 'package:addko/src/ui/plugin_game_surface.dart';
 import 'package:addko/src/ui/plugin_host_dialogs.dart';
 import 'package:addko/src/ui/plugin_ui.dart';
 import 'package:flutter/material.dart';
@@ -261,6 +262,7 @@ class _HomePageState extends State<_HomePage> {
       );
       final result = await pendingSession.start();
       final document = PluginUiDocument.tryParse(result);
+      final game = document == null ? PluginGameConfig.tryParse(result) : null;
 
       _sessions[plugin.manifest.id] = pendingSession;
       final session = pendingSession;
@@ -268,13 +270,15 @@ class _HomePageState extends State<_HomePage> {
 
       if (!mounted) return;
       setState(() {
-        _message = document == null
-            ? '${plugin.manifest.name}: $result'
-            : '${plugin.manifest.name} aberto.';
+        _message = document != null || game != null
+            ? '${plugin.manifest.name} aberto.'
+            : '${plugin.manifest.name}: $result';
         _busy = false;
       });
 
+      var openedExperience = false;
       if (document != null) {
+        openedExperience = true;
         await Navigator.of(context).push<void>(
           MaterialPageRoute<void>(
             builder: (context) => PluginUiPage(
@@ -286,11 +290,23 @@ class _HomePageState extends State<_HomePage> {
             ),
           ),
         );
+      } else if (game != null) {
+        openedExperience = true;
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: (context) => PluginGamePage(
+              config: game,
+              pluginRoot: plugin.directory.path,
+              onAction: session.call,
+            ),
+          ),
+        );
+      }
 
-        if (!plugin.manifest.permissions.contains(PluginPermission.background)) {
-          await _closePluginSession(plugin.manifest.id);
-          if (mounted) setState(() {});
-        }
+      if (openedExperience &&
+          !plugin.manifest.permissions.contains(PluginPermission.background)) {
+        await _closePluginSession(plugin.manifest.id);
+        if (mounted) setState(() {});
       }
     } on Object catch (error) {
       if (pendingSession != null) {
@@ -349,13 +365,13 @@ class _HomePageState extends State<_HomePage> {
               padding: const EdgeInsets.all(24),
               children: [
                 Text(
-                  'Mini-apps Lua',
+                  'Apps, jogos e experiências Lua',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'O AddKo instala pacotes .addko próprios com runtime Lua persistente. '
-                  'Kodi e Python não fazem parte deste runtime.',
+                  'O AddKo executa pacotes .addko próprios em um runtime Lua persistente. '
+                  'Um pacote pode ser app, ferramenta, leitor, jogo ou emulador; Kodi e Python não fazem parte deste runtime.',
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
                 const SizedBox(height: 20),
