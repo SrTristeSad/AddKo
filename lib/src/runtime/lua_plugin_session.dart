@@ -47,6 +47,7 @@ class LuaPluginSession {
         ')',
       );
       runtime.evaluate(_systemHostApi);
+      runtime.evaluate(_pluginsHostApi);
 
       final module = _entryModule(entry);
       runtime.evaluate(
@@ -211,6 +212,30 @@ function addko.system.open_uri(uri)
     end
     if reply.ok ~= true then
         error(tostring(reply.error or 'system.open_uri failed'))
+    end
+    return reply.value
+end
+''';
+
+const String _pluginsHostApi = r'''
+addko.plugins = addko.plugins or {}
+
+function addko.plugins.call(id, method, args)
+    local reply = coroutine.yield({
+        kind = 'host',
+        op = 'plugins.call',
+        args = {
+            id = id,
+            method = method,
+            args = args,
+        },
+    })
+
+    if type(reply) ~= 'table' then
+        error('invalid host reply for plugins.call')
+    end
+    if reply.ok ~= true then
+        error(tostring(reply.error or 'plugins.call failed'))
     end
     return reply.value
 end
