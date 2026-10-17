@@ -5,13 +5,18 @@ class PluginManifest {
     required this.version,
     required this.entry,
     required this.permissions,
+    this.dependencies = const <String>{},
   });
+
+  static final RegExp _idPattern =
+      RegExp(r'^[a-z0-9]+(?:[._-][a-z0-9]+)+$');
 
   final String id;
   final String name;
   final String version;
   final String entry;
   final Set<PluginPermission> permissions;
+  final Set<String> dependencies;
 
   factory PluginManifest.fromJson(Map<String, Object?> json) {
     final id = _requiredString(json, 'id');
@@ -19,8 +24,7 @@ class PluginManifest {
     final version = _requiredString(json, 'version');
     final entry = _requiredString(json, 'entry');
 
-    if (id.length > 128 ||
-        !RegExp(r'^[a-z0-9]+(?:[._-][a-z0-9]+)+$').hasMatch(id)) {
+    if (!_isValidPluginId(id)) {
       throw const FormatException('ID de plugin inválido.');
     }
     if (name.length > 120) {
@@ -46,12 +50,40 @@ class PluginManifest {
       permissions.add(PluginPermission.parse(value));
     }
 
+    final dependencies = <String>{};
+    final rawDependencies = json['dependencies'];
+    if (rawDependencies != null) {
+      if (rawDependencies is! List<Object?>) {
+        throw const FormatException('dependencies deve ser uma lista.');
+      }
+      if (rawDependencies.length > 32) {
+        throw const FormatException('Plugin declara dependências demais.');
+      }
+
+      for (final value in rawDependencies) {
+        if (value is! String) {
+          throw const FormatException('Dependência de plugin inválida.');
+        }
+        final dependency = value.trim();
+        if (!_isValidPluginId(dependency)) {
+          throw FormatException('ID de dependência inválido: $dependency');
+        }
+        if (dependency == id) {
+          throw const FormatException('Plugin não pode depender de si mesmo.');
+        }
+        if (!dependencies.add(dependency)) {
+          throw FormatException('Dependência duplicada: $dependency');
+        }
+      }
+    }
+
     return PluginManifest(
       id: id,
       name: name,
       version: version,
       entry: entry,
       permissions: Set.unmodifiable(permissions),
+      dependencies: Set.unmodifiable(dependencies),
     );
   }
 
@@ -61,6 +93,10 @@ class PluginManifest {
       throw FormatException('$key é obrigatório.');
     }
     return value.trim();
+  }
+
+  static bool _isValidPluginId(String value) {
+    return value.isNotEmpty && value.length <= 128 && _idPattern.hasMatch(value);
   }
 
   static bool _isSafeLuaEntrypoint(String value) {
