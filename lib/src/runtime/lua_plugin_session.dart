@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ffi';
 
 import 'package:addko/src/runtime/lua_host_bootstrap.dart';
 import 'package:addko/src/runtime/lua_runtime.dart';
@@ -22,8 +23,12 @@ class LuaPluginSession {
     required Map<String, Object?> platform,
     required Map<String, Object?> locale,
     required PluginHost host,
+    DynamicLibrary? testLibrary,
   }) async {
-    final runtime = LuaRuntime.open(pluginRoot: pluginRoot);
+    final runtime = LuaRuntime.open(
+      pluginRoot: pluginRoot,
+      testLibrary: testLibrary,
+    );
     final session = LuaPluginSession._(runtime: runtime, host: host);
 
     try {

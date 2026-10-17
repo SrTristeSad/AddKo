@@ -48,8 +48,12 @@ jobs:
           ref: dab8c14647ae978080223922f9a167a320295fe2
           path: .ci/luelement
           persist-credentials: false
+      - name: Compile sandbox Lua runtime for Linux integration
+        run: |
+          mkdir -p build/test_native
+          python3 tools/build_test_lua.py build/test_native/libaddko_lua.so
       - name: Test AddKo against real Luelement Lua
-        run: flutter test test/luelement_host_compatibility_test.dart --dart-define=LUELEMENT_PATH=.ci/luelement
+        run: flutter test test/luelement_host_compatibility_test.dart --dart-define=LUELEMENT_PATH=.ci/luelement --dart-define=LUA_TEST_LIBRARY=build/test_native/libaddko_lua.so
       - name: Build Android ARM64
         run: flutter build apk --release --target-platform android-arm64 --no-pub
       - name: Verify native engine inside APK

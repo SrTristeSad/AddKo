@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 
 import 'package:addko/src/plugins/plugin_manifest.dart';
@@ -8,6 +9,7 @@ import 'package:addko/src/runtime/plugin_host.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _sourcePath = String.fromEnvironment('LUELEMENT_PATH');
+const String _nativeTestPath = String.fromEnvironment('LUA_TEST_LIBRARY');
 
 class _FakeElementumHost extends PluginHost {
   bool running = false;
@@ -134,6 +136,7 @@ void main() {
           'language': 'pt', 'region': 'BR', 'second_language': '',
         },
         host: wrapped,
+        testLibrary: DynamicLibrary.open(_nativeTestPath),
       );
       final result = await session.start();
       expect(result, isA<Map>());
@@ -174,5 +177,6 @@ void main() {
       await sandbox.delete(recursive: true);
     }
     expect(fake.closed, true);
-  }, skip: _sourcePath.isEmpty ? 'Requires pinned Luelement checkout in CI.' : null);
+  }, skip: _sourcePath.isEmpty || _nativeTestPath.isEmpty
+      ? 'Requires pinned Luelement and sandbox Lua test library.' : null);
 }

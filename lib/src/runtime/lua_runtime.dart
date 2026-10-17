@@ -48,12 +48,17 @@ class LuaRuntime {
   final _VersionDart _version;
   bool _disposed = false;
 
-  static LuaRuntime open({String? pluginRoot}) {
-    if (!Platform.isAndroid) {
+  static LuaRuntime open({
+    String? pluginRoot,
+    DynamicLibrary? testLibrary,
+  }) {
+    if (!Platform.isAndroid && testLibrary == null) {
       throw UnsupportedError('O runtime nativo inicial suporta Android.');
     }
 
-    final library = DynamicLibrary.open('libaddko_lua.so');
+    // A caller-supplied library is used only by trusted Dart integration tests.
+    // Lua plugins cannot provide native executable paths or shared libraries.
+    final library = testLibrary ?? DynamicLibrary.open('libaddko_lua.so');
     final create = library.lookupFunction<_CreateNative, _CreateDart>(
       'addko_lua_create',
     );
