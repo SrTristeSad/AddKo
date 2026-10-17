@@ -138,6 +138,32 @@ void main() {
       );
     }
   });
+
+  test('generic UI operations are delegated without a new permission', () async {
+    String? operation;
+    Map<String, Object?>? arguments;
+    final host = BasicPluginHost(
+      manifest: _manifest(const <PluginPermission>{}),
+      pluginDirectory: pluginDirectory,
+      dataDirectory: dataDirectory,
+      uiHandler: (op, args) async {
+        operation = op;
+        arguments = args;
+        return 2;
+      },
+    );
+    addTearDown(host.close);
+
+    expect(host.capabilities['ui'], isTrue);
+    final result = await host.invoke('ui.select', <String, Object?>{
+      'title': 'Arquivo',
+      'items': <String>['A', 'B', 'C'],
+    });
+
+    expect(result, 2);
+    expect(operation, 'ui.select');
+    expect(arguments?['title'], 'Arquivo');
+  });
 }
 
 PluginManifest _manifest(Set<PluginPermission> permissions) {
