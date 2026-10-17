@@ -521,13 +521,13 @@ class _HomePageState extends State<_HomePage> {
       await _reloadPlugins();
       if (mounted) {
         setState(() {
-          _message = installed.manifest.name + ' instalado pelo repositório.';
+          _message = '${installed.manifest.name} instalado pelo repositório.';
         });
       }
       return true;
     } on Object catch (error) {
       if (mounted) {
-        setState(() => _message = 'Falha na instalação: ' + error.toString());
+        setState(() => _message = 'Falha na instalação: $error');
       }
       rethrow;
     } finally {
