@@ -1,0 +1,7 @@
+{
+  "id": "com.addko.game-demo",
+  "name": "AddKo Game Demo",
+  "version": "1.0.0",
+  "entry": "main.lua",
+  "permissions": []
+}
