@@ -135,7 +135,11 @@ ADDKO_EXPORT AddKoLuaRuntime *addko_lua_create(void) {
     }
 
     runtime->memory_limit = ADDKO_MEMORY_LIMIT;
-    runtime->state = lua_newstate(addko_allocator, runtime);
+    runtime->state = lua_newstate(
+        addko_allocator,
+        runtime,
+        luaL_makeseed(NULL)
+    );
     if (runtime->state == NULL) {
         free(runtime);
         return NULL;
