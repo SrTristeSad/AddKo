@@ -91,13 +91,8 @@ void main() {
   });
 
   test('rejects symbolic links', () async {
-    final archive = Archive()
-      ..add(ArchiveFile.string('manifest.json', jsonEncode(_manifest())))
-      ..add(ArchiveFile.string('main.lua', 'return true'))
-      ..add(ArchiveFile.symlink('assets/link', '../../outside'));
-
     expect(
-      () => manager.installBytes(ZipEncoder().encodeBytes(archive)),
+      () => manager.installBytes(base64Decode(_symlinkPackageBase64)),
       throwsA(isA<PluginPackageException>()),
     );
   });
@@ -126,3 +121,6 @@ Uint8List _package({
 
   return ZipEncoder().encodeBytes(archive);
 }
+
+const _symlinkPackageBase64 =
+    'UEsDBBQAAAAIAPyUUV02+0GgWgAAAGsAAAANAAAAbWFuaWZlc3QuanNvbhXKuwqAMAyF4VcpmSXU1adwcBOHYoME21R6EUR8d5vxfP95gT1MBvYU0Xl/JqxUKgwGxEXSsvRt5tAOFuWbcuEkWka0aNVIan5UomPB0JziRTly0W/pad2+H1BLAwQUAAAACAD8lFFdeouI5w0AAAALAAAACAAAAG1haW4ubHVhK0otKS3KUygpKk0FAFBLAwQUAAAAAAAAACEAQEr/sQ0AAAANAAAACwAAAGFzc2V0cy9saW5rLi4vLi4vb3V0c2lkZVBLAQIUAxQAAAAIAPyUUV02+0GgWgAAAGsAAAANAAAAAAAAAAAAAACAAQAAAABtYW5pZmVzdC5qc29uUEsBAhQDFAAAAAgA/JRRXXqLiOcNAAAACwAAAAgAAAAAAAAAAAAAAIABhQAAAG1haW4ubHVhUEsBAhQDFAAAAAAAAAAhAEBK/7ENAAAADQAAAAsAAAAAAAAAAAAAAP+huAAAAGFzc2V0cy9saW5rUEsFBgAAAAADAAMAqgAAAO4AAAAAAA==';
