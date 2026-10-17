@@ -8,16 +8,19 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   late Directory root;
+  late Directory sandbox;
   late PluginManager manager;
 
   setUp(() async {
-    root = await Directory.systemTemp.createTemp('addko-plugin-test-');
+    sandbox = await Directory.systemTemp.createTemp('addko-plugin-test-');
+    root = Directory('${sandbox.path}${Platform.pathSeparator}plugins');
+    await root.create();
     manager = PluginManager(root);
   });
 
   tearDown(() async {
-    if (await root.exists()) {
-      await root.delete(recursive: true);
+    if (await sandbox.exists()) {
+      await sandbox.delete(recursive: true);
     }
   });
 
@@ -88,6 +91,102 @@ void main() {
       ),
       throwsA(isA<PluginPackageException>()),
     );
+  });
+
+
+  test('uninstall preserves private data unless explicitly cleared', () async {
+    await manager.installBytes(
+      _package(
+        manifest: _manifest(),
+        files: <String, String>{'main.lua': 'return 1'},
+      ),
+    );
+    final data = Directory(
+      '${sandbox.path}${Platform.pathSeparator}plugin-data'
+      '${Platform.pathSeparator}com.addko.test',
+    );
+    await data.create(recursive: true);
+    final settings = File('${data.path}${Platform.pathSeparator}favorites.json');
+    await settings.writeAsString('{"items":[1]}');
+
+    await manager.uninstall('com.addko.test');
+    expect(await manager.listInstalled(), isEmpty);
+    expect(await settings.readAsString(), '{"items":[1]}');
+
+    await manager.installBytes(
+      _package(
+        manifest: _manifest(),
+        files: <String, String>{'main.lua': 'return 2'},
+      ),
+    );
+    expect(await settings.readAsString(), '{"items":[1]}');
+
+    await manager.uninstall('com.addko.test', deleteData: true);
+    expect(await data.exists(), isFalse);
+    expect(await manager.listInstalled(), isEmpty);
+  });
+
+  test('uninstall refuses addon required by another installed addon',
+      () async {
+    await manager.installBytes(
+      _package(
+        manifest: _manifest(),
+        files: <String, String>{'main.lua': 'return 1'},
+      ),
+    );
+    await manager.installBytes(
+      _package(
+        manifest: <String, Object?>{
+          ..._manifest(),
+          'id': 'com.addko.client',
+          'name': 'Client',
+          'dependencies': <Object?>['com.addko.test'],
+        },
+        files: <String, String>{'main.lua': 'return 2'},
+      ),
+    );
+    expect((await manager.dependentsOf('com.addko.test')).single.manifest.id,
+        'com.addko.client');
+    await expectLater(
+      manager.uninstall('com.addko.test'),
+      throwsA(isA<PluginPackageException>()),
+    );
+    expect(await manager.listInstalled(), hasLength(2));
+    await manager.uninstall('com.addko.client');
+    await manager.uninstall('com.addko.test');
+    expect(await manager.listInstalled(), isEmpty);
+  });
+
+  test('uninstall blocks unsafe IDs and symbolic-link data directories',
+      () async {
+    await expectLater(
+      manager.uninstall('../evil'),
+      throwsA(isA<PluginPackageException>()),
+    );
+    await manager.installBytes(
+      _package(
+        manifest: _manifest(),
+        files: <String, String>{'main.lua': 'return 1'},
+      ),
+    );
+    final data = Directory(
+      '${sandbox.path}${Platform.pathSeparator}plugin-data'
+      '${Platform.pathSeparator}com.addko.test',
+    );
+    await data.parent.create(recursive: true);
+    final outside = await Directory.systemTemp.createTemp('addko-outside-');
+    try {
+      await Link(data.path).create(outside.path);
+      await expectLater(
+        manager.uninstall('com.addko.test', deleteData: true),
+        throwsA(isA<PluginPackageException>()),
+      );
+      expect(await outside.exists(), isTrue);
+      expect(await manager.listInstalled(), hasLength(1));
+    } finally {
+      if (await Link(data.path).exists()) await Link(data.path).delete();
+      await outside.delete(recursive: true);
+    }
   });
 
   test('rejects symbolic links', () async {
