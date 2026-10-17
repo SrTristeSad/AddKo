@@ -36,6 +36,60 @@ The declared `entry` must point to a `.lua` file inside the same package.
 
 Unknown permissions are rejected instead of silently granted. Declaring a permission does not bypass the sandbox: every privileged host operation still verifies the installed plugin permission before executing.
 
+## Plugin dependencies
+
+A mini-app may depend on another installed AddKo plugin without adding an application-specific core API.
+
+Example:
+
+```json
+{
+  "id": "com.example.catalog",
+  "name": "Catalog",
+  "version": "1.0.0",
+  "entry": "main.lua",
+  "permissions": ["network"],
+  "dependencies": [
+    "io.addko.luelement"
+  ]
+}
+```
+
+`dependencies` is optional. Current rules:
+
+- dependency entries are plugin IDs, not URLs or package paths;
+- a plugin cannot depend on itself;
+- duplicate dependency IDs are rejected;
+- up to 32 dependencies may be declared;
+- version constraints are intentionally not part of draft 0 yet;
+- installing a package with a missing dependency is allowed, but AddKo clearly marks the dependency as absent and will not open the mini-app until required plugins are installed.
+
+A plugin can call only IDs it declared:
+
+```lua
+local health = addko.plugins.call(
+    "io.addko.luelement",
+    "health",
+    {}
+)
+```
+
+The target plugin exposes a normal Lua method named `service(method, args)`. AddKo opens or reuses one persistent session for the target and dispatches the call as:
+
+```lua
+Plugin.service("health", {})
+```
+
+The broker:
+
+- rejects calls to undeclared plugin IDs;
+- reuses an already running dependency session instead of opening duplicates;
+- serializes duplicate session startup through a shared opening future;
+- detects dependency cycles such as `A → B → A`;
+- preserves the target plugin's own sandbox and permissions.
+
+This is deliberately generic. The AddKo core does not know whether the target service is torrent, metadata, radio, manga, an emulator helper or something else.
+
 ## Installation rules implemented now
 
 Before extraction AddKo rejects:
@@ -50,7 +104,8 @@ Before extraction AddKo rejects:
 - symbolic links;
 - missing or invalid root `manifest.json`;
 - missing/non-file Lua entrypoints;
-- unknown permissions.
+- unknown permissions;
+- malformed, duplicate or self-referencing dependency IDs.
 
 A valid package is extracted into a staging directory first. When updating an installed plugin, the old directory is moved aside and the staged package replaces it only after validation and extraction complete.
 
