@@ -1,15 +1,18 @@
 name: addko
 description: AddKo - sandboxed Lua mini-app platform.
 publish_to: "none"
-version: 0.0.1+1
+version: 0.0.2+2
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
 
 dependencies:
+  archive: ^4.5.2
   ffi: ^2.1.3
+  file_picker: ^11.0.3
   flutter:
     sdk: flutter
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_lints: ^5.0.0
