@@ -64,7 +64,7 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
 
   Future<void> _addRepository() async {
     if (_working || widget.busy) return;
-    final controller = TextEditingController();
+    var enteredUrl = '';
     final url = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -81,7 +81,7 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
               ),
               const SizedBox(height: 16),
               TextField(
-                controller: controller,
+                onChanged: (value) => enteredUrl = value,
                 autofocus: true,
                 keyboardType: TextInputType.url,
                 decoration: const InputDecoration(
@@ -100,13 +100,12 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
             child: const Text('Cancelar'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            onPressed: () => Navigator.pop(dialogContext, enteredUrl),
             child: const Text('Validar e adicionar'),
           ),
         ],
       ),
     );
-    controller.dispose();
     if (url == null || url.trim().isEmpty || !mounted) return;
     setState(() => _working = true);
     try {
