@@ -344,4 +344,6 @@ String _permissionDescription(PluginPermission permission) => switch (permission
         'Armazenamento — arquivos próprios e dados privados.',
       PluginPermission.media => 'Mídia — player fornecido pelo host.',
       PluginPermission.background => 'Segundo plano — sessões prolongadas.',
+      PluginPermission.nativeEngine =>
+        'Motor nativo — iniciar módulos aprovados já incluídos no APK.',
     };
