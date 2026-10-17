@@ -46,6 +46,7 @@ class LuaPluginSession {
         '${_luaQuote(jsonEncode(host.capabilities))}'
         ')',
       );
+      runtime.evaluate(_systemHostApi);
 
       final module = _entryModule(entry);
       runtime.evaluate(
@@ -194,6 +195,26 @@ class LuaPluginProtocolException implements Exception {
   @override
   String toString() => 'LuaPluginProtocolException: $message';
 }
+
+const String _systemHostApi = r'''
+addko.system = addko.system or {}
+
+function addko.system.open_uri(uri)
+    local reply = coroutine.yield({
+        kind = 'host',
+        op = 'system.open_uri',
+        args = { uri = uri },
+    })
+
+    if type(reply) ~= 'table' then
+        error('invalid host reply for system.open_uri')
+    end
+    if reply.ok ~= true then
+        error(tostring(reply.error or 'system.open_uri failed'))
+    end
+    return reply.value
+end
+''';
 
 String _entryModule(String entry) {
   if (!entry.endsWith('.lua')) {
