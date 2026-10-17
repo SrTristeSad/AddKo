@@ -36,7 +36,8 @@ Implemented in `main`:
 14. generic video player API and player surface;
 15. safe Android external-URI launcher through `system.open_uri`;
 16. plugin background sessions;
-17. platform, locale, JSON, paths and timing APIs.
+17. platform, locale, JSON, paths and timing APIs;
+18. generic desktop native-process host for Windows/Linux/macOS, restricted to the plugin/data sandbox.
 
 The sandbox still does **not** expose `io`, `os`, `package` or `debug`. `dofile`, `loadfile` and `collectgarbage` remain unavailable.
 
@@ -51,6 +52,7 @@ addko.net.tcp
 addko.ui
 addko.player
 addko.system
+addko.process        # desktop only
 addko.paths
 addko.platform
 addko.locale
@@ -71,6 +73,8 @@ background
 
 `system.open_uri` does not create a product-specific permission. The Android host validates the URI and rejects local/dangerous schemes such as `file:`, `content:`, `data:`, `javascript:` and `intent:`.
 
+Desktop `process.spawn` also does not introduce a product-specific permission. It is only enabled when the plugin already declares `storage` + `background`, and the executable/working directory must stay inside the installed plugin directory or that plugin's private data directory.
+
 ## First stress-test plugin
 
 [Luelement](https://github.com/SrTristeSad/Luelement) is being used as the first demanding Plugin v2 integration.
@@ -84,13 +88,20 @@ It exercises:
 - forms/UI updates;
 - background lifetime;
 - local media playback;
+- standalone native helper launch on desktop;
 - external companion deep links on Android.
 
 Torrent/libtorrent is **not** part of the AddKo core. Luelement talks to the Elementum engine through generic AddKo APIs.
 
-## Android process policy
+## Native process policy
 
-Plugin code cannot download and execute arbitrary native binaries from writable storage. `process.spawn` therefore remains unavailable on the Android host.
+### Desktop
+
+On Windows, Linux and macOS, plugins with `storage` + `background` may use the generic `addko.process` API. The host accepts only executables located inside the plugin's own installation/data sandbox. Processes started by a session are terminated when that host session closes.
+
+### Android/iOS
+
+Plugin code cannot download and execute arbitrary native binaries from writable storage. `process.spawn` therefore remains unavailable on mobile hosts.
 
 Native workloads that genuinely require Android-native packaging can use a separately installed companion app/service and communicate through generic network/URI contracts. Luelement Engine is the first test of this architecture.
 
