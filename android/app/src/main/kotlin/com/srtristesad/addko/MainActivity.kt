@@ -74,6 +74,7 @@ class MainActivity : FlutterActivity() {
             return
         }
 
+        var output: File? = null
         try {
             val displayName = displayName(uri)
             if (displayName != null && !displayName.lowercase().endsWith(".addko")) {
@@ -86,7 +87,7 @@ class MainActivity : FlutterActivity() {
             }
 
             val importDir = File(cacheDir, "addko-imports").apply { mkdirs() }
-            val output = File(importDir, "selected-${System.nanoTime()}.addko")
+            output = File(importDir, "selected-${System.nanoTime()}.addko")
 
             contentResolver.openInputStream(uri).use { input ->
                 if (input == null) {
@@ -113,6 +114,11 @@ class MainActivity : FlutterActivity() {
 
             result.success(output.absolutePath)
         } catch (error: Throwable) {
+            try {
+                output?.takeIf { it.exists() }?.delete()
+            } catch (_: Throwable) {
+                // Cache cleanup is best-effort; the platform may reclaim it later.
+            }
             result.error(
                 "picker_read_failed",
                 error.message ?: error.javaClass.simpleName,
