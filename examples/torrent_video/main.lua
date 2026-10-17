@@ -89,7 +89,7 @@ local function check_engine()
         engine_message = "Luelement e motor Elementum prontos."
     else
         engine_ready = false
-        engine_message = "Motor indisponível. Confira Luelement 0.2.1-dev e o APK Android ARM64 completo."
+        engine_message = "Motor indisponível. Confira Luelement 0.2.2-dev e o APK Android ARM64 completo."
     end
 end
 

@@ -32,7 +32,7 @@ No Windows, a partir da raiz do AddKo, execute `BUILD_EXEMPLO_TORRENT.bat`. Alte
 ## Procedimento de teste Android
 
 1. Instale a build completa do AddKo (Android ARM64, com libelementum nativo).
-2. Instale `Luelement-0.2.1-dev.addko` e autorize suas permissões, inclusive `native_engine` para o módulo `elementum`.
+2. Instale `Luelement-0.2.2-dev.addko` e autorize suas permissões, inclusive `native_engine` para o módulo `elementum`.
 3. Instale `VideoTorrent-0.1.1.addko` pela Loja → Instalar pacote.
 4. Abra **Vídeo por Torrent**: a tela abre sem iniciar o motor. Toque em **Verificar novamente** para iniciar Luelement e consultar o estado.
 5. Toque em **Testar este magnet** e observe busca de metadados, buffering e reprodução, se houver peers.
