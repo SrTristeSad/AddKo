@@ -27,13 +27,13 @@ O addon **não conecta ao torrent automaticamente** na abertura. O botão **Test
 
 ## Gerar o pacote instalável
 
-No Windows, a partir da raiz do AddKo, execute `BUILD_EXEMPLO_TORRENT.bat`. Alternativamente, use `python tools/build_torrent_video_example.py`. O arquivo produzido será `dist/VideoTorrent-0.1.2.addko`.
+No Windows, a partir da raiz do AddKo, execute `BUILD_EXEMPLO_TORRENT.bat`. Alternativamente, use `python tools/build_torrent_video_example.py`. O arquivo produzido será `dist/VideoTorrent-0.1.3.addko`.
 
 ## Procedimento de teste Android
 
 1. Instale a build completa do AddKo (Android ARM64, com libelementum nativo).
 2. Instale `Luelement-0.2.2-dev.addko` e autorize suas permissões, inclusive `native_engine` para o módulo `elementum`.
-3. Instale `VideoTorrent-0.1.1.addko` pela Loja → Instalar pacote.
+3. Instale `VideoTorrent-0.1.3.addko` pela Loja → Instalar pacote.
 4. Abra **Vídeo por Torrent**: a tela abre sem iniciar o motor. Toque em **Verificar novamente** para iniciar Luelement e consultar o estado.
 5. Toque em **Testar este magnet** e observe busca de metadados, buffering e reprodução, se houver peers.
 6. Consulte **Torrents no Luelement** e, em caso de erro, anote a mensagem do aplicativo e os logs Android.
@@ -52,4 +52,6 @@ O serviço conversa com o Elementum em `127.0.0.1:65220`, obtém o URL local de 
 
 `lua examples/torrent_video/tests/run.lua` testa o frontend e o contrato do consumidor com serviço simulado, incluindo a tentativa explícita de abrir o magnet informado. Os testes do AddKo e do Luelement na CI também verificam seus contratos de integração. **A disponibilidade do torrent e a reprodução real ainda precisam de teste no Android físico.**
 
-**Correção 0.1.2:** ENTRAR não aguarda a inicialização do Elementum. A verificação do motor é feita somente quando solicitada. O magnet de diagnóstico não garante seeds ou um vídeo reproduzível; use um torrent legalmente distribuído e com fontes disponíveis.
+**Correção 0.1.3:** ENTRAR não aguarda a inicialização do Elementum. A verificação do motor é feita somente quando solicitada. O magnet de diagnóstico não garante seeds ou um vídeo reproduzível; use um torrent legalmente distribuído e com fontes disponíveis.
+
+**Correção do renderizador:** os botões do addon omitem `args` quando não há argumentos. O host também aceita objetos vazios de Lua como lista vazia de argumentos, mantendo objetos não vazios inválidos.
