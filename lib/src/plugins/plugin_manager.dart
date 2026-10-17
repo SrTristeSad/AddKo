@@ -303,7 +303,7 @@ class PluginManager {
         .toList();
     if (dependents.isNotEmpty) {
       throw PluginPackageException(
-        'Não é possível remover: usado por \${dependents.join(', ')}.',
+        'Não é possível remover: usado por ${dependents.join(', ')}.',
       );
     }
     final original = selected.directory;
