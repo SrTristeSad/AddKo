@@ -34,7 +34,12 @@ class MediaPluginHost extends BasicPluginHost {
     final args = _map(arguments);
     switch (operation) {
       case 'player.play':
-        return player.play(args['item']);
+        final result = await player.play(args['item']);
+        final handler = uiHandler;
+        if (handler != null) {
+          await handler('ui.player_open', const <String, Object?>{});
+        }
+        return result;
       case 'player.current_url':
         return player.currentUrl;
       case 'player.is_playing':
