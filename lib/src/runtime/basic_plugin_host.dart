@@ -2,23 +2,38 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:addko/src/platform/system_external_launcher.dart';
 import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/runtime/plugin_host.dart';
 import 'package:path/path.dart' as p;
+
+typedef ExternalUriOpener = Future<bool> Function(Uri uri);
 
 class BasicPluginHost extends PluginHost {
   BasicPluginHost({
     required this.manifest,
     required this.pluginDirectory,
     required this.dataDirectory,
-  });
+    ExternalUriOpener? externalUriOpener,
+  }) : _externalUriOpener = externalUriOpener ??
+            (SystemExternalLauncher.isSupported
+                ? SystemExternalLauncher.open
+                : null);
 
   static const int maxHttpResponseBytes = 8 * 1024 * 1024;
   static const int maxDownloadBytes = 64 * 1024 * 1024;
+  static const Set<String> _blockedExternalSchemes = <String>{
+    'file',
+    'content',
+    'data',
+    'javascript',
+    'intent',
+  };
 
   final PluginManifest manifest;
   final Directory pluginDirectory;
   final Directory dataDirectory;
+  final ExternalUriOpener? _externalUriOpener;
 
   final HttpClient _http = HttpClient();
   final Map<int, ServerSocket> _servers = <int, ServerSocket>{};
@@ -42,6 +57,7 @@ class BasicPluginHost extends PluginHost {
         'process': false,
         'player': false,
         'ui': false,
+        'open_uri': _externalUriOpener != null,
         'media_permission': _media,
       };
 
@@ -66,6 +82,8 @@ class BasicPluginHost extends PluginHost {
         final milliseconds = _int(args['milliseconds'], min: 0, max: 60000);
         await Future<void>.delayed(Duration(milliseconds: milliseconds));
         return true;
+      case 'system.open_uri':
+        return _openExternalUri(args['uri']);
       case 'http.request':
         _require(_network, 'network');
         return _httpRequest(args);
@@ -160,6 +178,26 @@ class BasicPluginHost extends PluginHost {
       default:
         throw PluginHostException('Operação de host desconhecida: $operation');
     }
+  }
+
+  Future<bool> _openExternalUri(Object? raw) async {
+    final opener = _externalUriOpener;
+    if (opener == null) {
+      throw const PluginHostException(
+        'Abertura de URI externo não é suportada neste host.',
+      );
+    }
+
+    final text = raw?.toString().trim() ?? '';
+    final uri = Uri.tryParse(text);
+    final scheme = uri?.scheme.toLowerCase() ?? '';
+    if (uri == null ||
+        scheme.isEmpty ||
+        _blockedExternalSchemes.contains(scheme)) {
+      throw const PluginHostException('URI externo inválido ou não permitido.');
+    }
+
+    return opener(uri);
   }
 
   Future<Map<String, Object?>> _httpRequest(Map<String, Object?> args) async {
