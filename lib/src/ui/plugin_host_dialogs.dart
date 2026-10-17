@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:addko/src/player/addko_video_player.dart';
 import 'package:flutter/material.dart';
 
 int _nextProgressHandle = 0;
@@ -5,8 +8,9 @@ int _nextProgressHandle = 0;
 Future<Object?> handlePluginHostUi(
   BuildContext context,
   String operation,
-  Map<String, Object?> arguments,
-) async {
+  Map<String, Object?> arguments, {
+  AddKoVideoPlayer? player,
+}) async {
   if (!context.mounted) {
     return _fallback(operation, arguments);
   }
@@ -133,6 +137,17 @@ Future<Object?> handlePluginHostUi(
       return true;
     case 'ui.progress_is_cancelled':
       return false;
+    case 'ui.player_open':
+      if (player == null) return false;
+      unawaited(
+        Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            fullscreenDialog: true,
+            builder: (_) => _PluginPlayerPage(player: player),
+          ),
+        ),
+      );
+      return true;
     default:
       throw StateError('Operação de UI desconhecida: $operation');
   }
@@ -146,6 +161,7 @@ Object? _fallback(String operation, Map<String, Object?> arguments) {
     'ui.pick_file' => '',
     'ui.progress_create' => 0,
     'ui.progress_is_cancelled' => false,
+    'ui.player_open' => false,
     _ => true,
   };
 }
@@ -165,4 +181,30 @@ String _itemLabel(Object? value) {
     }
   }
   return value?.toString() ?? '';
+}
+
+class _PluginPlayerPage extends StatelessWidget {
+  const _PluginPlayerPage({required this.player});
+
+  final AddKoVideoPlayer player;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Reprodução'),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1200),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: AddKoVideoSurface(player: player),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
