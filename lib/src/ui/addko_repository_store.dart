@@ -291,10 +291,9 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
                             ListTile(
                               title: Text(addon.name),
                               subtitle: Text(
-                                'v${addon.version}' +
-                                (addon.description.isEmpty
-                                    ? ''
-                                    : '\n${addon.description}'),
+                                addon.description.isEmpty
+                                    ? 'v${addon.version}'
+                                    : 'v${addon.version}\n${addon.description}',
                               ),
                               isThreeLine: addon.description.isNotEmpty,
                               trailing: FilledButton.tonal(
