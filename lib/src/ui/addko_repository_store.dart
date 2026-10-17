@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:addko/src/repositories/addko_repositories.dart';
+import 'package:addko/src/repositories/catalog_version.dart';
 import 'package:flutter/material.dart';
 
 typedef RepositoryInstaller = Future<bool> Function(RepositoryAddon addon);
@@ -9,12 +12,14 @@ class AddKoRepositoryStore extends StatefulWidget {
     required this.repositories,
     required this.onInstallPackage,
     required this.onInstallAddon,
+    this.installedVersions = const <String, String>{},
     this.busy = false,
   });
 
   final AddKoRepositoryManager repositories;
   final VoidCallback onInstallPackage;
   final RepositoryInstaller onInstallAddon;
+  final Map<String, String> installedVersions;
   final bool busy;
 
   @override
@@ -26,10 +31,15 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
   bool _working = false;
   bool _loading = true;
   String? _error;
+  String? _categoryFilter;
+  late final Map<String, String> _installedVersions;
+  final Map<String, Future<Uint8List?>> _iconFutures =
+      <String, Future<Uint8List?>>{};
 
   @override
   void initState() {
     super.initState();
+    _installedVersions = Map<String, String>.of(widget.installedVersions);
     _refresh();
   }
 
@@ -42,7 +52,13 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
     });
     try {
       final result = await widget.repositories.refresh();
-      if (mounted) setState(() => _sources = result);
+      if (mounted) {
+        setState(() {
+          _sources = result;
+          _iconFutures.clear();
+          _categoryFilter = null;
+        });
+      }
     } on Object catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
@@ -159,7 +175,12 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
     setState(() => _working = true);
     try {
       final installed = await widget.onInstallAddon(addon);
-      if (installed) _notify('${addon.name} instalado.');
+      if (installed) {
+        if (mounted) {
+          setState(() => _installedVersions[addon.id] = addon.version);
+        }
+        _notify('${addon.name} instalado.');
+      }
     } on Object catch (error) {
       _notify('Falha na instalação: $error');
     } finally {
@@ -167,11 +188,220 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
     }
   }
 
+
+  CatalogVersionStatus _status(RepositoryAddon addon) =>
+      catalogVersionStatus(addon.version, _installedVersions[addon.id]);
+
+  String _statusLabel(CatalogVersionStatus status) => switch (status) {
+        CatalogVersionStatus.notInstalled => 'Não instalado',
+        CatalogVersionStatus.installed => 'Instalado',
+        CatalogVersionStatus.updateAvailable => 'Atualização disponível',
+        CatalogVersionStatus.installedNewer => 'Versão local mais nova',
+        CatalogVersionStatus.differentVersion => 'Versão diferente',
+      };
+
+  String _actionLabel(CatalogVersionStatus status) => switch (status) {
+        CatalogVersionStatus.notInstalled => 'Instalar',
+        CatalogVersionStatus.installed => 'Instalado',
+        CatalogVersionStatus.updateAvailable => 'Atualizar',
+        CatalogVersionStatus.installedNewer => 'Versão local mais nova',
+        CatalogVersionStatus.differentVersion => 'Substituir versão',
+      };
+
+  IconData _categoryIcon(String category) {
+    final name = category.toLowerCase();
+    if (name.contains('video') || name.contains('vídeo') ||
+        name.contains('filme')) return Icons.movie_outlined;
+    if (name.contains('jogo') || name.contains('game') ||
+        name.contains('emulad')) return Icons.sports_esports_outlined;
+    if (name.contains('music') || name.contains('músic') ||
+        name.contains('radio') || name.contains('rádio')) {
+      return Icons.music_note_outlined;
+    }
+    if (name.contains('livro') || name.contains('mangá') ||
+        name.contains('manga') || name.contains('leitura')) {
+      return Icons.menu_book_outlined;
+    }
+    if (name.contains('ferramenta') || name.contains('utilit')) {
+      return Icons.build_outlined;
+    }
+    return Icons.extension_outlined;
+  }
+
+  Future<Uint8List?> _icon(RepositoryAddon addon) {
+    final url = addon.icon;
+    if (url == null) return Future<Uint8List?>.value();
+    final cacheKey = '${url.toString()}/${addon.iconSha256}';
+    final existing = _iconFutures[cacheKey];
+    if (existing != null) return existing;
+    // Never retain unbounded icon futures across massive catalogs.
+    if (_iconFutures.length >= 48) {
+      _iconFutures.remove(_iconFutures.keys.first);
+    }
+    final future = widget.repositories.downloadIcon(addon).catchError(
+      (Object _) => null,
+    );
+    _iconFutures[cacheKey] = future;
+    return future;
+  }
+
+  Widget _artwork(RepositoryAddon addon, {double size = 56}) {
+    final placeholder = Icon(_categoryIcon(addon.category), size: size * .53);
+    if (addon.icon == null) {
+      return SizedBox(width: size, height: size, child: Center(child: placeholder));
+    }
+    return SizedBox(
+      width: size,
+      height: size,
+      child: FutureBuilder<Uint8List?>(
+        future: _icon(addon),
+        builder: (context, snapshot) {
+          final bytes = snapshot.data;
+          if (bytes == null) return Center(child: placeholder);
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.memory(
+              bytes,
+              fit: BoxFit.cover,
+              cacheWidth: 144,
+              cacheHeight: 144,
+              gaplessPlayback: true,
+              errorBuilder: (_, __, ___) => Center(child: placeholder),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _details(RepositoryAddon addon, RepositoryIndex source) async {
+    final status = _status(addon);
+    final installed = _installedVersions[addon.id];
+    final actionable = status != CatalogVersionStatus.installed &&
+        status != CatalogVersionStatus.installedNewer;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(addon.name),
+        content: SizedBox(
+          width: 500,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(child: _artwork(addon, size: 90)),
+                const SizedBox(height: 16),
+                Text(addon.category, style: Theme.of(dialogContext).textTheme.labelLarge),
+                const SizedBox(height: 8),
+                Text(addon.description.isEmpty
+                    ? 'O publicador não forneceu uma descrição.'
+                    : addon.description),
+                const SizedBox(height: 18),
+                Text('Versão publicada: ${addon.version}'),
+                Text('Versão instalada: ${installed ?? "Nenhuma"}'),
+                Text('Situação: ${_statusLabel(status)}'),
+                const SizedBox(height: 12),
+                Text('Repositório: ${source.name}'),
+                Text('Origem: ${source.url.host}'),
+                const SizedBox(height: 8),
+                Text('SHA-256: ${addon.sha256}',
+                    style: Theme.of(dialogContext).textTheme.bodySmall),
+                const SizedBox(height: 12),
+                const Text(
+                  'As permissões e dependências verdadeiras são verificadas '
+                  'no pacote e exibidas antes de instalar ou atualizar. '
+                  'O catálogo é informação do publicador, não uma aprovação de segurança.',
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Fechar'),
+          ),
+          FilledButton(
+            onPressed: (_working || widget.busy || !actionable)
+                ? null
+                : () {
+                    Navigator.of(dialogContext).pop();
+                    _install(addon);
+                  },
+            child: Text(_actionLabel(status)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _addonCard(RepositoryAddon addon, RepositoryIndex source) {
+    final status = _status(addon);
+    final label = _statusLabel(status);
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => _details(addon, source),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              _artwork(addon),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(addon.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    Text('${addon.category} · v${addon.version}',
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    Text(label,
+                        style: TextStyle(
+                          color: status == CatalogVersionStatus.updateAvailable
+                              ? scheme.primary
+                              : scheme.onSurfaceVariant,
+                          fontWeight: status == CatalogVersionStatus.updateAvailable
+                              ? FontWeight.w700
+                              : FontWeight.normal,
+                        )),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: () => _details(addon, source),
+                child: const Text('Detalhes'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final disabled = _working || widget.busy;
+
+    final categories = _sources
+        .expand((source) => source.index?.addons ?? const <RepositoryAddon>[])
+        .map((addon) => addon.category)
+        .toSet()
+        .toList()
+      ..sort();
+    if (_categoryFilter != null && !categories.contains(_categoryFilter)) {
+      _categoryFilter = null;
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Loja'),
@@ -249,6 +479,30 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
                     ),
                   ),
                 ],
+
+                if (categories.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  Text('Categorias', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Todas'),
+                        selected: _categoryFilter == null,
+                        onSelected: (_) => setState(() => _categoryFilter = null),
+                      ),
+                      for (final category in categories)
+                        ChoiceChip(
+                          label: Text(category),
+                          selected: _categoryFilter == category,
+                          onSelected: (_) =>
+                              setState(() => _categoryFilter = category),
+                        ),
+                    ],
+                  ),
+                ],
                 for (final source in _sources) ...[
                   const SizedBox(height: 22),
                   Card(
@@ -286,22 +540,11 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
                             child: Text('Este repositório não possui addons.'),
                           )
                         else
-                          for (final addon in source.index!.addons) ...[
-                            const Divider(height: 1),
-                            ListTile(
-                              title: Text(addon.name),
-                              subtitle: Text(
-                                addon.description.isEmpty
-                                    ? 'v${addon.version}'
-                                    : 'v${addon.version}\n${addon.description}',
-                              ),
-                              isThreeLine: addon.description.isNotEmpty,
-                              trailing: FilledButton.tonal(
-                                onPressed: disabled ? null : () => _install(addon),
-                                child: const Text('Instalar'),
-                              ),
-                            ),
-                          ],
+                          for (final addon in source.index!.addons.where(
+                            (item) => _categoryFilter == null ||
+                                item.category == _categoryFilter,
+                          ))
+                            _addonCard(addon, source.index!),
                       ],
                     ),
                   ),
