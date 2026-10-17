@@ -81,7 +81,8 @@ assert(filled.value:find("AJKRETO5SBORCFLSLNVJMZF2XNSTJC3N", 1, true))
 assert(filled.value:find("tracker.opentrackr.org", 1, true))
 assert(latest_play() == nil) -- never launch torrent on page load
 
-local checked = plugin.refresh()\nassert_button_arguments(checked.body)
+local checked = plugin.refresh()
+assert_button_arguments(checked.body)
 assert(has_text(checked.body, "Motor conectado"))
 assert(calls[#calls].method == "health")
 
@@ -104,7 +105,8 @@ local http = plugin.play({ uri = "https://example.org/legal-video.torrent" })
 assert(has_text(http.body, "Reprodução iniciada"))
 assert(latest_play().uri == "https://example.org/legal-video.torrent")
 
-local shown = plugin.list_torrents()\nassert_button_arguments(shown.body)
+local shown = plugin.list_torrents()
+assert_button_arguments(shown.body)
 assert(has_text(shown.body, "Video de dominio publico"))
 local existing = plugin.play_existing("demo-hash")
 assert(has_text(existing.body, "Reprodução iniciada"))
