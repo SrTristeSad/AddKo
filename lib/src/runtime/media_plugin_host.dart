@@ -34,12 +34,22 @@ class MediaPluginHost extends BasicPluginHost {
     final args = _map(arguments);
     switch (operation) {
       case 'player.play':
-        final result = await player.play(args['item']);
+        // Open the native player surface before waiting for media to initialize.
+        // Torrent streams may need metadata and buffering; keeping the UI hidden
+        // until initialize() finishes makes the app appear unresponsive.
         final handler = uiHandler;
         if (handler != null) {
-          await handler('ui.player_open', const <String, Object?>{});
+          final opened = await handler(
+            'ui.player_open',
+            const <String, Object?>{},
+          );
+          if (opened == false) {
+            throw const PluginHostException(
+              'Não foi possível abrir a tela do player.',
+            );
+          }
         }
-        return result;
+        return player.play(args['item']);
       case 'player.current_url':
         return player.currentUrl;
       case 'player.is_playing':
