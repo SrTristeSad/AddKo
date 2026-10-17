@@ -1,9 +1,9 @@
 import 'dart:io';
 
+import 'package:addko/src/platform/system_file_picker.dart';
 import 'package:addko/src/plugins/plugin_manager.dart';
 import 'package:addko/src/plugins/plugin_package.dart';
 import 'package:addko/src/runtime/lua_runtime.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 class AddKoApp extends StatelessWidget {
@@ -81,27 +81,17 @@ class _HomePageState extends State<_HomePage> {
     final manager = _manager;
     if (manager == null || _busy) return;
 
+    String? selectedPath;
     try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const <String>['addko'],
-      );
-      if (result == null || result.files.isEmpty) return;
-
-      final selected = result.files.single;
-      final path = selected.path;
-      if (path == null || path.isEmpty) {
-        throw StateError(
-          'O Android não forneceu um caminho local para o pacote selecionado.',
-        );
-      }
+      selectedPath = await SystemFilePicker.pickAddko();
+      if (selectedPath == null || selectedPath.isEmpty) return;
 
       setState(() {
         _busy = true;
-        _message = 'Validando ${selected.name}...';
+        _message = 'Validando pacote .addko...';
       });
 
-      final installed = await manager.installFile(File(path));
+      final installed = await manager.installFile(File(selectedPath));
       await _reloadPlugins();
 
       if (!mounted) return;
@@ -113,6 +103,16 @@ class _HomePageState extends State<_HomePage> {
       if (!mounted) return;
       setState(() => _message = 'Falha na instalação: $error');
     } finally {
+      if (selectedPath != null) {
+        try {
+          final selectedFile = File(selectedPath);
+          if (await selectedFile.exists()) {
+            await selectedFile.delete();
+          }
+        } on Object {
+          // Arquivos de importação ficam no cache; falha na limpeza não bloqueia o app.
+        }
+      }
       if (mounted) {
         setState(() => _busy = false);
       }
