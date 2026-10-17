@@ -123,10 +123,10 @@ class _AddKoInstalledManagerState extends State<AddKoInstalledManager> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('ID: \${plugin.manifest.id}'),
-                Text('Versão instalada: \${plugin.manifest.version}'),
+                Text('ID: ${plugin.manifest.id}'),
+                Text('Versão instalada: ${plugin.manifest.version}'),
                 if (update != null)
-                  Text('Atualização disponível: \${update.version}'),
+                  Text('Atualização disponível: ${update.version}'),
                 const SizedBox(height: 20),
                 Text('Permissões',
                     style: Theme.of(dialogContext).textTheme.titleMedium),
@@ -155,7 +155,7 @@ class _AddKoInstalledManagerState extends State<AddKoInstalledManager> {
                   const Text('Nenhum.')
                 else
                   for (final dependent in dependents)
-                    Text('• \${dependent.manifest.name}'),
+                    Text('• ${dependent.manifest.name}'),
                 const SizedBox(height: 12),
                 const Text(
                   'As permissões exibidas vêm do manifesto local instalado, '
@@ -201,7 +201,7 @@ class _AddKoInstalledManagerState extends State<AddKoInstalledManager> {
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, updateDialog) => AlertDialog(
-          title: Text('Desinstalar \${plugin.manifest.name}?'),
+          title: Text('Desinstalar ${plugin.manifest.name}?'),
           content: SizedBox(
             width: 440,
             child: Column(
@@ -245,7 +245,7 @@ class _AddKoInstalledManagerState extends State<AddKoInstalledManager> {
       final remaining = await widget.onReload();
       if (mounted) {
         setState(() => _plugins = remaining);
-        _notify('\${plugin.manifest.name} desinstalado.');
+        _notify('${plugin.manifest.name} desinstalado.');
       }
     } on Object catch (error) {
       _notify('Falha na desinstalação: $error');
@@ -287,7 +287,7 @@ class _AddKoInstalledManagerState extends State<AddKoInstalledManager> {
                   children: [
                     Expanded(
                       child: Text(
-                        '\${_plugins.length} addon(s) instalado(s)',
+                        '${_plugins.length} addon(s) instalado(s)',
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                     ),
@@ -321,8 +321,8 @@ class _AddKoInstalledManagerState extends State<AddKoInstalledManager> {
                       leading: const Icon(Icons.extension_outlined),
                       title: Text(plugin.manifest.name),
                       subtitle: Text(
-                        'v\${plugin.manifest.version}'
-                        '\${_updateFor(plugin) != null ? ' • Atualização disponível' : ''}',
+                        'v${plugin.manifest.version}'
+                        '${_updateFor(plugin) != null ? ' • Atualização disponível' : ''}',
                       ),
                       trailing: const Icon(Icons.chevron_right_rounded),
                       onTap: _busy ? null : () => _details(plugin),
