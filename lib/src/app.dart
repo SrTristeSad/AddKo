@@ -9,6 +9,7 @@ import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/plugins/plugin_package.dart';
 import 'package:addko/src/runtime/lua_plugin_session.dart';
 import 'package:addko/src/runtime/lua_runtime.dart';
+import 'package:addko/src/ui/plugin_ui.dart';
 import 'package:flutter/material.dart';
 
 class AddKoApp extends StatelessWidget {
@@ -250,13 +251,37 @@ class _HomePageState extends State<_HomePage> {
       await _closePluginSession(plugin.manifest.id);
       pendingSession = await plugin.openSession(player: _player);
       final result = await pendingSession.start();
+      final document = PluginUiDocument.tryParse(result);
+
       _sessions[plugin.manifest.id] = pendingSession;
+      final session = pendingSession;
       pendingSession = null;
 
       if (!mounted) return;
       setState(() {
-        _message = '${plugin.manifest.name}: $result';
+        _message = document == null
+            ? '${plugin.manifest.name}: $result'
+            : '${plugin.manifest.name} aberto.';
+        _busy = false;
       });
+
+      if (document != null) {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: (context) => PluginUiPage(
+              initialDocument: document,
+              allowNetworkImages: plugin.manifest.permissions
+                  .contains(PluginPermission.network),
+              onAction: session.call,
+            ),
+          ),
+        );
+
+        if (!plugin.manifest.permissions.contains(PluginPermission.background)) {
+          await _closePluginSession(plugin.manifest.id);
+          if (mounted) setState(() {});
+        }
+      }
     } on Object catch (error) {
       if (pendingSession != null) {
         await pendingSession.close();
@@ -264,7 +289,7 @@ class _HomePageState extends State<_HomePage> {
       if (!mounted) return;
       setState(() => _message = 'Erro ao iniciar plugin: $error');
     } finally {
-      if (mounted) {
+      if (mounted && _busy) {
         setState(() => _busy = false);
       }
     }
