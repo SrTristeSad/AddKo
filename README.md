@@ -1,43 +1,59 @@
-# AddKo — Android native Kodi integration
+# AddKo
 
-Version 0.2.1+26 brings the current native integration into this repository.
-Android ARM64 uses Kodi 21.3, its CPython 3.11, InputStream Adaptive 21.5.25
-and FFmpegDirect 21.3.8. Flutter draws the application interface over the
-native activity. The launcher prepares the private runtime before starting
-the native activity in the :kodi process.
+AddKo is being rebuilt from the ground up as a **Lua mini-app platform**.
 
-## Startup fixes
+The old Kodi/Python architecture is no longer part of `main`. It is preserved in the branch `legacy/kodi-0.2.1` only for historical reference.
 
-The first ARM64 emulator run reproduced a native SIGABRT: libandroidjni
-constructed the input listener using the application package, while only
-the original JNI package contained that class. An application-package
-subclass now preserves the original registered native callbacks. The APK
-audit requires both application-package helpers.
+## New foundation
 
-Native paths are configured in the native process before loading libkodi.
-An absent vendor launcher no longer causes a null dereference. The Flutter
-host continues waiting for a slow native surface instead of abandoning
-startup after 12 seconds. MPV Android libraries have been removed; desktop
-MPV packages remain.
+- Flutter owns the application UI.
+- Lua 5.5.1 is the official plugin runtime.
+- Lua is compiled from the official upstream C sources and linked into the Android app.
+- Each future plugin will run in an isolated Lua state with explicit permissions.
+- The AddKo API will provide UI, navigation, storage, networking, media and other capabilities instead of exposing Android or Flutter directly.
+- Kodi and Python compatibility are explicitly out of scope.
 
-## Reproducible runtime
+## Current milestone
 
-Run `python3 tools/android/fetch_kodi_runtime.py` before building. It downloads
-pinned official packages, verifies SHA-256, stages assets and ARM64 libraries,
-applies the versioned integration overlays, then audits every inventoried
-file. Large binary payloads are not stored in Git. Sources and licenses:
-`third_party/kodi_21_3/PROVENANCE.json`, `LICENSE.md`, and `LICENSES/`. Kodi
-source is available at https://github.com/xbmc/xbmc/tree/21.3-Omega; InputStream
-sources at https://github.com/xbmc/inputstream.adaptive and
-https://github.com/xbmc/inputstream.ffmpegdirect (versions above).
+The first milestone proves the new stack end to end:
 
-## GitHub Actions
+1. fetch and SHA-256 verify the official Lua 5.5.1 source;
+2. compile Lua into `libaddko_lua.so` for Android ARM64;
+3. create a constrained Lua state;
+4. execute Lua through Dart FFI;
+5. enforce an initial memory limit and instruction budget;
+6. expose only a reduced standard library set.
 
-The workflow builds and audits an ARM64 release APK, uploads it as an artifact,
-and attempts a startup smoke test on an API 35 Google APIs emulator with ARM
-translation. The test requires a Flutter frame, ready native JSON-RPC, and
-a stable native process for 15 seconds. Diagnostics are uploaded on failure.
-An emulator lacking ARM64 translation fails explicitly rather than reporting
-a successful startup. This does not verify playback, DRM, or every TV box.
+The current sandbox does **not** open `io`, `os`, `package`, or `debug`. `dofile`, `loadfile`, and `collectgarbage` are removed from the base environment.
 
-The startup regression is not considered validated until that test passes.
+## Build on Windows
+
+Run:
+
+```bat
+BUILD_ANDROID.bat
+```
+
+The script intentionally pauses before closing so build errors remain visible.
+
+For analysis/tests only:
+
+```bat
+TESTAR_CODIGO.bat
+```
+
+## Lua upstream
+
+Pinned release: **Lua 5.5.1**
+
+Official archive: `https://www.lua.org/ftp/lua-5.5.1.tar.gz`
+
+SHA-256:
+
+```text
+1c4b4068d67061f2a2231ad2b5422e77acea1487ea9890f6320af614f4373dce
+```
+
+The source is downloaded during setup instead of being copied into this repository.
+
+See `docs/ARCHITECTURE.md`, `docs/PLUGIN_SPEC.md`, and `docs/ROADMAP.md`.

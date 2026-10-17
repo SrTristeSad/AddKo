@@ -26,28 +26,15 @@ android {
         }
     }
 
-    sourceSets.getByName("main") {
-        java.srcDir("../../third_party/kodi_21_3/java")
-        res.srcDir("../../third_party/kodi_21_3/res")
-        assets.srcDir("../../third_party/kodi_21_3/assets")
-        jniLibs.srcDir("../../third_party/kodi_21_3/jniLibs")
-    }
-    androidResources {
-        // AAPT's default ignores directories beginning with '_', which drops
-        // Python's _vendor/_bundled modules and Kodi's web translations.
-        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~"
-    }
-    packaging {
-        jniLibs {
-            useLegacyPackaging = true
-            keepDebugSymbols += "**/*.so"
-            pickFirsts += "**/libc++_shared.so"
+    externalNativeBuild {
+        cmake {
+            path = file("../../native/CMakeLists.txt")
+            version = "3.22.1"
         }
     }
 
     buildTypes {
         release {
-            // Kodi looks up Java classes/methods through JNI at runtime.
             isMinifyEnabled = false
             isShrinkResources = false
             signingConfig = signingConfigs.getByName("debug")
@@ -63,10 +50,4 @@ kotlin {
 
 flutter {
     source = "../.."
-}
-
-
-dependencies {
-    implementation("androidx.tvprovider:tvprovider:1.1.0-alpha01")
-    implementation("com.google.code.gson:gson:2.10.1")
 }

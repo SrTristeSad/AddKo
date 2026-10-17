@@ -1,0 +1,7 @@
+{
+  "id": "com.addko.hello",
+  "name": "Hello AddKo",
+  "version": "1.0.0",
+  "entry": "main.lua",
+  "permissions": []
+}

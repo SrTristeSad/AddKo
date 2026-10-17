@@ -1,9 +1,0 @@
-package org.xbmc.kodi.model;
-
-/**
- * Created by cbro on 22/12/2017
- */
-
-public class Album extends Media
-{
-}
