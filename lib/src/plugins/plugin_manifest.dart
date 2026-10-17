@@ -7,6 +7,7 @@ class PluginManifest {
     required this.permissions,
     this.dependencies = const <String>{},
     this.nativeEngines = const <String>{},
+    this.kind = PluginKind.app,
   });
 
   static final RegExp _idPattern =
@@ -19,12 +20,14 @@ class PluginManifest {
   final Set<PluginPermission> permissions;
   final Set<String> dependencies;
   final Set<String> nativeEngines;
+  final PluginKind kind;
 
   factory PluginManifest.fromJson(Map<String, Object?> json) {
     final id = _requiredString(json, 'id');
     final name = _requiredString(json, 'name');
     final version = _requiredString(json, 'version');
     final entry = _requiredString(json, 'entry');
+    final kind = PluginKind.parse(json['type']);
 
     if (!_isValidPluginId(id)) {
       throw const FormatException('ID de plugin inválido.');
@@ -108,6 +111,7 @@ class PluginManifest {
       permissions: Set.unmodifiable(permissions),
       dependencies: Set.unmodifiable(dependencies),
       nativeEngines: Set.unmodifiable(nativeEngines),
+      kind: kind,
     );
   }
 
@@ -164,5 +168,21 @@ enum PluginPermission {
       if (permission.wireName == value) return permission;
     }
     throw FormatException('Permissão desconhecida: $value');
+  }
+}
+
+enum PluginKind {
+  app('app'),
+  service('service');
+
+  const PluginKind(this.wireName);
+  final String wireName;
+
+  static PluginKind parse(Object? raw) {
+    if (raw == null) return PluginKind.app;
+    for (final kind in PluginKind.values) {
+      if (kind.wireName == raw) return kind;
+    }
+    throw const FormatException('Tipo de addon inválido: use app ou service.');
   }
 }

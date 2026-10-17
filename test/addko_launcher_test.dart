@@ -46,6 +46,61 @@ void main() {
     expect(opened, same(plugin));
   });
 
+
+  testWidgets('a service addon stays off the launcher', (tester) async {
+    final service = InstalledPlugin(
+      directory: Directory.systemTemp,
+      manifest: const PluginManifest(
+        id: 'io.addko.luelement',
+        name: 'Luelement',
+        version: '0.2.0-dev',
+        entry: 'main.lua',
+        permissions: <PluginPermission>{PluginPermission.background},
+        kind: PluginKind.service,
+      ),
+    );
+    final consumer = InstalledPlugin(
+      directory: Directory.systemTemp,
+      manifest: const PluginManifest(
+        id: 'io.addko.movie',
+        name: 'Cinema',
+        version: '1.0.0',
+        entry: 'main.lua',
+        permissions: <PluginPermission>{},
+        dependencies: <String>{'io.addko.luelement'},
+      ),
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: AddKoLauncher(
+        plugins: <InstalledPlugin>[service, consumer],
+        busy: false,
+        activePluginIds: const <String>{},
+        onOpenPlugin: (_) {},
+        onOpenStore: () {},
+        onOpenSettings: () {},
+        onExit: () {},
+      ),
+    ));
+    expect(find.text('Cinema'), findsOneWidget);
+    expect(find.text('Luelement'), findsNothing);
+    expect(find.text('ENTRAR'), findsOneWidget);
+
+    await tester.pumpWidget(MaterialApp(
+      home: AddKoLauncher(
+        plugins: <InstalledPlugin>[service],
+        busy: false,
+        activePluginIds: const <String>{},
+        onOpenPlugin: (_) {},
+        onOpenStore: () {},
+        onOpenSettings: () {},
+        onExit: () {},
+      ),
+    ));
+    expect(find.text('Nenhum aplicativo instalado'), findsOneWidget);
+    expect(find.textContaining('Gerenciar addons'), findsOneWidget);
+    expect(find.text('Luelement'), findsNothing);
+  });
+
   testWidgets('empty launcher points the user to the store', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

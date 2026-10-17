@@ -1,5 +1,6 @@
 import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/plugins/plugin_package.dart';
+import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/repositories/addko_repositories.dart';
 import 'package:addko/src/repositories/catalog_version.dart';
 import 'package:flutter/material.dart';
@@ -124,6 +125,9 @@ class _AddKoInstalledManagerState extends State<AddKoInstalledManager> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('ID: ${plugin.manifest.id}'),
+                Text(plugin.manifest.kind == PluginKind.service
+                    ? 'Tipo: Serviço para outros addons'
+                    : 'Tipo: Aplicativo'),
                 Text('Versão instalada: ${plugin.manifest.version}'),
                 if (update != null)
                   Text('Atualização disponível: ${update.version}'),
@@ -321,6 +325,7 @@ class _AddKoInstalledManagerState extends State<AddKoInstalledManager> {
                       leading: const Icon(Icons.extension_outlined),
                       title: Text(plugin.manifest.name),
                       subtitle: Text(
+                        '${plugin.manifest.kind == PluginKind.service ? 'Serviço • ' : ''}'
                         'v${plugin.manifest.version}'
                         '${_updateFor(plugin) != null ? ' • Atualização disponível' : ''}',
                       ),

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:addko/src/plugins/plugin_package.dart';
+import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:flutter/material.dart';
 
 class AddKoLauncher extends StatelessWidget {
@@ -25,14 +26,20 @@ class AddKoLauncher extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final visiblePlugins = plugins
+        .where((plugin) => plugin.manifest.kind == PluginKind.app)
+        .toList(growable: false);
+    final hasInstalledServices = plugins.any(
+      (plugin) => plugin.manifest.kind == PluginKind.service,
+    );
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
             _LauncherTopBar(busy: busy),
             Expanded(
-              child: plugins.isEmpty && !busy
-                  ? const _EmptyLauncher()
+              child: visiblePlugins.isEmpty && !busy
+                  ? _EmptyLauncher(hasServices: hasInstalledServices)
                   : LayoutBuilder(
                       builder: (context, constraints) {
                         final columns = _columnsForWidth(constraints.maxWidth);
@@ -45,9 +52,9 @@ class AddKoLauncher extends StatelessWidget {
                             mainAxisSpacing: 20,
                             mainAxisExtent: 292,
                           ),
-                          itemCount: plugins.length,
+                          itemCount: visiblePlugins.length,
                           itemBuilder: (context, index) {
-                            final plugin = plugins[index];
+                            final plugin = visiblePlugins[index];
                             return _PluginCard(
                               plugin: plugin,
                               busy: busy,
@@ -405,7 +412,9 @@ class _PluginCardState extends State<_PluginCard> {
 }
 
 class _EmptyLauncher extends StatelessWidget {
-  const _EmptyLauncher();
+  const _EmptyLauncher({this.hasServices = false});
+
+  final bool hasServices;
 
   @override
   Widget build(BuildContext context) {
@@ -423,12 +432,14 @@ class _EmptyLauncher extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             Text(
-              'Nenhum addon instalado',
+              hasServices ? 'Nenhum aplicativo instalado' : 'Nenhum addon instalado',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 6),
             Text(
-              'Abra a Loja para começar.',
+              hasServices
+                  ? 'Os plugins de serviço ficam em Configurações → Gerenciar addons.'
+                  : 'Abra a Loja para começar.',
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium

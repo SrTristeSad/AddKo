@@ -187,6 +187,10 @@ class _HomePageState extends State<_HomePage> {
                   children: [
                     Text(preview.manifest.id),
                     const SizedBox(height: 4),
+                    Text(preview.manifest.kind == PluginKind.service
+                        ? 'Tipo: plugin de serviço (não aparece na tela inicial)'
+                        : 'Tipo: aplicativo'),
+                    const SizedBox(height: 4),
                     Text(
                       current == null
                           ? 'Versão ${preview.manifest.version}'
@@ -287,6 +291,11 @@ class _HomePageState extends State<_HomePage> {
 
   Future<void> _runPlugin(InstalledPlugin plugin) async {
     if (_busy) return;
+    if (plugin.manifest.kind == PluginKind.service) {
+      setState(() => _message =
+          '${plugin.manifest.name} é um serviço usado por outros addons.');
+      return;
+    }
 
     final missing = _missingDependencies(plugin);
     if (missing.isNotEmpty) {

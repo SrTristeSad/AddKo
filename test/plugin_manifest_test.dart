@@ -14,6 +14,7 @@ void main() {
     expect(manifest.id, 'com.addko.hello');
     expect(manifest.permissions, contains(PluginPermission.storage));
     expect(manifest.dependencies, isEmpty);
+    expect(manifest.kind, PluginKind.app);
   });
 
   test('parses declared plugin dependencies', () {
@@ -32,6 +33,36 @@ void main() {
     expect(
       manifest.dependencies,
       containsAll(<String>['io.addko.luelement', 'com.example.metadata']),
+    );
+  });
+
+
+  test('distinguishes addon applications from headless services', () {
+    final base = <String, Object?>{
+      'id': 'io.addko.luelement',
+      'name': 'Luelement',
+      'version': '1.0.0',
+      'entry': 'main.lua',
+      'permissions': <Object?>['background'],
+    };
+    expect(
+      PluginManifest.fromJson(<String, Object?>{...base, 'type': 'service'})
+          .kind,
+      PluginKind.service,
+    );
+    expect(
+      () => PluginManifest.fromJson(<String, Object?>{
+        ...base,
+        'type': 'unknown',
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => PluginManifest.fromJson(<String, Object?>{
+        ...base,
+        'type': 8,
+      }),
+      throwsFormatException,
     );
   });
 
