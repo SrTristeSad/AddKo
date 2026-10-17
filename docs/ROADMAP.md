@@ -47,8 +47,20 @@
 - [x] tabs;
 - [x] network and package-local images;
 - [x] initial audio/video media API;
+- [x] first-class `type="game"` Lua experience root;
+- [x] sandboxed 2D game surface with keyboard/touch input;
+- [x] bounded draw-command protocol for Lua games;
+- [x] RGBA8888 framebuffer path for Lua emulators;
+- [x] package-local sprites inside game frames;
+- [ ] dedicated gamepad axes/buttons API;
+- [ ] low-overhead native frame transport for demanding emulators;
+- [ ] audio sample/buffer API for games and emulators;
 - [ ] local database API;
 - [ ] authentication helpers;
 - [ ] background services with quotas;
 - [ ] phone/tablet/TV input model;
 - [ ] plugin developer tools.
+
+## Design rule
+
+AddKo mini-apps must not be forced into Kodi-style media-addon screens. The host exposes generic capabilities and sandbox limits; Lua is free to combine them into apps, tools, readers, games, emulators and other experiences.
