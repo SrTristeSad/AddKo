@@ -4,34 +4,95 @@ AddKo is being rebuilt from the ground up as a **Lua mini-app platform**.
 
 The old Kodi/Python architecture is no longer part of `main`. It is preserved in the branch `legacy/kodi-0.2.1` only for historical reference.
 
-## New foundation
+## Foundation
 
 - Flutter owns the application UI.
 - Lua 5.5.1 is the official plugin runtime.
 - Lua is compiled from the official upstream C sources and linked into the Android app.
 - Plugins use the AddKo-owned `.addko` package format.
 - Each plugin runs in an isolated Lua state with explicit permissions.
-- The AddKo API will provide UI, navigation, storage, networking, media and other capabilities instead of exposing Android or Flutter directly.
 - Kodi and Python compatibility are explicitly out of scope.
+- Plugins call generic AddKo APIs instead of Android/Flutter directly.
 
 ## Current milestone
 
-The runtime foundation is now connected to the first real plugin lifecycle:
+The runtime is now connected to a real persistent mini-app lifecycle and the first generic host APIs.
+
+Implemented in `main`:
 
 1. fetch and SHA-256 verify the official Lua 5.5.1 source;
 2. compile Lua into `libaddko_lua.so` for Android ARM64;
-3. create a constrained Lua state;
-4. execute Lua through Dart FFI;
-5. enforce an initial memory limit and instruction budget;
-6. expose only a reduced standard library set;
-7. select a `.addko` package with the Android system picker;
-8. validate the ZIP, manifest, paths, sizes, duplicates and symlinks before extraction;
-9. stage installation before replacing an existing plugin;
-10. discover installed plugins and execute their declared `main.lua` entrypoint.
+3. create a constrained Lua state with memory/instruction limits;
+4. expose a safe plugin-local `require` without enabling the standard `package` library;
+5. install and validate `.addko` ZIP packages;
+6. persist one Lua state for the lifetime of an opened mini-app;
+7. coroutine-based asynchronous Lua → Dart host calls;
+8. declarative Flutter UI returned by Lua;
+9. forms, buttons, cards, lists/grids, images and common controls;
+10. permission-gated HTTP/HTTPS;
+11. sandboxed per-plugin filesystem;
+12. loopback-only TCP server for background plugins;
+13. generic Flutter dialogs (`alert`, `confirm`, `input`, `select`);
+14. generic video player API and player surface;
+15. safe Android external-URI launcher through `system.open_uri`;
+16. plugin background sessions;
+17. platform, locale, JSON, paths and timing APIs.
 
-The current Lua sandbox does **not** open `io`, `os`, `package`, or `debug`. `dofile`, `loadfile`, and `collectgarbage` are removed from the base environment.
+The sandbox still does **not** expose `io`, `os`, `package` or `debug`. `dofile`, `loadfile` and `collectgarbage` remain unavailable.
 
-The next major milestone is the host API: Lua-defined UI/events first, followed by permission-gated storage, networking and media.
+## Generic host model
+
+A plugin can use capabilities such as:
+
+```text
+addko.http
+addko.fs
+addko.net.tcp
+addko.ui
+addko.player
+addko.system
+addko.paths
+addko.platform
+addko.locale
+addko.json
+addko.sleep
+```
+
+The core does not contain application-specific APIs such as torrent, manga, radio or social-network APIs. Those belong to plugins.
+
+The current permission vocabulary remains intentionally small:
+
+```text
+network
+storage
+media
+background
+```
+
+`system.open_uri` does not create a product-specific permission. The Android host validates the URI and rejects local/dangerous schemes such as `file:`, `content:`, `data:`, `javascript:` and `intent:`.
+
+## First stress-test plugin
+
+[Luelement](https://github.com/SrTristeSad/Luelement) is being used as the first demanding Plugin v2 integration.
+
+It exercises:
+
+- persistent Lua state;
+- HTTP redirects;
+- loopback TCP callbacks;
+- dialogs;
+- forms/UI updates;
+- background lifetime;
+- local media playback;
+- external companion deep links on Android.
+
+Torrent/libtorrent is **not** part of the AddKo core. Luelement talks to the Elementum engine through generic AddKo APIs.
+
+## Android process policy
+
+Plugin code cannot download and execute arbitrary native binaries from writable storage. `process.spawn` therefore remains unavailable on the Android host.
+
+Native workloads that genuinely require Android-native packaging can use a separately installed companion app/service and communicate through generic network/URI contracts. Luelement Engine is the first test of this architecture.
 
 ## Build on Windows
 
@@ -63,4 +124,4 @@ SHA-256:
 
 The source is downloaded during setup instead of being copied into this repository.
 
-See `docs/ARCHITECTURE.md`, `docs/PLUGIN_SPEC.md`, and `docs/ROADMAP.md`.
+See `docs/ARCHITECTURE.md`, `docs/PLUGIN_SPEC.md` and `docs/ROADMAP.md`.
