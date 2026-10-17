@@ -80,7 +80,6 @@ void main() {
     );
 
     expect(find.text('Repositórios'), findsOneWidget);
-    expect(find.text('Sua loja ainda está vazia'), findsOneWidget);
     expect(find.text('Adicionar repositório'), findsOneWidget);
     expect(find.text('Instalar arquivo .addko'), findsOneWidget);
     expect(find.textContaining('128 addons'), findsNothing);
@@ -88,5 +87,9 @@ void main() {
     await tester.tap(find.text('Escolher arquivo'));
     await tester.pump();
     expect(installRequested, isTrue);
+
+    await tester.drag(find.byType(ListView).first, const Offset(0, -500));
+    await tester.pumpAndSettle();
+    expect(find.text('Sua loja ainda está vazia'), findsOneWidget);
   });
 }
