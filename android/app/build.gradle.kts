@@ -44,6 +44,11 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            // Keep pinned upstream bytes intact; Android NDK strip modifies ELF.
+            keepDebugSymbols += setOf(
+                "**/libelementum.so",
+                "**/libc++_shared.so",
+            )
         }
     }
 
