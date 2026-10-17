@@ -41,6 +41,15 @@ jobs:
         run: flutter analyze
       - name: Tests
         run: flutter test
+      - name: Fetch pinned Luelement addon for compatibility test
+        uses: actions/checkout@v4
+        with:
+          repository: SrTristeSad/Luelement
+          ref: dab8c14647ae978080223922f9a167a320295fe2
+          path: .ci/luelement
+          persist-credentials: false
+      - name: Test AddKo against real Luelement Lua
+        run: flutter test test/luelement_host_compatibility_test.dart --dart-define=LUELEMENT_PATH=.ci/luelement
       - name: Build Android ARM64
         run: flutter build apk --release --target-platform android-arm64 --no-pub
       - name: Verify native engine inside APK
