@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/runtime/lua_plugin_session.dart';
+import 'package:addko/src/runtime/plugin_dependency_host.dart';
 import 'package:addko/src/runtime/native_engine_plugin_host.dart';
 import 'package:addko/src/runtime/plugin_host.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -128,6 +129,7 @@ void main() {
       },
     );
     LuaPluginSession? session;
+    LuaPluginSession? consumer;
     try {
       session = await LuaPluginSession.open(
         pluginRoot: root.path, dataRoot: sandbox.path, entry: manifest.entry,
@@ -138,12 +140,53 @@ void main() {
         host: wrapped,
         testLibrary: DynamicLibrary.open(_nativeTestPath),
       );
-      final result = await session.start();
-      expect(result, isA<Map>());
-      final doc = result as Map;
-      expect(doc['type'], 'service');
-      expect(doc['id'], 'io.addko.luelement');
-      expect(doc['ready'], true);
+      // The real client addon makes the first dependency call and starts the
+      // headless Luelement service without exposing it in the launcher.
+      expect(fake.starts, 0);
+      final consumerRoot = Directory(
+        '${root.path}/examples/dependent-plugin',
+      );
+      final consumerRaw = jsonDecode(
+        await File('${consumerRoot.path}/manifest.json').readAsString(),
+      );
+      final consumerManifest = PluginManifest.fromJson(
+        (consumerRaw as Map<String, dynamic>).cast<String, Object?>(),
+      );
+      expect(consumerManifest.kind, PluginKind.app);
+      expect(
+        consumerManifest.dependencies,
+        contains('io.addko.luelement'),
+      );
+      Object? serviceStartupResult;
+      final broker = PluginDependencyHost(
+        inner: _FakeElementumHost(),
+        manifest: consumerManifest,
+        caller: (id, method, args) async {
+          expect(id, 'io.addko.luelement');
+          if (serviceStartupResult == null) {
+            serviceStartupResult = await session!.start();
+          }
+          return session!.call('service', <Object?>[method, args]);
+        },
+      );
+      consumer = await LuaPluginSession.open(
+        pluginRoot: consumerRoot.path,
+        dataRoot: sandbox.path,
+        entry: consumerManifest.entry,
+        platform: <String, Object?>{'os': 'android', 'arch': 'arm64'},
+        locale: <String, Object?>{
+          'language': 'pt', 'region': 'BR', 'second_language': '',
+        },
+        host: broker,
+        testLibrary: DynamicLibrary.open(_nativeTestPath),
+      );
+      final consumerDocument = await consumer.start();
+      expect(consumerDocument, isA<Map>());
+      expect((consumerDocument as Map)['type'], 'page');
+      expect(consumerDocument['title'], 'Luelement Client Demo');
+      expect((serviceStartupResult as Map)['type'], 'service');
+      expect((serviceStartupResult as Map)['id'], 'io.addko.luelement');
+      expect((serviceStartupResult as Map)['ready'], true);
       expect(manifest.kind, PluginKind.service);
       expect(fake.starts, 1);
       expect(fake.callbackId, isNotNull);
@@ -175,6 +218,7 @@ void main() {
       expect(fake.stops, 1);
       expect(fake.calls, contains('net.tcp.close'));
     } finally {
+      await consumer?.close();
       await session?.close();
       await sandbox.delete(recursive: true);
     }
