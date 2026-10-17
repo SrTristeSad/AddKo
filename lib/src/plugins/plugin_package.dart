@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/runtime/basic_plugin_host.dart';
+import 'package:addko/src/runtime/desktop_process_plugin_host.dart';
 import 'package:addko/src/runtime/lua_plugin_session.dart';
 import 'package:addko/src/runtime/lua_runtime.dart';
 import 'package:addko/src/runtime/media_plugin_host.dart';
@@ -70,6 +71,18 @@ class InstalledPlugin {
             uiHandler: uiHandler,
             player: player,
           );
+
+    // Desktop platforms can execute a native helper downloaded into the
+    // plugin's private data directory. Android/iOS intentionally do not get
+    // this capability; mobile helpers must be implemented by the app/companion.
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      host = DesktopProcessPluginHost(
+        inner: host,
+        manifest: manifest,
+        pluginDirectory: directory,
+        dataDirectory: dataDirectory,
+      );
+    }
 
     if (dependencyCaller != null && manifest.dependencies.isNotEmpty) {
       host = PluginDependencyHost(
