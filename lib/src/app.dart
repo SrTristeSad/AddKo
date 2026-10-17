@@ -12,6 +12,7 @@ import 'package:addko/src/runtime/lua_plugin_session.dart';
 import 'package:addko/src/runtime/lua_runtime.dart';
 import 'package:addko/src/runtime/plugin_dependency_host.dart';
 import 'package:addko/src/ui/addko_launcher.dart';
+import 'package:addko/src/ui/addko_installed_manager.dart';
 import 'package:addko/src/ui/addko_repository_store.dart';
 import 'package:addko/src/ui/plugin_game_surface.dart';
 import 'package:addko/src/ui/plugin_host_dialogs.dart';
@@ -535,10 +536,10 @@ class _HomePageState extends State<_HomePage> {
     }
   }
 
-  void _openStore() {
+  Future<void> _openStore() async {
     final repositories = _repositories;
     if (repositories == null) return;
-    Navigator.of(context).push<void>(
+    await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => AddKoRepositoryStore(
           repositories: repositories,
@@ -549,6 +550,58 @@ class _HomePageState extends State<_HomePage> {
           busy: _busy,
           onInstallPackage: () => unawaited(_installPackage()),
           onInstallAddon: _installRepositoryAddon,
+        ),
+      ),
+    );
+    await _reloadPlugins();
+  }
+
+
+  Future<List<InstalledPlugin>> _reloadManagedPlugins() async {
+    await _reloadPlugins();
+    return _plugins;
+  }
+
+  Future<void> _uninstallManagedPlugin(
+    InstalledPlugin plugin,
+    bool eraseData,
+  ) async {
+    final manager = _manager;
+    if (manager == null || _busy) {
+      throw StateError('Gerenciador de addons indisponível.');
+    }
+    final dependents = await manager.dependentsOf(plugin.manifest.id);
+    if (dependents.isNotEmpty) {
+      throw StateError(
+        'Addon necessário para: '
+        '${dependents.map((item) => item.manifest.name).join(', ')}.',
+      );
+    }
+    if (!mounted) return;
+    setState(() => _busy = true);
+    try {
+      await _closePluginSession(plugin.manifest.id);
+      await manager.uninstall(plugin.manifest.id, deleteData: eraseData);
+      if (mounted) {
+        setState(() => _message = '${plugin.manifest.name} desinstalado.');
+      }
+    } finally {
+      await _reloadPlugins();
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _openInstalledManager() {
+    final repositories = _repositories;
+    if (repositories == null || _manager == null) return;
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => AddKoInstalledManager(
+          installed: _plugins,
+          repositories: repositories,
+          onRemove: _uninstallManagedPlugin,
+          onReload: _reloadManagedPlugins,
+          onOpenStore: () => unawaited(_openStore()),
         ),
       ),
     );
@@ -564,6 +617,7 @@ class _HomePageState extends State<_HomePage> {
           runtimeStatus: status,
           busy: _busy,
           onInstallPackage: () => unawaited(_installPackage()),
+          onManageAddons: _openInstalledManager,
         ),
       ),
     );
