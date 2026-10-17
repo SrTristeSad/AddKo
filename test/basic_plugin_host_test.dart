@@ -92,6 +92,52 @@ void main() {
       throwsA(isA<PluginHostException>()),
     );
   });
+
+  test('system.open_uri is generic and does not require a new permission', () async {
+    Uri? opened;
+    final host = BasicPluginHost(
+      manifest: _manifest(const <PluginPermission>{}),
+      pluginDirectory: pluginDirectory,
+      dataDirectory: dataDirectory,
+      externalUriOpener: (uri) async {
+        opened = uri;
+        return true;
+      },
+    );
+    addTearDown(host.close);
+
+    expect(host.capabilities['open_uri'], isTrue);
+    expect(
+      await host.invoke('system.open_uri', <String, Object?>{
+        'uri': 'luelement-engine://start',
+      }),
+      isTrue,
+    );
+    expect(opened.toString(), 'luelement-engine://start');
+  });
+
+  test('system.open_uri rejects local file and content schemes', () async {
+    final host = BasicPluginHost(
+      manifest: _manifest(const <PluginPermission>{}),
+      pluginDirectory: pluginDirectory,
+      dataDirectory: dataDirectory,
+      externalUriOpener: (_) async => true,
+    );
+    addTearDown(host.close);
+
+    for (final uri in <String>[
+      'file:///tmp/private',
+      'content://com.example/private',
+      'data:text/plain,secret',
+      'javascript:alert(1)',
+      'intent://example/#Intent;end',
+    ]) {
+      await expectLater(
+        host.invoke('system.open_uri', <String, Object?>{'uri': uri}),
+        throwsA(isA<PluginHostException>()),
+      );
+    }
+  });
 }
 
 PluginManifest _manifest(Set<PluginPermission> permissions) {
