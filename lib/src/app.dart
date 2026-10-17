@@ -299,11 +299,13 @@ class _HomePageState extends State<_HomePage> {
 
     final missing = _missingDependencies(plugin);
     if (missing.isNotEmpty) {
-      setState(() {
-        _message =
-            'Não é possível abrir ${plugin.manifest.name}: dependências ausentes: '
-            '${missing.join(', ')}.';
-      });
+      final warning =
+          'Não é possível abrir ${plugin.manifest.name}: dependências ausentes: '
+          '${missing.join(', ')}.';
+      setState(() => _message = warning);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(warning)));
       return;
     }
 
