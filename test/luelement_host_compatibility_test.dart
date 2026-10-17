@@ -135,9 +135,10 @@ void main() {
         },
         host: wrapped,
       );
-      final doc = await session.start();
-      expect(doc, isA<Map>());
-      expect((doc as Map)['type'], 'page');
+      final result = await session.start();
+      expect(result, isA<Map>());
+      final doc = result as Map;
+      expect(doc['type'], 'page');
       expect(doc['title'], 'Luelement');
       expect(fake.starts, 1);
       expect(fake.callbackId, isNotNull);
