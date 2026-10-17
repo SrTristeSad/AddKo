@@ -60,6 +60,15 @@ Each installed plugin opens an isolated persistent Lua state. The AddKo host inj
 
 Lua host calls can yield through the AddKo coroutine scheduler while Dart performs asynchronous work, then resume in the same plugin session.
 
+## Experience roots
+
+`start()` is not restricted to a Kodi-like media screen. It currently supports two first-class experience roots:
+
+- `type = "page"` for application UI;
+- `type = "game"` for real-time games and Lua emulators.
+
+More experience types may be introduced as generic host capabilities without changing the `.addko` package model.
+
 ## Declarative UI
 
 A plugin method such as `start()` can return a page:
@@ -121,3 +130,37 @@ Images stored inside the plugin package use the `asset:` scheme and must remain 
 ```
 
 Local assets do not require the `network` permission. Absolute paths, backslashes, `.` / `..`, empty path segments and any path outside `assets/` are rejected. Network images continue to require the `network` permission.
+
+## Game and emulator root
+
+A Lua game may return:
+
+```lua
+return {
+    type = "game",
+    title = "My Game",
+    width = 320,
+    height = 180,
+    fps = 60,
+    frame_action = "frame",
+    pixel_art = true,
+}
+```
+
+`frame_action` is called with `(dt, input)`. `dt` is bounded elapsed time in seconds. `input.keys` contains normalized keyboard keys and `input.pointers` contains active touch/mouse pointers in the virtual game coordinate system.
+
+The frame method returns `type = "game_frame"`. A frame can contain up to 1024 bounded drawing commands (`rect`, `circle`, `line`, `text`, `image`) and may include a complete `rgba8888` pixel framebuffer for Lua emulators.
+
+Game sprites can only reference `asset:assets/...`. Plugins do not receive native canvas, GPU, OpenGL/Vulkan, JNI or FFI handles.
+
+Current game limits include:
+
+- maximum 60 requested FPS;
+- no overlapping Lua frame calls;
+- maximum 2 MiB serialized frame payload;
+- maximum 1024 draw commands per frame;
+- maximum 512×512 RGBA8888 framebuffer;
+- three consecutive invalid/erroring frames pause the surface;
+- game assets remain scoped to the installed package.
+
+These limits are host policy, not plugin preferences, and a package cannot disable them.
