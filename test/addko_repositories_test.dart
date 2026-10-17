@@ -183,9 +183,12 @@ void main() {
         'https://catalog.example.com/addko/icons/controller.png');
     expect(await manager.downloadIcon(parsed), png);
 
-    addon['icon_sha256'] = '0' * 64;
+    final tampered = AddKoRepositoryManager(
+      File('${temp.path}/tampered.json'),
+      fetcher: (_, __) async => <int>[...png, 2],
+    );
     await expectLater(
-      manager.downloadIcon(parsed),
+      tampered.downloadIcon(parsed),
       throwsA(isA<RepositoryException>()),
     );
     addon.remove('icon_sha256');
