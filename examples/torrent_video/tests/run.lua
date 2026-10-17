@@ -79,7 +79,7 @@ assert(latest_play().uri:find("urn:btih:AJKRETO5SBORCFLSLNVJMZF2XNSTJC3N", 1, tr
 local before = #calls
 local invalid = plugin.play({ uri = "file:///private/example.torrent" })
 assert(has_text(invalid.body, "Use um magnet válido"))
-assert(#calls == before + 1) -- rendering only performs health check
+assert(#calls == before) -- invalid input and rendering never wake up the motor
 
 local magnet = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"
 local played = plugin.play({ uri = magnet })
