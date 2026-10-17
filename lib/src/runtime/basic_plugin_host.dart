@@ -243,6 +243,23 @@ class BasicPluginHost extends PluginHost {
     final response = await request.close().timeout(
           Duration(seconds: timeoutSeconds),
         );
+    // A playback endpoint can return a 302 or a large video body.
+    // Read only response headers; never ingest media into Lua.
+    if (args['headers_only'] == true) {
+      final responseHeaders = <String, String>{};
+      response.headers.forEach((name, values) {
+        responseHeaders[name] = values.join(', ');
+      });
+      final subscription = response.listen((_) {});
+      await subscription.cancel();
+      return <String, Object?>{
+        'status': response.statusCode,
+        'body': '',
+        'headers': responseHeaders,
+        'url': uri.toString(),
+      };
+    }
+
     if (response.contentLength > maxHttpResponseBytes) {
       await response.drain<void>();
       throw const PluginHostException(

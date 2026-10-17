@@ -370,6 +370,11 @@ class _HomePageState extends State<_HomePage> {
       }
       if (!mounted) return;
       setState(() => _message = 'Erro ao iniciar plugin: $error');
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text('Não foi possível abrir o addon: $error'),
+        ));
     } finally {
       if (mounted && _busy) {
         setState(() => _busy = false);

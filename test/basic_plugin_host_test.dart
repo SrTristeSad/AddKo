@@ -77,6 +77,32 @@ void main() {
     );
   });
 
+
+  test('header-only HTTP receives redirect without buffering video', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+    server.listen((request) async {
+      request.response.statusCode = HttpStatus.found;
+      request.response.headers.set('location', '/files/demo.mp4');
+      request.response.write('not-video-data');
+      await request.response.close();
+    });
+    final host = BasicPluginHost(
+      manifest: _manifest(<PluginPermission>{PluginPermission.network}),
+      pluginDirectory: pluginDirectory,
+      dataDirectory: dataDirectory,
+    );
+    addTearDown(host.close);
+    final result = await host.invoke('http.request', <String, Object?>{
+      'url': 'http://127.0.0.1:${server.port}/play',
+      'follow_redirects': false,
+      'headers_only': true,
+    }) as Map;
+    expect(result['status'], 302);
+    expect(result['body'], '');
+    expect((result['headers'] as Map)['location'], '/files/demo.mp4');
+  });
+
   test('network operations require network permission', () async {
     final host = BasicPluginHost(
       manifest: _manifest(const <PluginPermission>{}),
