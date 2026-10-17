@@ -41,7 +41,10 @@ class InstalledPlugin {
   ///
   /// Unlike [runEntrypoint], this keeps the Lua state alive, injects the
   /// generic AddKo host API and supports coroutine-based asynchronous calls.
-  Future<LuaPluginSession> openSession({PluginPlayer? player}) async {
+  Future<LuaPluginSession> openSession({
+    PluginPlayer? player,
+    PluginUiHandler? uiHandler,
+  }) async {
     final supportRoot = directory.parent.parent;
     final dataDirectory = Directory(
       _resolvePackagePath(
@@ -56,11 +59,13 @@ class InstalledPlugin {
             manifest: manifest,
             pluginDirectory: directory,
             dataDirectory: dataDirectory,
+            uiHandler: uiHandler,
           )
         : MediaPluginHost(
             manifest: manifest,
             pluginDirectory: directory,
             dataDirectory: dataDirectory,
+            uiHandler: uiHandler,
             player: player,
           );
 
