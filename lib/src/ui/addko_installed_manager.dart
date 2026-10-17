@@ -1,6 +1,5 @@
 import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/plugins/plugin_package.dart';
-import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/repositories/addko_repositories.dart';
 import 'package:addko/src/repositories/catalog_version.dart';
 import 'package:flutter/material.dart';
