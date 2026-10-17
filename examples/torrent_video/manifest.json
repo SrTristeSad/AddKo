@@ -1,7 +1,7 @@
 {
   "id": "io.addko.examples.torrent_video",
   "name": "Vídeo por Torrent",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "entry": "main.lua",
   "permissions": [],
   "dependencies": [
