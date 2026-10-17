@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:addko/src/platform/system_file_picker.dart';
+import 'package:addko/src/player/addko_video_player.dart';
 import 'package:addko/src/plugins/plugin_inspection.dart';
 import 'package:addko/src/plugins/plugin_manager.dart';
 import 'package:addko/src/plugins/plugin_manifest.dart';
@@ -38,6 +39,7 @@ class _HomePageState extends State<_HomePage> {
   PluginManager? _manager;
   List<InstalledPlugin> _plugins = const <InstalledPlugin>[];
   final Map<String, LuaPluginSession> _sessions = <String, LuaPluginSession>{};
+  final AddKoVideoPlayer _player = AddKoVideoPlayer();
   String _runtimeStatus = 'Verificando runtime Lua...';
   String? _message;
   bool _busy = true;
@@ -246,7 +248,7 @@ class _HomePageState extends State<_HomePage> {
     LuaPluginSession? pendingSession;
     try {
       await _closePluginSession(plugin.manifest.id);
-      pendingSession = await plugin.openSession();
+      pendingSession = await plugin.openSession(player: _player);
       final result = await pendingSession.start();
       _sessions[plugin.manifest.id] = pendingSession;
       pendingSession = null;
@@ -287,6 +289,7 @@ class _HomePageState extends State<_HomePage> {
       );
     }
     _sessions.clear();
+    unawaited(_player.close());
     super.dispose();
   }
 
@@ -328,6 +331,7 @@ class _HomePageState extends State<_HomePage> {
                     subtitle: Text(_runtimeStatus),
                   ),
                 ),
+                AddKoVideoSurface(player: _player),
                 const SizedBox(height: 12),
                 FilledButton.icon(
                   onPressed: _busy ? null : _installPackage,
