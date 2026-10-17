@@ -49,6 +49,20 @@ assert(started.type == "page")
 assert(started.title == "Vídeo por Torrent")
 assert(has_text(started.body, "Motor não verificado"))
 assert(#calls == 0) -- ENTRAR never initializes the native engine
+-- Lua 5.5 serializa {} como objeto JSON. Buttons without positional args
+-- must omit the args field so Flutter accepts the declarative page.
+local function assert_button_arguments(node)
+    if type(node) ~= "table" then return end
+    if node.type == "button" then
+        assert(node.args == nil or (type(node.args) == "table"
+            and #node.args > 0), "button.args vazio deve ser omitido")
+    end
+    if node.children then
+        for _, child in ipairs(node.children) do assert_button_arguments(child) end
+    end
+    if node.child then assert_button_arguments(node.child) end
+end
+assert_button_arguments(started.body)
 assert(has_text(started.body, "AJKRETO5SBORCFLSLNVJMZF2XNSTJC3N"))
 local function find_type(node, kind)
     if type(node) ~= "table" then return nil end
@@ -67,7 +81,7 @@ assert(filled.value:find("AJKRETO5SBORCFLSLNVJMZF2XNSTJC3N", 1, true))
 assert(filled.value:find("tracker.opentrackr.org", 1, true))
 assert(latest_play() == nil) -- never launch torrent on page load
 
-local checked = plugin.refresh()
+local checked = plugin.refresh()\nassert_button_arguments(checked.body)
 assert(has_text(checked.body, "Motor conectado"))
 assert(calls[#calls].method == "health")
 
@@ -90,7 +104,7 @@ local http = plugin.play({ uri = "https://example.org/legal-video.torrent" })
 assert(has_text(http.body, "Reprodução iniciada"))
 assert(latest_play().uri == "https://example.org/legal-video.torrent")
 
-local shown = plugin.list_torrents()
+local shown = plugin.list_torrents()\nassert_button_arguments(shown.body)
 assert(has_text(shown.body, "Video de dominio publico"))
 local existing = plugin.play_existing("demo-hash")
 assert(has_text(existing.body, "Reprodução iniciada"))
