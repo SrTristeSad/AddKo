@@ -110,9 +110,9 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
     setState(() => _working = true);
     try {
       final source = await widget.repositories.add(url);
-      _notify('Repositório adicionado: ' + source.name);
+      _notify('Repositório adicionado: ${source.name}');
     } on Object catch (error) {
-      _notify('Não foi possível adicionar: ' + error.toString());
+      _notify('Não foi possível adicionar: $error');
     } finally {
       if (mounted) setState(() => _working = false);
     }
@@ -126,8 +126,8 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Remover repositório?'),
         content: Text(
-          'Remover ' + (source.index?.name ?? source.url.host) +
-          ' da Loja? Os addons já instalados serão mantidos.',
+          'Remover ${source.index?.name ?? source.url.host} da Loja? '
+          'Os addons já instalados serão mantidos.',
         ),
         actions: [
           TextButton(
@@ -147,7 +147,7 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
       await widget.repositories.remove(source.url);
       _notify('Repositório removido.');
     } on Object catch (error) {
-      _notify('Falha ao remover: ' + error.toString());
+      _notify('Falha ao remover: $error');
     } finally {
       if (mounted) setState(() => _working = false);
     }
@@ -159,9 +159,9 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
     setState(() => _working = true);
     try {
       final installed = await widget.onInstallAddon(addon);
-      if (installed) _notify(addon.name + ' instalado.');
+      if (installed) _notify('${addon.name} instalado.');
     } on Object catch (error) {
-      _notify('Falha na instalação: ' + error.toString());
+      _notify('Falha na instalação: $error');
     } finally {
       if (mounted) setState(() => _working = false);
     }
@@ -225,7 +225,7 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
                 ],
                 if (_error != null) ...[
                   const SizedBox(height: 20),
-                  Text('Erro ao carregar repositórios: ' + _error!),
+                  Text('Erro ao carregar repositórios: ${_error!}'),
                 ],
                 if (_sources.isEmpty && !_loading && _error == null) ...[
                   const SizedBox(height: 28),
@@ -276,7 +276,7 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
                           Padding(
                             padding: const EdgeInsets.all(16),
                             child: Text(
-                              'Falha ao atualizar: ' + source.error!,
+                              'Falha ao atualizar: ${source.error!}',
                               style: TextStyle(color: scheme.error),
                             ),
                           )
@@ -291,10 +291,10 @@ class _AddKoRepositoryStoreState extends State<AddKoRepositoryStore> {
                             ListTile(
                               title: Text(addon.name),
                               subtitle: Text(
-                                'v' + addon.version +
+                                'v${addon.version}' +
                                 (addon.description.isEmpty
                                     ? ''
-                                    : '\n' + addon.description),
+                                    : '\n${addon.description}'),
                               ),
                               isThreeLine: addon.description.isNotEmpty,
                               trailing: FilledButton.tonal(
