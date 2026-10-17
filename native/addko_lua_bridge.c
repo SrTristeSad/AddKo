@@ -92,6 +92,26 @@ static void instruction_hook(lua_State *L, lua_Debug *ar) {
     }
 }
 
+static int addko_coroutine_create(lua_State *L) {
+    lua_State *thread;
+
+    luaL_checktype(L, 1, LUA_TFUNCTION);
+    thread = lua_newthread(L);
+    if (thread == NULL) {
+        return luaL_error(L, "could not create coroutine");
+    }
+
+    lua_pushvalue(L, 1);
+    lua_xmove(L, thread, 1);
+    lua_sethook(
+        thread,
+        instruction_hook,
+        LUA_MASKCOUNT,
+        ADDKO_HOOK_GRANULARITY
+    );
+    return 1;
+}
+
 static void remove_global(lua_State *L, const char *name) {
     lua_pushnil(L);
     lua_setglobal(L, name);
@@ -222,7 +242,13 @@ static void open_safe_libraries(lua_State *L) {
     lua_setglobal(L, "require");
 
     luaL_requiref(L, LUA_COLIBNAME, luaopen_coroutine, 1);
+    lua_pushcfunction(L, addko_coroutine_create);
+    lua_setfield(L, -2, "create");
+    /* wrap would create a coroutine outside our watchdog. */
+    lua_pushnil(L);
+    lua_setfield(L, -2, "wrap");
     lua_pop(L, 1);
+
     luaL_requiref(L, LUA_TABLIBNAME, luaopen_table, 1);
     lua_pop(L, 1);
     luaL_requiref(L, LUA_STRLIBNAME, luaopen_string, 1);
