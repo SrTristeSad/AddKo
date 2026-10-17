@@ -45,3 +45,13 @@ add_library(addko_lua SHARED
 target_include_directories(addko_lua PRIVATE ${LUA_ROOT})
 target_compile_definitions(addko_lua PRIVATE LUA_USE_C89)
 target_compile_options(addko_lua PRIVATE -fvisibility=hidden -Wall -Wextra)
+
+
+# Only app-bundled JNI bridge. No untrusted plugin ELF loading.
+add_library(addko_engine_bridge SHARED addko_engine_bridge.c)
+find_library(ADDKO_ENGINE_LOG_LIB log)
+find_library(ADDKO_ENGINE_DL_LIB dl)
+target_link_libraries(addko_engine_bridge
+    ${ADDKO_ENGINE_LOG_LIB}
+    ${ADDKO_ENGINE_DL_LIB}
+)
