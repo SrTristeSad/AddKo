@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:addko/src/platform/system_file_picker.dart';
+import 'package:addko/src/plugins/plugin_inspection.dart';
 import 'package:addko/src/plugins/plugin_manager.dart';
+import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/plugins/plugin_package.dart';
 import 'package:addko/src/runtime/lua_plugin_session.dart';
 import 'package:addko/src/runtime/lua_runtime.dart';
@@ -91,10 +93,27 @@ class _HomePageState extends State<_HomePage> {
 
       setState(() {
         _busy = true;
-        _message = 'Validando pacote .addko...';
+        _message = 'Inspecionando pacote .addko...';
       });
 
-      final installed = await manager.installFile(File(selectedPath));
+      final selectedFile = File(selectedPath);
+      final preview = await inspectAddkoFile(selectedFile);
+      if (!mounted) return;
+
+      final approved = await _confirmInstall(preview);
+      if (!approved) {
+        if (mounted) {
+          setState(() => _message = 'Instalação cancelada.');
+        }
+        return;
+      }
+
+      if (mounted) {
+        setState(() => _message = 'Validando e instalando pacote .addko...');
+      }
+
+      await _closePluginSession(preview.manifest.id);
+      final installed = await manager.installFile(selectedFile);
       await _reloadPlugins();
 
       if (!mounted) return;
@@ -120,6 +139,100 @@ class _HomePageState extends State<_HomePage> {
         setState(() => _busy = false);
       }
     }
+  }
+
+  Future<bool> _confirmInstall(PluginPackagePreview preview) async {
+    InstalledPlugin? current;
+    for (final plugin in _plugins) {
+      if (plugin.manifest.id == preview.manifest.id) {
+        current = plugin;
+        break;
+      }
+    }
+
+    final permissions = preview.manifest.permissions.toList()
+      ..sort((a, b) => a.wireName.compareTo(b.wireName));
+    final action = current == null ? 'Instalar' : 'Atualizar';
+
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) {
+            return AlertDialog(
+              title: Text('$action ${preview.manifest.name}?'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(preview.manifest.id),
+                    const SizedBox(height: 4),
+                    Text(
+                      current == null
+                          ? 'Versão ${preview.manifest.version}'
+                          : 'Versão ${current.manifest.version} → ${preview.manifest.version}',
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      permissions.isEmpty
+                          ? 'Este mini-app não solicita permissões especiais.'
+                          : 'Permissões solicitadas:',
+                      style: Theme.of(dialogContext).textTheme.titleSmall,
+                    ),
+                    if (permissions.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      for (final permission in permissions)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Padding(
+                                padding: EdgeInsets.only(top: 2),
+                                child: Icon(Icons.security_rounded, size: 18),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(_permissionTitle(permission)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _permissionDescription(permission),
+                                      style: Theme.of(dialogContext)
+                                          .textTheme
+                                          .bodySmall,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                    const SizedBox(height: 8),
+                    Text(
+                      'O AddKo só libera essas capacidades dentro do sandbox do mini-app.',
+                      style: Theme.of(dialogContext).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: Text(action),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
   }
 
   Future<void> _runPlugin(InstalledPlugin plugin) async {
@@ -283,4 +396,26 @@ class _HomePageState extends State<_HomePage> {
       ),
     );
   }
+}
+
+String _permissionTitle(PluginPermission permission) {
+  return switch (permission) {
+    PluginPermission.network => 'Rede',
+    PluginPermission.storage => 'Armazenamento',
+    PluginPermission.media => 'Mídia',
+    PluginPermission.background => 'Segundo plano',
+  };
+}
+
+String _permissionDescription(PluginPermission permission) {
+  return switch (permission) {
+    PluginPermission.network =>
+      'Pode fazer requisições HTTP/HTTPS e, quando combinado com segundo plano, usar serviços TCP locais.',
+    PluginPermission.storage =>
+      'Pode ler os próprios arquivos e gravar somente no diretório privado de dados do mini-app.',
+    PluginPermission.media =>
+      'Pode solicitar recursos de reprodução de mídia quando o host oferecer essa capacidade.',
+    PluginPermission.background =>
+      'Pode manter serviços e tarefas de longa duração enquanto a sessão do mini-app estiver ativa.',
+  };
 }
