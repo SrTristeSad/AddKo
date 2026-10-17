@@ -87,7 +87,21 @@ class PluginManifest {
       }
       for (final value in rawNative) {
         if (value is! String ||
-            !RegExp(r'^[a-z][a-z0-9_-]{0,63}      id: id,
+            !RegExp(r'^[a-z][a-z0-9_-]{0,63}$').hasMatch(value) ||
+            !nativeEngines.add(value)) {
+          throw const FormatException('ID de motor nativo inválido ou duplicado.');
+        }
+      }
+      if (nativeEngines.isNotEmpty &&
+          !permissions.contains(PluginPermission.nativeEngine)) {
+        throw const FormatException(
+          'Declare permissão native_engine para solicitar motores nativos.',
+        );
+      }
+    }
+
+    return PluginManifest(
+      id: id,
       name: name,
       version: version,
       entry: entry,
@@ -140,83 +154,6 @@ enum PluginPermission {
   media('media'),
   background('background'),
   nativeEngine('native_engine');
-
-  const PluginPermission(this.wireName);
-
-  final String wireName;
-
-  static PluginPermission parse(String value) {
-    for (final permission in values) {
-      if (permission.wireName == value) return permission;
-    }
-    throw FormatException('Permissão desconhecida: $value');
-  }
-}
-).hasMatch(value) ||
-            !nativeEngines.add(value)) {
-          throw const FormatException('ID de motor nativo inválido ou duplicado.');
-        }
-      }
-      if (nativeEngines.isNotEmpty &&
-          !permissions.contains(PluginPermission.nativeEngine)) {
-        throw const FormatException(
-          'Declare permissão native_engine para solicitar motores nativos.',
-        );
-      }
-    }
-
-    return PluginManifest(
-      id: id,
-      name: name,
-      version: version,
-      entry: entry,
-      permissions: Set.unmodifiable(permissions),
-      dependencies: Set.unmodifiable(dependencies),
-    );
-  }
-
-  static String _requiredString(Map<String, Object?> json, String key) {
-    final value = json[key];
-    if (value is! String || value.trim().isEmpty) {
-      throw FormatException('$key é obrigatório.');
-    }
-    return value.trim();
-  }
-
-  static bool _isValidPluginId(String value) {
-    return value.isNotEmpty && value.length <= 128 && _idPattern.hasMatch(value);
-  }
-
-  static bool _isSafeLuaEntrypoint(String value) {
-    if (!value.endsWith('.lua') ||
-        value.length > 512 ||
-        value.startsWith('/') ||
-        value.contains(r'\') ||
-        value.codeUnits.contains(0) ||
-        RegExp(r'^[A-Za-z]:').hasMatch(value)) {
-      return false;
-    }
-
-    final parts = value.split('/');
-    if (parts.any(
-      (part) =>
-          part.isEmpty ||
-          part == '.' ||
-          part == '..' ||
-          part.length > 255 ||
-          part.contains(':'),
-    )) {
-      return false;
-    }
-    return true;
-  }
-}
-
-enum PluginPermission {
-  network('network'),
-  storage('storage'),
-  media('media'),
-  background('background');
 
   const PluginPermission(this.wireName);
 
