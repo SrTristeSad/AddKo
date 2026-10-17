@@ -542,6 +542,10 @@ class _HomePageState extends State<_HomePage> {
       MaterialPageRoute<void>(
         builder: (_) => AddKoRepositoryStore(
           repositories: repositories,
+          installedVersions: <String, String>{
+            for (final plugin in _plugins)
+              plugin.manifest.id: plugin.manifest.version,
+          },
           busy: _busy,
           onInstallPackage: () => unawaited(_installPackage()),
           onInstallAddon: _installRepositoryAddon,
