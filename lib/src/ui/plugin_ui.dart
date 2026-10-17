@@ -139,14 +139,20 @@ class PluginUiNode {
       }
       final rawArguments = map['args'];
       if (rawArguments != null) {
-        if (rawArguments is! List || rawArguments.length > 32) {
+        // Lua uses {} for empty tables, which JSON encodes as an object.
+        // Treat only an empty object as omitted positional arguments.
+        // Non-empty objects remain invalid to preserve the action contract.
+        final normalizedArguments = rawArguments is Map && rawArguments.isEmpty
+            ? const <Object?>[]
+            : rawArguments;
+        if (normalizedArguments is! List || normalizedArguments.length > 32) {
           throw PluginUiException('$type.args é inválido.');
         }
-        final bytes = utf8.encode(jsonEncode(rawArguments));
+        final bytes = utf8.encode(jsonEncode(normalizedArguments));
         if (bytes.length > PluginUiDocument.maxActionPayloadBytes) {
           throw PluginUiException('$type.args excede o limite de 8 KiB.');
         }
-        actionArguments = List<Object?>.unmodifiable(rawArguments);
+        actionArguments = List<Object?>.unmodifiable(normalizedArguments);
       }
     }
 
