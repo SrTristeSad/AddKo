@@ -65,7 +65,7 @@ class AddKoRepositoryManager {
   static Future<AddKoRepositoryManager> openDefault() async {
     final support = await getApplicationSupportDirectory();
     return AddKoRepositoryManager(
-      File(support.path + Platform.pathSeparator + 'repositories.json'),
+      File('${support.path}${Platform.pathSeparator}repositories.json'),
     );
   }
 
@@ -156,7 +156,7 @@ class AddKoRepositoryManager {
 
   Future<void> _persist(List<Uri> urls) async {
     await configFile.parent.create(recursive: true);
-    final temp = File(configFile.path + '.tmp');
+    final temp = File('${configFile.path}.tmp');
     try {
       await temp.writeAsString(
         jsonEncode(urls.map((url) => url.toString()).toList()),
@@ -237,16 +237,16 @@ class AddKoRepositoryManager {
           'permissions': <Object?>[],
         });
       } on FormatException {
-        throw RepositoryException('ID, nome ou versão inválidos: ' + id);
+        throw RepositoryException('ID, nome ou versão inválidos: $id');
       }
       if (!ids.add(id)) {
-        throw RepositoryException('ID duplicado no catálogo: ' + id);
+        throw RepositoryException('ID duplicado no catálogo: $id');
       }
       if (file.length > 300 ||
           !_relativePackagePattern.hasMatch(file) ||
           file.startsWith('/') ||
           file.split('/').any((part) => part == '.' || part == '..' || part.isEmpty)) {
-        throw RepositoryException('Caminho de pacote inseguro: ' + id);
+        throw RepositoryException('Caminho de pacote inseguro: $id');
       }
       final package = url.resolve(file);
       if (package.scheme != 'https' ||
@@ -255,7 +255,7 @@ class AddKoRepositoryManager {
           package.userInfo.isNotEmpty ||
           package.hasQuery ||
           package.hasFragment) {
-        throw RepositoryException('Pacote fora da origem autorizada: ' + id);
+        throw RepositoryException('Pacote fora da origem autorizada: $id');
       }
       addons.add(RepositoryAddon(
         id: id,
@@ -304,7 +304,7 @@ class AddKoRepositoryManager {
       request.followRedirects = false;
       final response = await request.close().timeout(const Duration(seconds: 15));
       if (response.statusCode != HttpStatus.ok) {
-        throw RepositoryException('Servidor retornou HTTP ' + response.statusCode.toString() + '.');
+        throw RepositoryException('Servidor retornou HTTP ${response.statusCode}.');
       }
       if (response.contentLength > limit) {
         throw const RepositoryException('Download excede o tamanho permitido.');
@@ -340,9 +340,13 @@ class AddKoRepositoryManager {
     }
     if (bytes.length == 16) {
       if (bytes.every((b) => b == 0) || (bytes[0] & 0xfe) == 0xfc ||
-          (bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80)) return false;
+          (bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80)) {
+        return false;
+      }
       if (bytes.take(10).every((b) => b == 0) &&
-          bytes[10] == 255 && bytes[11] == 255) return false;
+          bytes[10] == 255 && bytes[11] == 255) {
+        return false;
+      }
     }
     return true;
   }
