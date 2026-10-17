@@ -84,11 +84,15 @@ void main() {
     expect(find.text('Instalar arquivo .addko'), findsOneWidget);
     expect(find.textContaining('128 addons'), findsNothing);
 
+    final storeList = find.byType(ListView).first;
+    await tester.drag(storeList, const Offset(0, -180));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('Escolher arquivo'));
     await tester.pump();
     expect(installRequested, isTrue);
 
-    await tester.drag(find.byType(ListView).first, const Offset(0, -500));
+    await tester.drag(storeList, const Offset(0, -420));
     await tester.pumpAndSettle();
     expect(find.text('Sua loja ainda está vazia'), findsOneWidget);
   });
