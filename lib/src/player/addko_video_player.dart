@@ -6,8 +6,12 @@ class AddKoVideoPlayer extends ChangeNotifier implements PluginPlayer {
   VideoPlayerController? _controller;
   String _currentUrl = '';
   bool _closed = false;
+  bool _loading = false;
+  String? _errorMessage;
 
   VideoPlayerController? get controller => _controller;
+  bool get isLoading => _loading;
+  String? get errorMessage => _errorMessage;
 
   bool get hasVideo =>
       !_closed && _controller != null && _controller!.value.isInitialized;
@@ -60,22 +64,29 @@ class AddKoVideoPlayer extends ChangeNotifier implements PluginPlayer {
       return true;
     }
 
-    await _disposeController();
-
-    final next = VideoPlayerController.networkUrl(uri);
-    _controller = next;
-    _currentUrl = url;
-    next.addListener(_onControllerChanged);
+    _loading = true;
+    _errorMessage = null;
+    notifyListeners();
 
     try {
+      await _disposeController();
+
+      final next = VideoPlayerController.networkUrl(uri);
+      _controller = next;
+      _currentUrl = url;
+      next.addListener(_onControllerChanged);
+
       await next.initialize();
       await next.setLooping(false);
       await next.play();
-      notifyListeners();
       return true;
-    } on Object {
+    } on Object catch (error) {
+      _errorMessage = error.toString();
       await _disposeController();
       rethrow;
+    } finally {
+      _loading = false;
+      notifyListeners();
     }
   }
 
@@ -121,6 +132,8 @@ class AddKoVideoPlayer extends ChangeNotifier implements PluginPlayer {
   Future<void> clear() async {
     if (_closed) return;
     await _disposeController();
+    _loading = false;
+    _errorMessage = null;
     notifyListeners();
   }
 
@@ -181,7 +194,54 @@ class AddKoVideoSurface extends StatelessWidget {
       builder: (context, _) {
         final controller = player.controller;
         if (controller == null || !controller.value.isInitialized) {
-          return const SizedBox.shrink();
+          final error = player.errorMessage;
+          return Card(
+            clipBehavior: Clip.antiAlias,
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (player.isLoading) ...[
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'Preparando reprodução…',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Torrents podem demorar para obter dados e iniciar o vídeo.',
+                          textAlign: TextAlign.center,
+                        ),
+                      ] else if (error != null) ...[
+                        const Icon(Icons.error_outline_rounded, size: 36),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Falha ao reproduzir o vídeo',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        SelectableText(
+                          error.length > 360
+                              ? '${error.substring(0, 360)}…'
+                              : error,
+                          textAlign: TextAlign.center,
+                        ),
+                      ] else
+                        const Text(
+                          'Aguardando vídeo…',
+                          textAlign: TextAlign.center,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
         }
 
         final duration = controller.value.duration.inMilliseconds.toDouble();
