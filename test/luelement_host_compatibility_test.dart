@@ -163,9 +163,7 @@ void main() {
         manifest: consumerManifest,
         caller: (id, method, args) async {
           expect(id, 'io.addko.luelement');
-          if (serviceStartupResult == null) {
-            serviceStartupResult = await session!.start();
-          }
+          serviceStartupResult ??= await session!.start();
           return session!.call('service', <Object?>[method, args]);
         },
       );
