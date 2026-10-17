@@ -8,6 +8,10 @@ import 'package:addko/src/runtime/plugin_host.dart';
 import 'package:path/path.dart' as p;
 
 typedef ExternalUriOpener = Future<bool> Function(Uri uri);
+typedef PluginUiHandler = Future<Object?> Function(
+  String operation,
+  Map<String, Object?> arguments,
+);
 
 class BasicPluginHost extends PluginHost {
   BasicPluginHost({
@@ -15,6 +19,7 @@ class BasicPluginHost extends PluginHost {
     required this.pluginDirectory,
     required this.dataDirectory,
     ExternalUriOpener? externalUriOpener,
+    this.uiHandler,
   }) : _externalUriOpener = externalUriOpener ??
             (SystemExternalLauncher.isSupported
                 ? SystemExternalLauncher.open
@@ -34,6 +39,7 @@ class BasicPluginHost extends PluginHost {
   final Directory pluginDirectory;
   final Directory dataDirectory;
   final ExternalUriOpener? _externalUriOpener;
+  final PluginUiHandler? uiHandler;
 
   final HttpClient _http = HttpClient();
   final Map<int, ServerSocket> _servers = <int, ServerSocket>{};
@@ -56,7 +62,7 @@ class BasicPluginHost extends PluginHost {
         'tcp_server': _network && _background,
         'process': false,
         'player': false,
-        'ui': false,
+        'ui': uiHandler != null,
         'open_uri': _externalUriOpener != null,
         'media_permission': _media,
       };
@@ -70,6 +76,10 @@ class BasicPluginHost extends PluginHost {
   Future<Object?> invoke(String operation, Object? arguments) async {
     _ensureOpen();
     final args = _map(arguments);
+
+    if (operation.startsWith('ui.') && uiHandler != null) {
+      return uiHandler!(operation, args);
+    }
 
     switch (operation) {
       case 'log':
