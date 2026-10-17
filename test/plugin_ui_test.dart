@@ -31,6 +31,34 @@ void main() {
     expect(document.body.children.last.actionArguments, <Object?>['one']);
   });
 
+  test('treats an empty Lua table as no action arguments', () {
+    final document = PluginUiDocument.fromMap(<String, Object?>{
+      'type': 'page',
+      'title': 'Lua action',
+      'body': <String, Object?>{
+        'type': 'button',
+        'label': 'Enter',
+        'action': 'open',
+        'args': <String, Object?>{},
+      },
+    });
+    expect(document.body.actionArguments, isEmpty);
+
+    expect(
+      () => PluginUiDocument.fromMap(<String, Object?>{
+        'type': 'page',
+        'title': 'Invalid args',
+        'body': <String, Object?>{
+          'type': 'button',
+          'label': 'Bad',
+          'action': 'open',
+          'args': <String, Object?>{'unsafe': true},
+        },
+      }),
+      throwsA(isA<PluginUiException>()),
+    );
+  });
+
   test('parses form defaults and rejects duplicate names', () {
     final document = PluginUiDocument.fromMap(<String, Object?>{
       'type': 'page',
