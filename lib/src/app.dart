@@ -9,10 +9,13 @@ import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/plugins/plugin_package.dart';
 import 'package:addko/src/runtime/lua_plugin_session.dart';
 import 'package:addko/src/runtime/lua_runtime.dart';
+import 'package:addko/src/runtime/plugin_dependency_host.dart';
 import 'package:addko/src/ui/plugin_game_surface.dart';
 import 'package:addko/src/ui/plugin_host_dialogs.dart';
 import 'package:addko/src/ui/plugin_ui.dart';
 import 'package:flutter/material.dart';
+
+final Object _dependencyStackZoneKey = Object();
 
 class AddKoApp extends StatelessWidget {
   const AddKoApp({super.key});
@@ -42,6 +45,8 @@ class _HomePageState extends State<_HomePage> {
   PluginManager? _manager;
   List<InstalledPlugin> _plugins = const <InstalledPlugin>[];
   final Map<String, LuaPluginSession> _sessions = <String, LuaPluginSession>{};
+  final Map<String, Future<LuaPluginSession>> _openingSessions =
+      <String, Future<LuaPluginSession>>{};
   final AddKoVideoPlayer _player = AddKoVideoPlayer();
   String _runtimeStatus = 'Verificando runtime Lua...';
   String? _message;
@@ -157,6 +162,8 @@ class _HomePageState extends State<_HomePage> {
 
     final permissions = preview.manifest.permissions.toList()
       ..sort((a, b) => a.wireName.compareTo(b.wireName));
+    final dependencies = preview.manifest.dependencies.toList()..sort();
+    final installedIds = _plugins.map((plugin) => plugin.manifest.id).toSet();
     final action = current == null ? 'Instalar' : 'Atualizar';
 
     return await showDialog<bool>(
@@ -216,6 +223,36 @@ class _HomePageState extends State<_HomePage> {
                           ),
                         ),
                     ],
+                    if (dependencies.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'Dependências de mini-app:',
+                        style: Theme.of(dialogContext).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      for (final dependency in dependencies)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            children: [
+                              Icon(
+                                installedIds.contains(dependency)
+                                    ? Icons.check_circle_outline_rounded
+                                    : Icons.error_outline_rounded,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(dependency)),
+                              Text(
+                                installedIds.contains(dependency)
+                                    ? 'instalado'
+                                    : 'ausente',
+                                style: Theme.of(dialogContext).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
                     const SizedBox(height: 8),
                     Text(
                       'O AddKo só libera essas capacidades dentro do sandbox do mini-app.',
@@ -243,6 +280,16 @@ class _HomePageState extends State<_HomePage> {
   Future<void> _runPlugin(InstalledPlugin plugin) async {
     if (_busy) return;
 
+    final missing = _missingDependencies(plugin);
+    if (missing.isNotEmpty) {
+      setState(() {
+        _message =
+            'Não é possível abrir ${plugin.manifest.name}: dependências ausentes: '
+            '${missing.join(', ')}.';
+      });
+      return;
+    }
+
     setState(() {
       _busy = true;
       _message = 'Iniciando ${plugin.manifest.name}...';
@@ -251,15 +298,7 @@ class _HomePageState extends State<_HomePage> {
     LuaPluginSession? pendingSession;
     try {
       await _closePluginSession(plugin.manifest.id);
-      pendingSession = await plugin.openSession(
-        player: _player,
-        uiHandler: (operation, arguments) => handlePluginHostUi(
-          context,
-          operation,
-          arguments,
-          player: _player,
-        ),
-      );
+      pendingSession = await _createPluginSession(plugin);
       final result = await pendingSession.start();
       final document = PluginUiDocument.tryParse(result);
       final game = document == null ? PluginGameConfig.tryParse(result) : null;
@@ -319,6 +358,120 @@ class _HomePageState extends State<_HomePage> {
         setState(() => _busy = false);
       }
     }
+  }
+
+  Future<LuaPluginSession> _createPluginSession(InstalledPlugin plugin) {
+    return plugin.openSession(
+      player: _player,
+      uiHandler: (operation, arguments) => handlePluginHostUi(
+        context,
+        operation,
+        arguments,
+        player: _player,
+      ),
+      dependencyCaller: _dependencyCallerFor(plugin),
+    );
+  }
+
+  PluginDependencyCaller _dependencyCallerFor(InstalledPlugin caller) {
+    return (targetPluginId, method, arguments) {
+      return _callPluginDependency(
+        caller,
+        targetPluginId,
+        method,
+        arguments,
+      );
+    };
+  }
+
+  Future<Object?> _callPluginDependency(
+    InstalledPlugin caller,
+    String targetPluginId,
+    String method,
+    Object? arguments,
+  ) {
+    final inherited =
+        Zone.current[_dependencyStackZoneKey] as List<String>? ??
+            <String>[caller.manifest.id];
+    if (inherited.contains(targetPluginId)) {
+      final cycle = <String>[...inherited, targetPluginId].join(' → ');
+      throw StateError('Dependência cíclica entre mini-apps: $cycle');
+    }
+
+    final stack = List<String>.unmodifiable(<String>[
+      ...inherited,
+      targetPluginId,
+    ]);
+
+    return runZoned<Future<Object?>>(
+      () async {
+        final target = _findPlugin(targetPluginId);
+        if (target == null) {
+          throw StateError(
+            'Dependência ${caller.manifest.id} → $targetPluginId não está instalada.',
+          );
+        }
+
+        final missing = _missingDependencies(target);
+        if (missing.isNotEmpty) {
+          throw StateError(
+            'Dependência $targetPluginId também depende de: ${missing.join(', ')}.',
+          );
+        }
+
+        final session = await _ensureServiceSession(target);
+        return session.call('service', <Object?>[method, arguments]);
+      },
+      zoneValues: <Object, Object?>{
+        _dependencyStackZoneKey: stack,
+      },
+    );
+  }
+
+  Future<LuaPluginSession> _ensureServiceSession(InstalledPlugin plugin) async {
+    final existing = _sessions[plugin.manifest.id];
+    if (existing != null) return existing;
+
+    final opening = _openingSessions[plugin.manifest.id];
+    if (opening != null) return opening;
+
+    final future = () async {
+      LuaPluginSession? session;
+      try {
+        session = await _createPluginSession(plugin);
+        await session.start();
+        _sessions[plugin.manifest.id] = session;
+        return session;
+      } on Object {
+        if (session != null) {
+          await session.close();
+        }
+        rethrow;
+      }
+    }();
+
+    _openingSessions[plugin.manifest.id] = future;
+    try {
+      return await future;
+    } finally {
+      _openingSessions.remove(plugin.manifest.id);
+    }
+  }
+
+  InstalledPlugin? _findPlugin(String id) {
+    for (final plugin in _plugins) {
+      if (plugin.manifest.id == id) return plugin;
+    }
+    return null;
+  }
+
+  List<String> _missingDependencies(InstalledPlugin plugin) {
+    final installed = _plugins.map((item) => item.manifest.id).toSet();
+    final missing = plugin.manifest.dependencies
+        .where((dependency) => !installed.contains(dependency))
+        .toList()
+      ..sort();
+    return missing;
   }
 
   Future<void> _closePluginSession(String pluginId) async {
@@ -431,7 +584,8 @@ class _HomePageState extends State<_HomePage> {
                       leading: const Icon(Icons.extension_rounded),
                       title: Text(plugin.manifest.name),
                       subtitle: Text(
-                        '${plugin.manifest.id} • ${plugin.manifest.version}',
+                        '${plugin.manifest.id} • ${plugin.manifest.version}'
+                        '${plugin.manifest.dependencies.isEmpty ? '' : ' • depende de ${plugin.manifest.dependencies.length}'}',
                       ),
                       trailing: FilledButton.tonalIcon(
                         onPressed: _busy ? null : () => _runPlugin(plugin),
