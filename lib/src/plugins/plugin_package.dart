@@ -7,6 +7,7 @@ import 'package:addko/src/runtime/basic_plugin_host.dart';
 import 'package:addko/src/runtime/lua_plugin_session.dart';
 import 'package:addko/src/runtime/lua_runtime.dart';
 import 'package:addko/src/runtime/media_plugin_host.dart';
+import 'package:addko/src/runtime/plugin_dependency_host.dart';
 import 'package:addko/src/runtime/plugin_host.dart';
 import 'package:addko/src/runtime/plugin_player.dart';
 
@@ -44,6 +45,7 @@ class InstalledPlugin {
   Future<LuaPluginSession> openSession({
     PluginPlayer? player,
     PluginUiHandler? uiHandler,
+    PluginDependencyCaller? dependencyCaller,
   }) async {
     final supportRoot = directory.parent.parent;
     final dataDirectory = Directory(
@@ -54,7 +56,7 @@ class InstalledPlugin {
     );
     await dataDirectory.create(recursive: true);
 
-    final PluginHost host = player == null
+    PluginHost host = player == null
         ? BasicPluginHost(
             manifest: manifest,
             pluginDirectory: directory,
@@ -68,6 +70,14 @@ class InstalledPlugin {
             uiHandler: uiHandler,
             player: player,
           );
+
+    if (dependencyCaller != null && manifest.dependencies.isNotEmpty) {
+      host = PluginDependencyHost(
+        inner: host,
+        manifest: manifest,
+        caller: dependencyCaller,
+      );
+    }
 
     final locale = _locale();
     return LuaPluginSession.open(
