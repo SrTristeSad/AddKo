@@ -26,7 +26,9 @@ local function button(label, action, options)
         type = "button",
         label = label,
         action = action,
-        -- Lua {} vira objeto JSON, mas button.args exige uma lista.\n        -- Sem argumentos, omitir a propriedade em vez de enviar {}.\n        args = options.args,
+        -- Lua {} vira objeto JSON, mas button.args exige uma lista.
+        -- Sem argumentos, omitir a propriedade em vez de enviar {}.
+        args = options.args,
         submit_form = options.submit_form == true,
         variant = options.variant or "tonal",
         enabled = options.enabled ~= false,
