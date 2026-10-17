@@ -9,6 +9,7 @@ import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/plugins/plugin_package.dart';
 import 'package:addko/src/runtime/lua_plugin_session.dart';
 import 'package:addko/src/runtime/lua_runtime.dart';
+import 'package:addko/src/ui/plugin_host_dialogs.dart';
 import 'package:addko/src/ui/plugin_ui.dart';
 import 'package:flutter/material.dart';
 
@@ -249,7 +250,11 @@ class _HomePageState extends State<_HomePage> {
     LuaPluginSession? pendingSession;
     try {
       await _closePluginSession(plugin.manifest.id);
-      pendingSession = await plugin.openSession(player: _player);
+      pendingSession = await plugin.openSession(
+        player: _player,
+        uiHandler: (operation, arguments) =>
+            handlePluginHostUi(context, operation, arguments),
+      );
       final result = await pendingSession.start();
       final document = PluginUiDocument.tryParse(result);
 
