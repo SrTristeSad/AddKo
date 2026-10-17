@@ -7,13 +7,6 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-Future<void> settleRepositoryIo(WidgetTester tester) async {
-  await tester.runAsync(() async {
-    await Future<void>.delayed(const Duration(milliseconds: 120));
-  });
-  await tester.pumpAndSettle();
-}
-
 void main() {
   late Directory temp;
   final url = Uri.parse('https://catalog.example.com/addko/index.json');
@@ -168,7 +161,7 @@ void main() {
 
   testWidgets('store adds repository and installs a listed addon',
       (tester) async {
-    final manager = service(catalog());
+    final manager = _MemoryRepositories(await service(catalog()).loadIndex(url));
     RepositoryAddon? requested;
     await tester.pumpWidget(MaterialApp(
       home: AddKoRepositoryStore(
@@ -180,20 +173,41 @@ void main() {
         },
       ),
     ));
-    await settleRepositoryIo(tester);
+    await tester.pumpAndSettle();
 
     expect(find.text('Sua loja ainda está vazia'), findsOneWidget);
     await tester.tap(find.text('Adicionar repositório'));
-    await settleRepositoryIo(tester);
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), url.toString());
     await tester.tap(find.text('Validar e adicionar'));
-    await settleRepositoryIo(tester);
+    await tester.pumpAndSettle();
 
     expect(find.text('Catálogo da comunidade'), findsOneWidget);
     expect(find.text('Miniapp Demo'), findsOneWidget);
     await tester.ensureVisible(find.text('Instalar'));
     await tester.tap(find.text('Instalar'));
-    await settleRepositoryIo(tester);
+    await tester.pumpAndSettle();
     expect(requested?.id, 'com.addko.demo');
   });
+}
+
+class _MemoryRepositories extends AddKoRepositoryManager {
+  _MemoryRepositories(this.catalog) : super(File('not-used-in-widget-test.json'));
+
+  final RepositoryIndex catalog;
+  bool added = false;
+
+  @override
+  Future<RepositoryIndex> add(String source) async {
+    if (source != catalog.url.toString()) {
+      throw const RepositoryException('URL inesperada.');
+    }
+    added = true;
+    return catalog;
+  }
+
+  @override
+  Future<List<RepositoryStatus>> refresh() async => added
+      ? <RepositoryStatus>[RepositoryStatus(url: catalog.url, index: catalog)]
+      : <RepositoryStatus>[];
 }
