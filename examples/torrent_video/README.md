@@ -1,12 +1,12 @@
-# Vídeo por Torrent — addon de diagnóstico do AddKo (v0.1.1)
+# Vídeo por Torrent — addon de diagnóstico do AddKo (v0.1.3)
 
 Este miniapp Lua usa o serviço público do [Luelement](https://github.com/SrTristeSad/Luelement) para reproduzir vídeos por torrent. O addon não implementa BitTorrent e não solicita permissões de rede, mídia ou execução próprias.
 
 ## Requisitos atualizados — 17/10/2026
 
 1. **AddKo Android ARM64 completo**, com o motor Elementum aprovado incluído no próprio APK assinado. A build leve sem Elementum não serve para o teste.
-2. **Luelement 0.2.1-dev**, instalado como addon de serviço (`io.addko.luelement`). Ele fica em **Configurações → Gerenciar addons**, não aparece no launcher e inicia sob demanda.
-3. **Vídeo por Torrent 0.1.1**, instalado como addon comum, declarando dependência de Luelement.
+2. **Luelement 0.2.2-dev**, instalado como addon de serviço (`io.addko.luelement`). Ele fica em **Configurações → Gerenciar addons**, não aparece no launcher e inicia sob demanda.
+3. **Vídeo por Torrent 0.1.3**, instalado como addon comum, declarando dependência de Luelement.
 4. Conexão e espaço para buffering. Utilize apenas conteúdo que você esteja autorizado a acessar.
 
 **Não instale um APK auxiliar do Luelement Engine.** A arquitetura atual já contém o provedor Elementum no APK completo do AddKo.
