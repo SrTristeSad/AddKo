@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:addko/src/platform/system_file_picker.dart';
 import 'package:addko/src/player/addko_video_player.dart';
 import 'package:addko/src/plugins/plugin_inspection.dart';
+import 'package:addko/src/repositories/addko_repositories.dart';
 import 'package:addko/src/plugins/plugin_manager.dart';
 import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/plugins/plugin_package.dart';
@@ -11,6 +12,7 @@ import 'package:addko/src/runtime/lua_plugin_session.dart';
 import 'package:addko/src/runtime/lua_runtime.dart';
 import 'package:addko/src/runtime/plugin_dependency_host.dart';
 import 'package:addko/src/ui/addko_launcher.dart';
+import 'package:addko/src/ui/addko_repository_store.dart';
 import 'package:addko/src/ui/plugin_game_surface.dart';
 import 'package:addko/src/ui/plugin_host_dialogs.dart';
 import 'package:addko/src/ui/plugin_ui.dart';
@@ -45,6 +47,7 @@ class _HomePage extends StatefulWidget {
 
 class _HomePageState extends State<_HomePage> {
   PluginManager? _manager;
+  AddKoRepositoryManager? _repositories;
   List<InstalledPlugin> _plugins = const <InstalledPlugin>[];
   final Map<String, LuaPluginSession> _sessions = <String, LuaPluginSession>{};
   final Map<String, Future<LuaPluginSession>> _openingSessions =
@@ -68,11 +71,13 @@ class _HomePageState extends State<_HomePage> {
       runtime.dispose();
 
       final manager = await PluginManager.openDefault();
+      final repositories = await AddKoRepositoryManager.openDefault();
       final plugins = await manager.listInstalled();
 
       if (!mounted) return;
       setState(() {
         _manager = manager;
+        _repositories = repositories;
         _plugins = plugins;
         _runtimeStatus = '$version ativo • teste Lua: $answer';
         _busy = false;
@@ -487,12 +492,59 @@ class _HomePageState extends State<_HomePage> {
     await session.close();
   }
 
+  Future<bool> _installRepositoryAddon(RepositoryAddon addon) async {
+    final manager = _manager;
+    final repositories = _repositories;
+    if (manager == null || repositories == null || _busy) {
+      throw StateError('Instalador ainda não está disponível.');
+    }
+    setState(() {
+      _busy = true;
+      _message = 'Baixando pacote do repositório...';
+    });
+    try {
+      final bytes = await repositories.download(addon);
+      // The checksum is validated before any ZIP parsing or permission prompt.
+      final preview = inspectAddkoBytes(bytes);
+      if (preview.manifest.id != addon.id ||
+          preview.manifest.name != addon.name ||
+          preview.manifest.version != addon.version) {
+        throw const RepositoryException(
+          'O manifesto do pacote não corresponde ao catálogo. Instalação bloqueada.',
+        );
+      }
+      if (!mounted) return false;
+      final approved = await _confirmInstall(preview);
+      if (!approved) return false;
+      await _closePluginSession(addon.id);
+      final installed = await manager.installBytes(bytes);
+      await _reloadPlugins();
+      if (mounted) {
+        setState(() {
+          _message = installed.manifest.name + ' instalado pelo repositório.';
+        });
+      }
+      return true;
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _message = 'Falha na instalação: ' + error.toString());
+      }
+      rethrow;
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   void _openStore() {
+    final repositories = _repositories;
+    if (repositories == null) return;
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => AddKoStoreShell(
+        builder: (_) => AddKoRepositoryStore(
+          repositories: repositories,
           busy: _busy,
           onInstallPackage: () => unawaited(_installPackage()),
+          onInstallAddon: _installRepositoryAddon,
         ),
       ),
     );
