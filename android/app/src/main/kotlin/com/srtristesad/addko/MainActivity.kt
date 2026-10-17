@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.srtristesad.addko.nativeengines.NativeEngineRegistry
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -14,6 +15,7 @@ import java.io.FileOutputStream
 class MainActivity : FlutterActivity() {
     companion object {
         private const val CHANNEL = "addko/system"
+        private const val NATIVE_CHANNEL = "addko/native_engines"
         private const val PICK_ADDKO_REQUEST = 5101
         private const val MAX_PACKAGE_BYTES = 16L * 1024L * 1024L
         private val BLOCKED_URI_SCHEMES = setOf(
@@ -38,6 +40,46 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NATIVE_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                nativeEngineOperation(call.method, call.argument<String>("engine"), result)
+            }
+    }
+
+    private fun nativeEngineOperation(
+        action: String, engine: String?, result: MethodChannel.Result,
+    ) {
+        if (engine == null || !NativeEngineRegistry.supports(engine)) {
+            result.error("unknown_engine", "Motor nativo não aprovado.", null)
+            return
+        }
+        try {
+            when (action) {
+                "available" -> result.success(NativeEngineRegistry.available(this, engine))
+                "start" -> {
+                    if (!NativeEngineRegistry.available(this, engine)) {
+                        result.error("engine_missing", "Motor não incluído no APK.", null)
+                        return
+                    }
+                    NativeEngineRegistry.start(this, engine)
+                    result.success(true)
+                }
+                "stop" -> {
+                    NativeEngineRegistry.stop(this, engine)
+                    result.success(true)
+                }
+                "status" -> {
+                    Thread {
+                        val status = NativeEngineRegistry.status(engine)
+                        runOnUiThread { result.success(status) }
+                    }.start()
+                }
+                else -> result.notImplemented()
+            }
+        } catch (error: Throwable) {
+            result.error("engine_failed", error.message ?: "Erro do motor.", null)
+        }
     }
 
     private fun openExternalUri(raw: String?, result: MethodChannel.Result) {
