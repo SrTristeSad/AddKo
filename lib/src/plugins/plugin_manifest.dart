@@ -19,10 +19,17 @@ class PluginManifest {
     final version = _requiredString(json, 'version');
     final entry = _requiredString(json, 'entry');
 
-    if (!RegExp(r'^[a-z0-9]+(?:[._-][a-z0-9]+)+$').hasMatch(id)) {
+    if (id.length > 128 ||
+        !RegExp(r'^[a-z0-9]+(?:[._-][a-z0-9]+)+$').hasMatch(id)) {
       throw const FormatException('ID de plugin inválido.');
     }
-    if (!entry.endsWith('.lua') || entry.contains('..') || entry.startsWith('/')) {
+    if (name.length > 120) {
+      throw const FormatException('Nome de plugin muito longo.');
+    }
+    if (version.length > 64) {
+      throw const FormatException('Versão de plugin muito longa.');
+    }
+    if (!_isSafeLuaEntrypoint(entry)) {
       throw const FormatException('Entrypoint Lua inválido.');
     }
 
@@ -54,6 +61,30 @@ class PluginManifest {
       throw FormatException('$key é obrigatório.');
     }
     return value.trim();
+  }
+
+  static bool _isSafeLuaEntrypoint(String value) {
+    if (!value.endsWith('.lua') ||
+        value.length > 512 ||
+        value.startsWith('/') ||
+        value.contains(r'\') ||
+        value.codeUnits.contains(0) ||
+        RegExp(r'^[A-Za-z]:').hasMatch(value)) {
+      return false;
+    }
+
+    final parts = value.split('/');
+    if (parts.any(
+      (part) =>
+          part.isEmpty ||
+          part == '.' ||
+          part == '..' ||
+          part.length > 255 ||
+          part.contains(':'),
+    )) {
+      return false;
+    }
+    return true;
   }
 }
 
