@@ -7,7 +7,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "examples" / "torrent_video"
-OUTPUT = ROOT / "dist" / "VideoTorrent-0.1.0.addko"
+
 
 
 def build() -> Path:
@@ -17,15 +17,16 @@ def build() -> Path:
     assert manifest["entry"] == "main.lua"
     assert manifest["dependencies"] == ["io.addko.luelement"]
     assert manifest["permissions"] == []
+    output = ROOT / "dist" / f"VideoTorrent-{manifest['version']}.addko"
     files = {"manifest.json": manifest_bytes, "main.lua": (SOURCE / "main.lua").read_bytes()}
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    with ZipFile(OUTPUT, "w", compression=ZIP_DEFLATED, compresslevel=9) as archive:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with ZipFile(output, "w", compression=ZIP_DEFLATED, compresslevel=9) as archive:
         for name, content in files.items():
             archive.writestr(name, content)
-    with ZipFile(OUTPUT) as archive:
+    with ZipFile(output) as archive:
         assert set(archive.namelist()) == set(files)
         assert all(archive.read(name) == content for name, content in files.items())
-    return OUTPUT
+    return output
 
 
 if __name__ == "__main__":
