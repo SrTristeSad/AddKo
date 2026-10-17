@@ -276,6 +276,100 @@ class PluginManager {
     }
   }
 
+
+  Future<List<InstalledPlugin>> dependentsOf(String pluginId) async {
+    final installed = await listInstalled();
+    return installed
+        .where((plugin) => plugin.manifest.dependencies.contains(pluginId))
+        .toList(growable: false);
+  }
+
+  /// Uninstall a manifest-validated addon, preserving private data by default.
+  Future<void> uninstall(String pluginId, {bool deleteData = false}) async {
+    final installed = await listInstalled();
+    InstalledPlugin? selected;
+    for (final plugin in installed) {
+      if (plugin.manifest.id == pluginId) {
+        selected = plugin;
+        break;
+      }
+    }
+    if (selected == null) {
+      throw const PluginPackageException('Addon não está instalado.');
+    }
+    final dependents = installed
+        .where((plugin) => plugin.manifest.dependencies.contains(pluginId))
+        .map((plugin) => plugin.manifest.name)
+        .toList();
+    if (dependents.isNotEmpty) {
+      throw PluginPackageException(
+        'Não é possível remover: usado por \${dependents.join(', ')}.',
+      );
+    }
+    final original = selected.directory;
+    if (await FileSystemEntity.type(original.path, followLinks: false) !=
+        FileSystemEntityType.directory) {
+      throw const PluginPackageException('Diretório do addon inseguro.');
+    }
+    final dataDirectory = Directory(
+      _joinFileSystemPath(
+        _joinFileSystemPath(rootDirectory.parent.path, 'plugin-data'),
+        pluginId,
+      ),
+    );
+    final dataType = await FileSystemEntity.type(
+      dataDirectory.path,
+      followLinks: false,
+    );
+    if (deleteData &&
+        dataType != FileSystemEntityType.notFound &&
+        dataType != FileSystemEntityType.directory) {
+      throw const PluginPackageException(
+        'Dados do addon possuem tipo de arquivo inseguro.',
+      );
+    }
+
+    final nonce = DateTime.now().microsecondsSinceEpoch;
+    final quarantineAddon = Directory(
+      _joinFileSystemPath(rootDirectory.path, '.$pluginId.removing-$nonce'),
+    );
+    final quarantineData = Directory(
+      _joinFileSystemPath(
+        dataDirectory.parent.path,
+        '.$pluginId.removing-$nonce',
+      ),
+    );
+    var movedAddon = false;
+    var movedData = false;
+    try {
+      await original.rename(quarantineAddon.path);
+      movedAddon = true;
+      if (deleteData && dataType == FileSystemEntityType.directory) {
+        await dataDirectory.rename(quarantineData.path);
+        movedData = true;
+      }
+    } on Object catch (error) {
+      if (movedData && await quarantineData.exists()) {
+        await quarantineData.rename(dataDirectory.path);
+      }
+      if (movedAddon && await quarantineAddon.exists()) {
+        await quarantineAddon.rename(original.path);
+      }
+      throw PluginPackageException('Não foi possível remover addon: $error');
+    }
+
+    // Deletion after quarantine cannot be rolled back. If cleanup fails, the
+    // error is shown, rather than falsely claiming the data was erased.
+    try {
+      await quarantineAddon.delete(recursive: true);
+      if (movedData) await quarantineData.delete(recursive: true);
+    } on Object catch (error) {
+      throw PluginPackageException(
+        'Addon desativado, mas a limpeza não terminou: $error',
+      );
+    }
+  }
+
   static PluginManifest _parseManifest(List<int> bytes) {
     final String source;
     try {
