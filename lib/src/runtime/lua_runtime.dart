@@ -9,6 +9,14 @@ typedef _DestroyNative = Void Function(Pointer<Void> runtime);
 typedef _DestroyDart = void Function(Pointer<Void> runtime);
 typedef _VersionNative = Pointer<Utf8> Function();
 typedef _VersionDart = Pointer<Utf8> Function();
+typedef _SetPluginRootNative = Int32 Function(
+  Pointer<Void> runtime,
+  Pointer<Utf8> pluginRoot,
+);
+typedef _SetPluginRootDart = int Function(
+  Pointer<Void> runtime,
+  Pointer<Utf8> pluginRoot,
+);
 typedef _EvalNative = Int32 Function(
   Pointer<Void> runtime,
   Pointer<Utf8> source,
@@ -38,7 +46,7 @@ class LuaRuntime {
   final _VersionDart _version;
   bool _disposed = false;
 
-  static LuaRuntime open() {
+  static LuaRuntime open({String? pluginRoot}) {
     if (!Platform.isAndroid) {
       throw UnsupportedError('O runtime nativo inicial suporta Android.');
     }
@@ -56,13 +64,36 @@ class LuaRuntime {
     final version = library.lookupFunction<_VersionNative, _VersionDart>(
       'addko_lua_version',
     );
+    final setPluginRoot =
+        library.lookupFunction<_SetPluginRootNative, _SetPluginRootDart>(
+      'addko_lua_set_plugin_root',
+    );
 
     final handle = create();
     if (handle == nullptr) {
       throw StateError('Não foi possível criar o estado Lua.');
     }
 
-    return LuaRuntime._(handle, destroy, evaluate, version);
+    try {
+      if (pluginRoot != null) {
+        final rootPointer = pluginRoot.toNativeUtf8();
+        try {
+          final status = setPluginRoot(handle, rootPointer);
+          if (status != 0) {
+            throw StateError(
+              'Não foi possível configurar a raiz do plugin Lua (erro $status).',
+            );
+          }
+        } finally {
+          calloc.free(rootPointer);
+        }
+      }
+
+      return LuaRuntime._(handle, destroy, evaluate, version);
+    } on Object {
+      destroy(handle);
+      rethrow;
+    }
   }
 
   String get version {
