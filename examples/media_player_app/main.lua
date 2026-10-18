@@ -33,6 +33,10 @@ local function page()
                     action = "player_status",
                 },
                 {
+                    type = "button", label = "Diagnosticar conexão",
+                    action = "stream_diagnostics",
+                },
+                {
                     type = "button", label = "Avançar 5 segundos",
                     action = "seek_forward",
                 },
@@ -69,6 +73,30 @@ function App.play(form)
     end)
     message = ok and "Reprodução solicitada ao player."
         or ("Falha: " .. tostring(result):sub(1, 240))
+    return page()
+end
+
+function App.stream_diagnostics()
+    local ok, result = pcall(function()
+        return addko.plugins.call(SOURCE_PLUGIN, "stats", {})
+    end)
+    if not ok then
+        message = "Falha ao obter diagnóstico: " .. tostring(result):sub(1, 180)
+    elseif type(result) ~= "table" or result.ready ~= true then
+        message = "Sem fonte de mídia ativa. Toque em Reproduzir primeiro."
+    else
+        message = string.format(
+            "Rede: HTTP %s | pedidos %d | Range %d | HEAD %d | bytes %d | ativos %d | falhas %d%s",
+            tostring(result.last_http_status or "?"),
+            tonumber(result.requests or 0) or 0,
+            tonumber(result.range_requests or 0) or 0,
+            tonumber(result.head_requests or 0) or 0,
+            tonumber(result.bytes_forwarded or 0) or 0,
+            tonumber(result.active_requests or 0) or 0,
+            tonumber(result.failed_requests or 0) or 0,
+            result.last_error and (" | erro " .. tostring(result.last_error)) or ""
+        )
+    end
     return page()
 end
 
