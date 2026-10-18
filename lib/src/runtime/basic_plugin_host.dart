@@ -157,6 +157,9 @@ class BasicPluginHost extends PluginHost {
       case 'stream.revoke':
         _require(_network, 'network');
         return _mediaStreams.revoke(args['id']);
+      case 'stream.stats':
+        _require(_network, 'network');
+        return _mediaStreams.stats(args['id']);
       case 'net.dns.lookup':
       case 'net.udp.open':
       case 'net.udp.info':
