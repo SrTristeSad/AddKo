@@ -10,11 +10,13 @@ class _FakePlayer implements PluginPlayer {
 
   final List<String> events;
   final bool failPlayback;
+  bool started = false;
 
   @override
   Future<bool> play(Object? item) async {
     events.add('player.play');
     if (failPlayback) throw StateError('media stream unavailable');
+    started = true;
     return true;
   }
 
@@ -23,7 +25,7 @@ class _FakePlayer implements PluginPlayer {
   @override
   bool get isPlaying => false;
   @override
-  bool get isPaused => false;
+  bool get isPaused => started;
   @override
   Map<String, Object?> get times => const <String, Object?>{};
   @override
@@ -104,6 +106,39 @@ void main() {
         throwsA(isA<StateError>()),
       );
       expect(events, <String>['ui.player_open', 'player.play']);
+    } finally {
+      await mediaHost.close();
+    }
+  });
+
+  test('seek refuses uninitialized playback and status reports readiness',
+      () async {
+    final events = <String>[];
+    final mediaHost = host(
+      _FakePlayer(events),
+      (operation, arguments) async {
+        events.add(operation);
+        return true;
+      },
+    );
+    try {
+      final initial = await mediaHost.invoke('player.status', null) as Map;
+      expect(initial['state'], 'idle');
+      expect(initial['can_seek'], false);
+      expect(await mediaHost.invoke('player.seek', <String, Object?>{
+        'seconds': 5.0,
+      }), false);
+      expect(events, isEmpty);
+
+      expect(await mediaHost.invoke('player.play', <String, Object?>{
+        'item': 'http://localhost/video',
+      }), true);
+      final ready = await mediaHost.invoke('player.status', null) as Map;
+      expect(ready['state'], 'paused');
+      expect(ready['can_seek'], true);
+      expect(await mediaHost.invoke('player.seek', <String, Object?>{
+        'seconds': 5.0,
+      }), true);
     } finally {
       await mediaHost.close();
     }
