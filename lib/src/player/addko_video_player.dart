@@ -1,4 +1,5 @@
 import 'package:addko/src/runtime/plugin_player.dart';
+import 'package:addko/src/player/addko_seek_slider.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
@@ -275,11 +276,6 @@ class AddKoVideoSurface extends StatelessWidget {
           );
         }
 
-        final duration = controller.value.duration.inMilliseconds.toDouble();
-        final position = controller.value.position.inMilliseconds
-            .clamp(0, controller.value.duration.inMilliseconds)
-            .toDouble();
-
         return Card(
           clipBehavior: Clip.antiAlias,
           child: Column(
@@ -308,13 +304,11 @@ class AddKoVideoSurface extends StatelessWidget {
                       ),
                     ),
                     Expanded(
-                      child: Slider(
-                        min: 0,
-                        max: duration <= 0 ? 1 : duration,
-                        value: duration <= 0 ? 0 : position,
-                        onChanged: duration <= 0
-                            ? null
-                            : (value) => player.seek(value / 1000.0),
+                      child: AddKoSeekSlider(
+                        duration: controller.value.duration,
+                        position: controller.value.position,
+                        onSeek: (value) =>
+                            player.seek(value.inMilliseconds / 1000.0),
                       ),
                     ),
                     IconButton(
