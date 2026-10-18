@@ -1,128 +1,239 @@
 package com.srtristesad.addko
 
-import android.content.Context
-import android.os.Build
-import android.system.Os
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
+import com.srtristesad.addko.nativeengines.NativeEngineRegistry
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
-import java.io.FileNotFoundException
+import java.io.FileOutputStream
 
 class MainActivity : FlutterActivity() {
     companion object {
-        private const val PYTHON_CHANNEL = "addko/python_runtime"
+        private const val CHANNEL = "addko/system"
+        private const val NATIVE_CHANNEL = "addko/native_engines"
+        private const val PICK_ADDKO_REQUEST = 5101
+        private const val MAX_PACKAGE_BYTES = 16L * 1024L * 1024L
+        private val BLOCKED_URI_SCHEMES = setOf(
+            "file",
+            "content",
+            "data",
+            "javascript",
+            "intent",
+        )
     }
+
+    private var pendingPickerResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PYTHON_CHANNEL)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "prepare" -> {
-                        Thread {
-                            try {
-                                val info = PythonRuntimeInstaller(applicationContext).prepare()
-                                runOnUiThread {
-                                    result.success(
-                                        mapOf(
-                                            "home" to info.home.absolutePath,
-                                            "abi" to info.abi,
-                                            "version" to info.version,
-                                        )
-                                    )
-                                }
-                            } catch (error: Throwable) {
-                                runOnUiThread {
-                                    result.error(
-                                        "python_runtime_prepare_failed",
-                                        error.message ?: error.javaClass.simpleName,
-                                        null,
-                                    )
-                                }
-                            }
-                        }.start()
-                    }
+                    "pickAddko" -> openAddkoPicker(result)
+                    "openUri" -> openExternalUri(call.argument<String>("uri"), result)
                     else -> result.notImplemented()
                 }
             }
-    }
-}
 
-private data class PythonRuntimeInfo(
-    val home: File,
-    val abi: String,
-    val version: String,
-)
-
-private class PythonRuntimeInstaller(private val context: Context) {
-    companion object {
-        private const val VERSION = "3.14.8"
-        private val SUPPORTED_ABIS = setOf("arm64-v8a", "x86_64")
-    }
-
-    @Synchronized
-    fun prepare(): PythonRuntimeInfo {
-        val abi = Build.SUPPORTED_ABIS.firstOrNull { it in SUPPORTED_ABIS }
-            ?: throw IllegalStateException(
-                "ABI Android não suportada pelo CPython embarcado: " +
-                    Build.SUPPORTED_ABIS.joinToString()
-            )
-
-        val runtimeRoot = File(context.filesDir, "addko-python/$VERSION/$abi")
-        val prefix = File(runtimeRoot, "prefix")
-        val marker = File(runtimeRoot, ".complete")
-
-        if (!marker.exists() || marker.readText().trim() != VERSION) {
-            if (runtimeRoot.exists() && !runtimeRoot.deleteRecursively()) {
-                throw IllegalStateException("Não foi possível limpar $runtimeRoot")
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NATIVE_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                nativeEngineOperation(call.method, call.argument<String>("engine"), result)
             }
-            runtimeRoot.mkdirs()
+    }
 
-            val assetRoot = "addko_python/$VERSION/$abi/prefix"
-            extractAssetTree(assetRoot, prefix, assetRoot)
-            marker.writeText(VERSION)
+    private fun nativeEngineOperation(
+        action: String, engine: String?, result: MethodChannel.Result,
+    ) {
+        if (engine == null || !NativeEngineRegistry.supports(engine)) {
+            result.error("unknown_engine", "Motor nativo não aprovado.", null)
+            return
+        }
+        try {
+            when (action) {
+                "available" -> result.success(NativeEngineRegistry.available(this, engine))
+                "start" -> {
+                    if (!NativeEngineRegistry.available(this, engine)) {
+                        result.error("engine_missing", "Motor não incluído no APK.", null)
+                        return
+                    }
+                    NativeEngineRegistry.start(this, engine)
+                    result.success(true)
+                }
+                "stop" -> {
+                    NativeEngineRegistry.stop(this, engine)
+                    result.success(true)
+                }
+                "status" -> {
+                    Thread {
+                        val status = NativeEngineRegistry.status(engine)
+                        runOnUiThread { result.success(status) }
+                    }.start()
+                }
+                else -> result.notImplemented()
+            }
+        } catch (error: Throwable) {
+            result.error("engine_failed", error.message ?: "Erro do motor.", null)
+        }
+    }
+
+    private fun openExternalUri(raw: String?, result: MethodChannel.Result) {
+        val uri = try {
+            raw?.trim()?.takeIf { it.isNotEmpty() }?.let(Uri::parse)
+        } catch (_: Throwable) {
+            null
         }
 
-        val stdlib = File(prefix, "lib/python3.14")
-        if (!stdlib.isDirectory) {
-            throw IllegalStateException("Biblioteca padrão do Python não foi extraída: $stdlib")
-        }
-
-        // CPython on Android consults TMPDIR. Android only sets it automatically on
-        // recent releases, so provide it on every supported version.
-        Os.setenv("TMPDIR", context.cacheDir.absolutePath, true)
-
-        return PythonRuntimeInfo(prefix, abi, VERSION)
-    }
-
-    private fun extractAssetTree(path: String, target: File, root: String) {
-        val children = context.assets.list(path)
-            ?: throw IllegalStateException("Não foi possível listar asset $path")
-
-        if (children.isNotEmpty()) {
-            if (!target.exists() && !target.mkdirs()) {
-                throw IllegalStateException("Não foi possível criar $target")
-            }
-            for (child in children) {
-                extractAssetTree("$path/$child", File(target, restoreName(child)), root)
-            }
+        val scheme = uri?.scheme?.lowercase()
+        if (uri == null || scheme.isNullOrBlank() || scheme in BLOCKED_URI_SCHEMES) {
+            result.error("invalid_uri", "URI externo inválido ou não permitido.", null)
             return
         }
 
+        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+            addCategory(Intent.CATEGORY_BROWSABLE)
+        }
+
         try {
-            context.assets.open(path).use { input ->
-                target.parentFile?.mkdirs()
-                target.outputStream().use { output -> input.copyTo(output) }
-            }
-        } catch (error: FileNotFoundException) {
-            throw IllegalStateException("Asset do CPython ausente: $path", error)
+            startActivity(intent)
+            result.success(true)
+        } catch (_: ActivityNotFoundException) {
+            result.success(false)
+        } catch (error: Throwable) {
+            result.error(
+                "open_uri_failed",
+                error.message ?: error.javaClass.simpleName,
+                null,
+            )
         }
     }
 
-    // The staging script mirrors CPython's official Android workaround: files
-    // ending in .gz or '-' receive an extra trailing dash before APK packaging.
-    private fun restoreName(name: String): String =
-        if (name.endsWith("-")) name.dropLast(1) else name
+    private fun openAddkoPicker(result: MethodChannel.Result) {
+        if (pendingPickerResult != null) {
+            result.error("picker_busy", "Já existe um seletor de pacote aberto.", null)
+            return
+        }
+
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }
+
+        pendingPickerResult = result
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(
+                Intent.createChooser(intent, "Escolha um pacote .addko"),
+                PICK_ADDKO_REQUEST,
+            )
+        } catch (error: Throwable) {
+            pendingPickerResult = null
+            result.error("picker_failed", error.message ?: error.javaClass.simpleName, null)
+        }
+    }
+
+    @Deprecated("Deprecated in Android; retained for FlutterActivity compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != PICK_ADDKO_REQUEST) return
+
+        val result = pendingPickerResult ?: return
+        pendingPickerResult = null
+
+        if (resultCode != Activity.RESULT_OK) {
+            result.success(null)
+            return
+        }
+
+        val uri = data?.data
+        if (uri == null) {
+            result.error("picker_empty", "Nenhum arquivo foi retornado pelo Android.", null)
+            return
+        }
+
+        var output: File? = null
+        try {
+            val displayName = displayName(uri)
+            if (displayName != null && !displayName.lowercase().endsWith(".addko")) {
+                result.error(
+                    "invalid_extension",
+                    "O arquivo selecionado não possui a extensão .addko.",
+                    null,
+                )
+                return
+            }
+
+            val importDir = File(cacheDir, "addko-imports").apply { mkdirs() }
+            output = File(importDir, "selected-${System.nanoTime()}.addko")
+
+            contentResolver.openInputStream(uri).use { input ->
+                if (input == null) {
+                    throw IllegalStateException("Não foi possível abrir o arquivo selecionado.")
+                }
+
+                FileOutputStream(output).use { stream ->
+                    val buffer = ByteArray(64 * 1024)
+                    var total = 0L
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        total += read
+                        if (total > MAX_PACKAGE_BYTES) {
+                            throw IllegalArgumentException(
+                                "Pacote .addko excede o limite de 16 MiB.",
+                            )
+                        }
+                        stream.write(buffer, 0, read)
+                    }
+                    stream.fd.sync()
+                }
+            }
+
+            result.success(output.absolutePath)
+        } catch (error: Throwable) {
+            try {
+                output?.takeIf { it.exists() }?.delete()
+            } catch (_: Throwable) {
+                // Cache cleanup is best-effort; the platform may reclaim it later.
+            }
+            result.error(
+                "picker_read_failed",
+                error.message ?: error.javaClass.simpleName,
+                null,
+            )
+        }
+    }
+
+    private fun displayName(uri: Uri): String? {
+        contentResolver.query(
+            uri,
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0 && !cursor.isNull(index)) {
+                    return cursor.getString(index)
+                }
+            }
+        }
+        return null
+    }
+
+    override fun onDestroy() {
+        pendingPickerResult?.error(
+            "activity_destroyed",
+            "A tela foi encerrada antes de concluir a seleção do pacote.",
+            null,
+        )
+        pendingPickerResult = null
+        super.onDestroy()
+    }
 }

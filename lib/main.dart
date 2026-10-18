@@ -1,10 +1,7 @@
-import 'package:flutter/material.dart';
-import 'package:media_kit/media_kit.dart';
-
-import 'app/addko_app.dart';
+import 'package:addko/src/app.dart';
+import 'package:flutter/widgets.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  MediaKit.ensureInitialized();
   runApp(const AddKoApp());
 }

@@ -1,114 +1,67 @@
-# AddKo roadmap
+# AddKo roadmap — Lua rewrite
 
-## v0.1.x — Kodi Legacy Runtime
+## Phase 0 — clean reset
 
-Objetivo: instalar um addon Kodi existente e executá-lo sem modificar o pacote.
+- [x] preserve the Kodi/Python implementation under `legacy/kodi-0.2.1`;
+- [x] remove Kodi and Python from the new `main` tree;
+- [x] define Lua as the only plugin runtime;
+- [x] pin official Lua 5.5.1 with SHA-256 verification.
 
-### Fundação
+## Phase 1 — native Lua foundation
 
-- [x] shell Flutter e launcher em cards;
-- [x] acesso visual à Loja no dock inferior do launcher;
-- [x] dock inferior com ações visuais de Sair, Loja e Configurações;
-- [x] cadastro e persistência de URL de repositório;
-- [x] parser de `addon.xml`;
-- [x] parser de descritor `xbmc.addon.repository`;
-- [x] parser de URI `plugin://`;
-- [x] sincronização HTTP de `addons.xml` / `addons.xml.gz`;
-- [x] organização da Loja por tipos de addon Kodi;
-- [x] instalador seguro de pacotes ZIP com staging/rollback;
-- [x] instalação manual de addon/repository Kodi por arquivo ZIP local;
-- [x] repository instalado por ZIP registra seus endpoints remotos na Loja;
-- [x] dependências de addon instalado por ZIP são buscadas nos repositórios ativos;
-- [x] validação do ID e versão do pacote contra o índice do repositório;
-- [x] registro e descoberta de addons instalados;
-- [x] resolvedor recursivo de dependências e versões;
-- [x] instalação automática de dependências antes do addon principal;
-- [x] atualização/reinstalação de pacote pela Loja;
-- [x] desinstalação no Addon Manager;
-- [x] Addon Manager com busca, filtros, detalhes e acesso às configurações legadas;
-- [x] proteção contra remoção de dependência ainda usada por outro addon;
-- [x] opção de preservar ou apagar `addon_data` durante a desinstalação;
-- [x] validação de checksum de índices de repositório (MD5/SHA-1/SHA-256, incluindo endpoints GZip);
-- [ ] checksum de pacote quando a origem fornecer digest verificável;
-- [ ] cache local dos índices sincronizados;
+- [x] Android CMake target for Lua;
+- [x] Dart FFI wrapper;
+- [x] one Lua state per runtime instance;
+- [x] initial memory budget;
+- [x] initial instruction budget;
+- [x] restricted standard libraries;
+- [x] Android smoke UI evaluating `return 6 * 7`;
+- [ ] CI validation on a real Android emulator/device.
 
-### Runtime legado Python
+## Phase 2 — package loader
 
-- [x] worker Python isolado por invocação em processo no desktop;
-- [x] `sys.argv` no formato esperado por plugins `plugin://`;
-- [x] carregamento de `script.module.*` no `PYTHONPATH`;
-- [x] bridge JSON entre Python e Flutter;
-- [x] navegação de diretórios retornados por `xbmcplugin`;
-- [x] `xbmcaddon` inicial, incluindo informações e settings persistentes;
-- [x] `xbmcplugin` inicial, incluindo `addDirectoryItem`, `addDirectoryItems`, `endOfDirectory` e `setResolvedUrl`;
-- [x] `xbmcvfs` inicial e tradução de `special://`;
-- [x] `xbmc` inicial (`log`, built-ins, `Player`, `Monitor` e superfícies básicas);
-- [x] `xbmcdrm` com superfície de compatibilidade para imports;
-- [x] `xbmcgui.ListItem`, InfoTags, Dialog, Keyboard e Progress iniciais;
-- [x] bridge bidirecional para `Dialog.ok`, `yesno`, `select`, `contextmenu`, `input`, `textviewer` e `Keyboard` usando Flutter;
-- [x] `Window`, `WindowDialog` e modelo inicial de `WindowXML`/controles traduzidos para Flutter;
-- [x] callbacks básicos de `WindowXML` trafegando pelo bridge Python ↔ Flutter;
-- [x] JSON-RPC inicial (`JSONRPC.Ping`, `JSONRPC.Version`, propriedades básicas de Application/GUI e superfícies vazias seguras para Player/Files);
-- [x] built-ins de navegação e execução: `RunPlugin`, `RunAddon`, `RunScript`, `Container.Update`, `Container.Refresh`, `PlayMedia`, `ActivateWindow`, `Addon.OpenSettings` e `Notification`;
-- [x] built-ins ligados à Loja/Add-on Manager: `InstallAddon`, `UpdateAddonRepos` e `UpdateLocalAddons`;
-- [x] `InstallAddon` procura o pacote nos repositórios ativos e usa o resolvedor recursivo de dependências do AddKo;
-- [x] reconhecimento de `xbmc.service` e seu entrypoint em `addon.xml`;
-- [x] supervisor de serviços Python em processos de segundo plano no desktop;
-- [x] `xbmc.Monitor.abortRequested()` e `waitForAbort()` conectados ao supervisor para encerramento limpo;
-- [x] serviços instalados/inseridos ou atualizados são reconciliados automaticamente pelo supervisor;
-- [x] JSON-RPC de serviços é respondido pela mesma camada de compatibilidade do runtime legado;
-- [x] eventos de `xbmc.service` podem ser encaminhados ao host global do AddKo;
-- [x] notificações, `Player.play`, `InstallAddon`, `UpdateAddonRepos`, `UpdateLocalAddons` e `PlayMedia` diretos emitidos por serviços chegam aos controllers/UI globais;
-- [x] painel em Configurações para listar serviços rodando, parados ou com falha;
-- [x] reinício manual de serviços pelo painel;
-- [x] `RunPlugin`, `RunAddon`, `RunScript`, `PlayMedia(plugin://...)` e `Container.Update(plugin://...)` disparados por serviços executam pelo runtime global;
-- [x] resultados `setResolvedUrl` e built-ins produzidos por plugins/scripts chamados em background continuam sendo processados;
-- [x] player ativo registra uma ponte global para receber `play`, `pause`, `stop`, `seekTime` e troca de mídia sem abrir outra instância;
-- [x] projeto Android/Android TV inicial com launcher Leanback, navegação por controle e orientação horizontal;
-- [x] `libaddko_python_host` nativa compilada por CMake e acessível pelo Flutter via Dart FFI;
-- [x] loader nativo procura CPython por ABI, consulta a versão, inicializa, executa código e libera o GIL entre isolates;
-- [x] página em Configurações mostra o estado do host nativo e do CPython embarcado;
-- [x] executor Android usa o mesmo `LegacyPluginInvocation` do desktop e encaminha plugins/scripts ao host embarcado;
-- [x] bridge local autenticado permite requests/eventos bidirecionais entre o worker Python embarcado e o Flutter, incluindo dialogs e demais chamadas síncronas;
-- [x] CPython 3.14.8 oficial é baixado com SHA-256 fixo e empacotado no APK para `arm64-v8a` e `x86_64`;
-- [x] stdlib e módulos nativos do CPython são preparados por ABI, extraídos para o armazenamento privado do app e configurados como `PYTHONHOME`/`PYTHONPATH`;
-- [x] execução Android usa subinterpretadores CPython para separar `sys.modules`, `sys.path`, `sys.argv` e streams entre addons concorrentes;
-- [x] `xbmc.service` usa CPython embarcado no Android e compartilha o bridge de Monitor, JSON-RPC e eventos do supervisor legado;
-- [x] o CI Android baixa/verifica o runtime, constrói o APK e valida que `libpython` e a stdlib foram realmente incluídos no pacote;
-- [ ] smoke test em emulador Android executando imports reais (`ssl`, `sqlite3`, `json`) e um addon de teste;
-- [ ] build próprio de CPython para `armeabi-v7a` caso decidamos manter suporte a Android 32-bit;
-- [ ] interrupção nativa forçada de serviço que ignore completamente `xbmc.Monitor`;
-- [ ] suportar os demais comandos do player (`playnext`, `playprevious`, legendas e playlists) no host global;
-- [ ] `ActivateWindow` e navegação visual disparados por serviços;
-- [ ] registrar histórico/log recente por serviço no painel;
-- [ ] ampliar os built-ins restantes do Kodi conforme addons reais exigirem;
-- [ ] ampliar JSON-RPC para Addons, Files, Player, Playlist, Settings e bibliotecas;
-- [ ] ampliar suporte a scripts Python e demais extension points usados por addons reais;
-- [ ] ampliar `WindowXML` para mais tipos de controle, navegação/foco e recursos de skin.
+- [x] initial manifest domain validation;
+- [x] `.addko` ZIP parser;
+- [x] zip-slip and decompression-bomb protection;
+- [x] package size/resource limits;
+- [x] install staging + atomic commit/rollback;
+- [x] installed plugin registry;
+- [x] uninstall flow with optional data cleanup and dependency protection;
+- [x] update/replace flow.
 
-### Mídia e addons binários
+## Phase 3 — AddKo host API
 
-- [x] Player Bridge inicial usando `media_kit`;
-- [x] reprodução direta de mídia resolvida por addons legados;
-- [x] tradução inicial de propriedades de `ListItem` para headers, MIME, legendas e metadados InputStream/DRM;
-- [ ] encaminhar propriedades InputStream/DRM para um host binário compatível;
-- [ ] Kodi Binary Addon ABI host;
-- [ ] InputStream ABI e `inputstream.adaptive`;
-- [ ] InputStream FFmpeg Direct;
-- [ ] PVR Binary ABI;
-- [ ] Torrent Engine/bridge;
-- [ ] VFS binário e demais famílias necessárias.
+- [ ] versioned host API;
+- [x] initial manifest-scoped native engines API (APK-bundled only);
+- [x] UI tree protocol;
+- [x] event callbacks;
+- [x] in-app push/replace/pop navigation;
+- [x] scoped storage;
+- [x] permission-gated HTTP;
+- [x] asynchronous Lua coroutine scheduler;
+- [ ] structured errors/logging.
 
-## Regra da Loja
+## Phase 4 — mini-app platform
 
-O usuário registra a URL de um repositório ou instala o ZIP de um addon `repository.*`. O AddKo aceita um descriptor `xbmc.addon.repository` ou um índice `addons.xml`/`addons.xml.gz`, sincroniza os metadados, apresenta os addons pelas categorias Kodi e usa o mesmo Addon Manager para baixar o pacote e resolver dependências automaticamente.
+- [x] lists and grids;
+- [x] forms;
+- [x] tabs;
+- [x] network and package-local images;
+- [x] initial audio/video media API;
+- [x] first-class `type="game"` Lua experience root;
+- [x] sandboxed 2D game surface with keyboard/touch input;
+- [x] bounded draw-command protocol for Lua games;
+- [x] RGBA8888 framebuffer path for Lua emulators;
+- [x] package-local sprites inside game frames;
+- [ ] dedicated gamepad axes/buttons API;
+- [ ] low-overhead native frame transport for demanding emulators;
+- [ ] audio sample/buffer API for games and emulators;
+- [ ] local database API;
+- [ ] authentication helpers;
+- [ ] background services with quotas;
+- [ ] phone/tablet/TV input model;
+- [ ] plugin developer tools.
 
-A Loja também aceita um ZIP Kodi local. O pacote é validado e instalado pelo mesmo instalador seguro; se for um `repository.*`, os endpoints do `addon.xml` entram na Loja. Se for um addon comum, o AddKo procura as dependências faltantes nos repositórios ativos.
+## Design rule
 
-Dependências como `script.module.*`, `inputstream.*` e outros addons não aparecem como cards comuns no launcher apenas por estarem instaladas. O launcher é voltado aos addons executáveis pelo usuário.
-
-A Loja também é o backend dos built-ins legados de instalação. Quando um addon antigo chama `InstallAddon`, `UpdateAddonRepos` ou `UpdateLocalAddons`, o AddKo encaminha a ação para os mesmos controllers usados pela interface da Loja.
-
-## Plugin v2
-
-Fica fora do escopo desta primeira etapa. O desenho futuro prevê App Plugins Python com recursos próprios, incluindo login, armazenamento, banco de dados, rede, serviços em segundo plano e APIs modernas do AddKo.
+AddKo mini-apps must not be forced into Kodi-style media-addon screens. The host exposes generic capabilities and sandbox limits; Lua is free to combine them into apps, tools, readers, games, emulators and other experiences.

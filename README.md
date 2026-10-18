@@ -1,44 +1,145 @@
 # AddKo
 
-AddKo é uma plataforma Flutter focada em executar addons legados do Kodi e, futuramente, um novo modelo de App Plugin em Python.
+AddKo is being rebuilt from the ground up as a **Lua mini-app platform**.
 
-## Objetivo da v0.1.0
+The old Kodi/Python architecture is no longer part of `main`. It is preserved in the branch `legacy/kodi-0.2.1` only for historical reference.
 
-A primeira etapa é compatibilidade com addons Kodi existentes, sem exigir alteração do addon:
+## Foundation
 
-- instalar addons por ZIP;
-- ler `addon.xml`;
-- abrir rotas `plugin://`;
-- executar o entrypoint Python do addon;
-- suportar dependências entre addons (`script.module.*`, `inputstream.*`, etc.);
-- oferecer uma Loja baseada em repositórios adicionados pelo usuário;
-- preservar a organização e os metadados fornecidos por cada repositório;
-- implementar gradualmente as APIs `xbmc`, `xbmcaddon`, `xbmcplugin`, `xbmcgui` e `xbmcvfs`;
-- suportar GUI legada e, mais adiante, addons binários como InputStream e PVR.
+- Flutter owns the application UI.
+- Lua 5.5.1 is the official plugin runtime.
+- Lua is compiled from the official upstream C sources and linked into the Android app.
+- Plugins use the AddKo-owned `.addko` package format.
+- Each plugin runs in an isolated Lua state with explicit permissions.
+- Kodi and Python compatibility are explicitly out of scope.
+- Plugins call generic AddKo APIs instead of Android/Flutter directly.
 
-## Arquitetura inicial
+## Current milestone
+
+The runtime is now connected to a real persistent mini-app lifecycle and the first generic host APIs.
+
+Implemented in `main`:
+
+1. fetch and SHA-256 verify the official Lua 5.5.1 source;
+2. compile Lua into `libaddko_lua.so` for Android ARM64;
+3. create a constrained Lua state with memory/instruction limits;
+4. expose a safe plugin-local `require` without enabling the standard `package` library;
+5. install and validate `.addko` ZIP packages;
+6. persist one Lua state for the lifetime of an opened mini-app;
+7. coroutine-based asynchronous Lua → Dart host calls;
+8. declarative Flutter UI returned by Lua;
+9. forms, buttons, cards, lists/grids, images and common controls;
+10. permission-gated HTTP/HTTPS;
+11. sandboxed per-plugin filesystem;
+12. loopback-only TCP server for background plugins;
+13. reusable outbound TCP/TLS client sockets for Lua plugins (bounded read/write);
+14. generic UDP datagrams, DNS resolution and WebSocket transport APIs;
+15. session-scoped media stream proxy (HTTP range forwarding to native player);
+16. generic Flutter dialogs (`alert`, `confirm`, `input`, `select`);
+17. generic video player API and player surface;
+18. safe Android external-URI launcher through `system.open_uri`;
+19. plugin background sessions;
+20. platform, locale, JSON, paths and timing APIs;
+21. generic desktop native-process host for Windows/Linux/macOS, restricted to the plugin/data sandbox.
+
+The sandbox still does **not** expose `io`, `os`, `package` or `debug`. `dofile`, `loadfile` and `collectgarbage` remain unavailable.
+
+## Generic host model
+
+A plugin can use capabilities such as:
 
 ```text
-Flutter App
-├── Launcher de plugins
-├── Loja
-└── Configurações
-        │
-        ▼
-Addon Core
-├── Addon Manager
-├── Repository Manager
-├── Dependency Resolver
-└── plugin:// Router
-        │
-        ▼
-Kodi Compatibility Runtime
-├── Python Host
-├── xbmc*
-├── GUI bridge
-└── Binary Addon bridge (futuro)
+addko.http
+addko.stream        # HTTP media handoff + per-source diagnostics
+addko.fs
+addko.net.tcp       # outbound TCP/TLS + loopback server
+addko.net.udp       # datagram transport
+addko.net.websocket # ws/wss messaging
+addko.net.dns       # IP address lookup
+addko.ui
+addko.player
+addko.system
+addko.process        # desktop only
+addko.paths
+addko.platform
+addko.locale
+addko.json
+addko.sleep
 ```
 
-## Estado
+The core does not contain application-specific APIs such as torrent, manga, radio or social-network APIs. Those belong to plugins.
 
-Projeto em desenvolvimento inicial. A branch `main` é a linha principal de desenvolvimento.
+The current permission vocabulary remains intentionally small:
+
+```text
+network
+storage
+media
+background
+```
+
+`system.open_uri` does not create a product-specific permission. The Android host validates the URI and rejects local/dangerous schemes such as `file:`, `content:`, `data:`, `javascript:` and `intent:`.
+
+Desktop `process.spawn` also does not introduce a product-specific permission. It is only enabled when the plugin already declares `storage` + `background`, and the executable/working directory must stay inside the installed plugin directory or that plugin's private data directory.
+
+## First stress-test plugin
+
+[Luelement](https://github.com/SrTristeSad/Luelement) is being used as the first demanding Plugin v2 integration.
+
+It exercises:
+
+- persistent Lua state;
+- HTTP redirects;
+- loopback TCP callbacks;
+- dialogs;
+- forms/UI updates;
+- background lifetime;
+- local media playback;
+- standalone native helper launch on desktop;
+- external companion deep links on Android.
+
+Torrent/libtorrent is **not** part of the AddKo core. Luelement talks to the Elementum engine through generic AddKo APIs.
+
+## Native process policy
+
+### Desktop
+
+On Windows, Linux and macOS, plugins with `storage` + `background` may use the generic `addko.process` API. The host accepts only executables located inside the plugin's own installation/data sandbox. Processes started by a session are terminated when that host session closes.
+
+### Android/iOS
+
+Plugin code cannot download and execute arbitrary native binaries from writable storage. `process.spawn` therefore remains unavailable on mobile hosts.
+
+Native workloads that genuinely require Android-native packaging can use a separately installed companion app/service and communicate through generic network/URI contracts. Luelement Engine is the first test of this architecture.
+
+## Build on Windows
+
+Run:
+
+```bat
+BUILD_ANDROID.bat
+```
+
+The script intentionally pauses before closing so build errors remain visible.
+
+For analysis/tests only:
+
+```bat
+TESTAR_CODIGO.bat
+```
+
+## Lua upstream
+
+Pinned release: **Lua 5.5.1**
+
+Official archive: `https://www.lua.org/ftp/lua-5.5.1.tar.gz`
+
+SHA-256:
+
+```text
+1c4b4068d67061f2a2231ad2b5422e77acea1487ea9890f6320af614f4373dce
+```
+
+The source is downloaded during setup instead of being copied into this repository.
+
+See `docs/ARCHITECTURE.md`, `docs/PLUGIN_SPEC.md`, `docs/NETWORK.md`, `docs/STREAMING.md`, `docs/ANDROID_STREAM_SMOKE.md` and `docs/ROADMAP.md`.
