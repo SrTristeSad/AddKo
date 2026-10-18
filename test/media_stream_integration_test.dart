@@ -16,6 +16,7 @@ class _RangeProbePlayer implements PluginPlayer {
   final List<String> events;
   String _url = '';
   bool _playing = false;
+  bool _initialized = false;
   int? headStatus;
   int? rangeStatus;
   String? contentRange;
@@ -45,6 +46,7 @@ class _RangeProbePlayer implements PluginPlayer {
         (bytes, chunk) => bytes..addAll(chunk),
       );
       _playing = result.statusCode == HttpStatus.partialContent;
+      _initialized = _playing;
       return _playing;
     } finally {
       client.close(force: true);
@@ -56,7 +58,15 @@ class _RangeProbePlayer implements PluginPlayer {
   @override
   bool get isPlaying => _playing;
   @override
-  bool get isPaused => !_playing;
+  bool get isPaused => _initialized && !_playing;
+  @override
+  bool get canSeek => _initialized;
+  @override
+  Map<String, Object?> get status => <String, Object?>{
+        'state': _playing ? 'playing' : (_initialized ? 'paused' : 'idle'),
+        'can_seek': canSeek,
+        ...times,
+      };
   @override
   Map<String, Object?> get times =>
       const <String, Object?>{'position': 2.0, 'duration': 12.0};
@@ -185,6 +195,10 @@ void main() {
     final localUrl = source['url'] as String;
     expect(localUrl, startsWith('http://127.0.0.1:'));
     expect(localUrl, isNot(originUrl));
+
+    expect(await addon.invoke('player.seek', <String, Object?>{
+      'seconds': 7.0,
+    }), false);
 
     final started = await addon.invoke('player.play', <String, Object?>{
       'item': localUrl,
