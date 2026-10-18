@@ -27,6 +27,14 @@ class _FakePlayer implements PluginPlayer {
   @override
   bool get isPaused => started;
   @override
+  bool get canSeek => started;
+  @override
+  Map<String, Object?> get status => <String, Object?>{
+        'state': started ? 'paused' : 'idle',
+        'can_seek': canSeek,
+        ...times,
+      };
+  @override
   Map<String, Object?> get times => const <String, Object?>{};
   @override
   List<String> get subtitles => const <String>[];
