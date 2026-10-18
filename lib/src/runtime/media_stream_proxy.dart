@@ -157,6 +157,8 @@ class MediaStreamProxy {
       final request = await _client.openUrl(incoming.method, url)
           .timeout(const Duration(seconds: 15));
       request.followRedirects = false;
+      // Keep byte positions stable; the proxy forwards upstream encoding as-is.
+      request.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
       // Never leak plugin credentials across redirect origins.
       if (url.origin == origin) {
         for (final entry in source.headers.entries) {
