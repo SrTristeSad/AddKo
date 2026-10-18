@@ -471,6 +471,10 @@ local function build_host(config)
         return host_request('net.udp.open', options or {})
     end
 
+    function addko.net.udp.info(handle)
+        return host_request('net.udp.info', {handle = handle})
+    end
+
     function addko.net.udp.send(handle, host, port, data, options)
         options = options or {}
         return host_request('net.udp.send', {
