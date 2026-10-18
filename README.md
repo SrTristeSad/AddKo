@@ -18,7 +18,7 @@ The old Kodi/Python architecture is no longer part of `main`. It is preserved in
 
 The runtime is now connected to a real persistent mini-app lifecycle and the first generic host APIs.
 
-Implemented in `main` (with outbound TCP/TLS available in the network-core integration branch):
+Implemented in `main`:
 
 1. fetch and SHA-256 verify the official Lua 5.5.1 source;
 2. compile Lua into `libaddko_lua.so` for Android ARM64;
