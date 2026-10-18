@@ -37,13 +37,14 @@ class _AddKoSeekSliderState extends State<AddKoSeekSlider> {
     final maxValue = durationMs > 0 ? durationMs.toDouble() : 1.0;
     final current = widget.position.inMilliseconds
         .toDouble()
-        .clamp(0.0, maxValue);
+        .clamp(0.0, maxValue)
+        .toDouble();
     return Slider(
       min: 0,
       max: maxValue,
       value: durationMs <= 0
-          ? 0
-          : (_dragPositionMs ?? current).clamp(0.0, maxValue),
+          ? 0.0
+          : (_dragPositionMs ?? current).clamp(0.0, maxValue).toDouble(),
       onChanged: durationMs <= 0
           ? null
           : (value) => setState(() => _dragPositionMs = value),
