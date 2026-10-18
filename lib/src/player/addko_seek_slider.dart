@@ -21,6 +21,7 @@ class AddKoSeekSlider extends StatefulWidget {
 
 class _AddKoSeekSliderState extends State<AddKoSeekSlider> {
   double? _dragPositionMs;
+  bool _cancelDrag = false;
 
   @override
   void didUpdateWidget(covariant AddKoSeekSlider oldWidget) {
@@ -28,6 +29,7 @@ class _AddKoSeekSliderState extends State<AddKoSeekSlider> {
     // A new video invalidates any preview position from the old one.
     if (widget.duration != oldWidget.duration) {
       _dragPositionMs = null;
+      _cancelDrag = true;
     }
   }
 
@@ -45,12 +47,23 @@ class _AddKoSeekSliderState extends State<AddKoSeekSlider> {
       value: durationMs <= 0
           ? 0.0
           : (_dragPositionMs ?? current).clamp(0.0, maxValue).toDouble(),
+      onChangeStart: durationMs <= 0
+          ? null
+          : (value) {
+              _cancelDrag = false;
+              setState(() => _dragPositionMs = value);
+            },
       onChanged: durationMs <= 0
           ? null
           : (value) => setState(() => _dragPositionMs = value),
       onChangeEnd: durationMs <= 0
           ? null
           : (value) async {
+              if (_cancelDrag) {
+                _cancelDrag = false;
+                setState(() => _dragPositionMs = null);
+                return;
+              }
               try {
                 await widget.onSeek(
                   Duration(milliseconds: value.round()),
