@@ -17,27 +17,33 @@ if not errorlevel 1 (
     set "PY=python"
 )
 
-echo [1/3] Criando os dois pacotes .addko...
+echo [1/4] Testando servidor HTTP e suporte a Range...
+%PY% tools\test_stream_smoke_server.py
+if errorlevel 1 goto :failed
+
+echo.
+echo [2/4] Criando os dois pacotes .addko...
 %PY% tools\build_stream_smoke_examples.py
 if errorlevel 1 goto :failed
 
 echo.
-echo [2/3] Preparando ADB USB reverse...
+echo [3/4] Preparando ADB USB reverse...
 where adb >nul 2>nul
 if errorlevel 1 goto :missing_adb
 
 adb devices
 adb reverse tcp:8765 tcp:8765
 if errorlevel 1 goto :failed
+adb reverse --list
 
 echo.
-echo [3/3] Iniciando servidor local...
+echo [4/4] Iniciando servidor local...
 echo.
 echo Instale no AddKo do celular:
 echo    dist\MediaSource-1.0.0.addko
 echo    dist\MediaBridge-1.0.0.addko
 echo.
-echo Entre no Media Bridge e toque Reproduzir.
+echo Entre no Media Bridge, toque Reproduzir e use Diagnosticar conexao.
 echo Durante o teste, nao feche esta janela.
 echo Use CTRL+C para encerrar o servidor.
 echo.
