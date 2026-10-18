@@ -475,7 +475,7 @@ class _WebSocketClient {
   }
 }
 
-int _int(Object? value, {required int min, required int max}) {
+int _int(Object? value, {required int min, int max = 2147483647}) {
   if (value is! int || value < min || value > max) {
     throw NetworkSocketException('Número fora do intervalo: ' + value.toString());
   }
