@@ -21,6 +21,12 @@ function Service.service(method, args)
         })
         active_id = source.id
         return source
+    elseif method == "stats" then
+        local id = args.id or active_id
+        if id == nil then return {ready = false} end
+        local result = addko.stream.stats(id)
+        result.ready = true
+        return result
     elseif method == "close" then
         local id = args.id or active_id
         if id == nil then return false end

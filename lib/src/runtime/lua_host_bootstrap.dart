@@ -421,6 +421,10 @@ local function build_host(config)
         return host_request('stream.revoke', { id = id })
     end
 
+    function addko.stream.stats(id)
+        return host_request('stream.stats', { id = id })
+    end
+
     function addko.process.spawn(options)
         return host_request('process.spawn', options)
     end

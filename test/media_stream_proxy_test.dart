@@ -118,15 +118,38 @@ void main() {
     expect(seenRanges, contains('bytes=4-9'));
     expect(seenAuthorization, contains('Bearer secret'));
 
+    final streamedStats = await host.invoke(
+      'stream.stats', <String, Object?>{'id': registered['id']},
+    ) as Map;
+    expect(streamedStats['requests'], 1);
+    expect(streamedStats['range_requests'], 1);
+    expect(streamedStats['head_requests'], 0);
+    expect(streamedStats['bytes_forwarded'], 6);
+    expect(streamedStats['last_http_status'], HttpStatus.partialContent);
+    expect(streamedStats.toString(), isNot(contains('secret')));
+    expect(streamedStats.toString(), isNot(contains(url)));
+
     final head = await read(url, method: 'HEAD');
     expect(head.$1, HttpStatus.ok);
     expect(head.$2['content-length'], '26');
     expect(head.$3, isEmpty);
 
+    final finalStats = await host.invoke(
+      'stream.stats', <String, Object?>{'id': registered['id']},
+    ) as Map;
+    expect(finalStats['requests'], 2);
+    expect(finalStats['head_requests'], 1);
+    expect(finalStats['range_requests'], 1);
+    expect(finalStats['bytes_forwarded'], 6);
+
     final revoked = await host.invoke(
       'stream.revoke', <String, Object?>{'id': registered['id']},
     );
     expect(revoked, true);
+    await expectLater(
+      host.invoke('stream.stats', <String, Object?>{'id': registered['id']}),
+      throwsA(isA<MediaStreamException>()),
+    );
     expect((await read(url)).$1, HttpStatus.notFound);
     expect((await read(url.replaceFirst('/media/', '/unknown/'))).$1,
         HttpStatus.notFound);
@@ -188,6 +211,10 @@ void main() {
     );
     addTearDown(host.close);
     expect(host.capabilities['media_stream_proxy'], false);
+    await expectLater(
+      host.invoke('stream.stats', <String, Object?>{'id': 'no-access'}),
+      throwsA(isA<PluginHostException>()),
+    );
     await expectLater(
       host.invoke('stream.register', <String, Object?>{
         'url': upstreamUrl + '/video',

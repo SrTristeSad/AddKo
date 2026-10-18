@@ -23,6 +23,27 @@ A Lua service does **not** need `media` permission merely to register a source;
 and a consumer addon does **not** need `network` just to play the returned local
 URL. The declared dependency controls which addon can request the service.
 
+## Read-only stream diagnostics
+
+After registering a source, its owning Lua plugin may call
+`addko.stream.stats(source.id)`. This requires the same `network`
+permission as registration. It returns only transport counters:
+
+- `requests`, `head_requests`, `range_requests`, `upstream_requests`
+- `bytes_forwarded`, `active_requests`, `failed_requests`
+- `last_http_status` (number or nil), `last_error` (error class or nil)
+
+No authorization header, source URL or bearer token appears in the result.
+Metrics are scoped to one source and disappear when it is revoked.
+Service plugins may offer them to declared dependent addons through their
+`service()` interface.
+
+**Interpreting the results:** no requests suggests the player could not
+connect to the local URL; upstream status 404/500 suggests source issues;
+HTTP 200/206 plus bytes but no rendered picture suggests investigating
+the Android media decoder and video codec. A 206 with `range_requests`
+greater than zero confirms the byte-range path was exercised.
+
 ## Source capabilities
 
 - HTTP/HTTPS input (including a local HTTP endpoint provided by a native helper).

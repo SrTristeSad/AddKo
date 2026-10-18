@@ -102,6 +102,9 @@ local source = addko.stream.register({
 })
 -- Return source.url to a declared dependent addon.
 -- That addon may call addko.player.play(source.url), with media permission.
+local info = addko.stream.stats(source.id)
+-- info.requests, info.range_requests, info.bytes_forwarded,
+-- info.last_http_status and info.failed_requests
 addko.stream.revoke(source.id)
 ```
 
