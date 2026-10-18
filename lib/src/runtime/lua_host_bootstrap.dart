@@ -349,7 +349,7 @@ local function build_host(config)
         fs = {},
         http = {},
         process = {},
-        net = { tcp = {} },
+        net = { tcp = {}, udp = {}, websocket = {}, dns = {} },
         ui = {},
         player = {},
     }
@@ -458,6 +458,55 @@ local function build_host(config)
 
     function addko.net.tcp.close(handle)
         return host_request('net.tcp.close', { handle = handle })
+    end
+
+    function addko.net.dns.lookup(host, options)
+        options = options or {}
+        return host_request('net.dns.lookup', {
+            host = host, family = options.family, timeout_ms = options.timeout_ms,
+        })
+    end
+
+    function addko.net.udp.open(options)
+        return host_request('net.udp.open', options or {})
+    end
+
+    function addko.net.udp.send(handle, host, port, data, options)
+        options = options or {}
+        return host_request('net.udp.send', {
+            handle = handle, host = host, port = port,
+            data = data, timeout_ms = options.timeout_ms,
+        })
+    end
+
+    function addko.net.udp.receive(handle, options)
+        options = options or {}
+        return host_request('net.udp.receive', {
+            handle = handle, timeout_ms = options.timeout_ms,
+        })
+    end
+
+    function addko.net.udp.close(handle)
+        return host_request('net.udp.close', { handle = handle })
+    end
+
+    function addko.net.websocket.connect(options)
+        return host_request('net.websocket.connect', options or {})
+    end
+
+    function addko.net.websocket.send(handle, data)
+        return host_request('net.websocket.send', { handle = handle, data = data })
+    end
+
+    function addko.net.websocket.receive(handle, options)
+        options = options or {}
+        return host_request('net.websocket.receive', {
+            handle = handle, timeout_ms = options.timeout_ms,
+        })
+    end
+
+    function addko.net.websocket.close(handle)
+        return host_request('net.websocket.close', { handle = handle })
     end
 
     function addko.ui.refresh()
