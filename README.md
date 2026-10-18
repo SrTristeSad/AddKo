@@ -50,7 +50,7 @@ A plugin can use capabilities such as:
 
 ```text
 addko.http
-addko.stream        # HTTP media source handoff to native player
+addko.stream        # HTTP media handoff + per-source diagnostics
 addko.fs
 addko.net.tcp       # outbound TCP/TLS + loopback server
 addko.net.udp       # datagram transport
