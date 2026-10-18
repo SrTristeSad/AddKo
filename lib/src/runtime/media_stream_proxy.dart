@@ -61,6 +61,31 @@ class MediaStreamProxy {
     };
   }
 
+
+  /// Lightweight diagnostics for a registered source. No bearer token,
+  /// authorization header or upstream URL is ever returned.
+  Map<String, Object?> stats(Object? rawId) {
+    if (_closed) throw const MediaStreamException('Ponte encerrada.');
+    if (rawId is! String || rawId.isEmpty) {
+      throw const MediaStreamException('ID de fonte inválido.');
+    }
+    final source = _sources[rawId];
+    if (source == null) {
+      throw const MediaStreamException('Fonte de mídia desconhecida.');
+    }
+    return <String, Object?>{
+      'requests': source.requests,
+      'head_requests': source.headRequests,
+      'range_requests': source.rangeRequests,
+      'upstream_requests': source.upstreamRequests,
+      'bytes_forwarded': source.bytesForwarded,
+      'active_requests': source.activeRequests,
+      'failed_requests': source.failedRequests,
+      'last_http_status': source.lastHttpStatus,
+      'last_error': source.lastError,
+    };
+  }
+
   bool revoke(Object? rawId) {
     if (_closed) return false;
     if (rawId is! String) {
@@ -123,10 +148,20 @@ class MediaStreamProxy {
         return;
       }
       final source = _sources[path.last]!;
+      source.requests++;
+      if (incoming.method == 'HEAD') source.headRequests++;
+      if (range != null) source.rangeRequests++;
+      source.activeRequests++;
       _active++;
       try {
         await _pipe(source, incoming, outgoing);
+      } catch (error) {
+        source.failedRequests++;
+        // Avoid logging credentials, tokens or full user-provided URLs.
+        source.lastError = error.runtimeType.toString();
+        rethrow;
       } finally {
+        source.activeRequests--;
         _active--;
       }
     } on Object {
@@ -176,6 +211,8 @@ class MediaStreamProxy {
       }
       final upstream = await request.close()
           .timeout(const Duration(seconds: 15));
+      source.upstreamRequests++;
+      source.lastHttpStatus = upstream.statusCode;
       if (upstream.isRedirect) {
         final location = upstream.headers.value(HttpHeaders.locationHeader);
         await upstream.listen((_) {}).cancel();
@@ -203,7 +240,10 @@ class MediaStreamProxy {
       try {
         // addStream preserves backpressure and never buffers a whole video.
         await outgoing.addStream(
-          upstream.timeout(const Duration(seconds: 60)),
+          upstream.timeout(const Duration(seconds: 60)).map((chunk) {
+            source.bytesForwarded += chunk.length;
+            return chunk;
+          }),
         );
       } finally {
         try {
@@ -280,9 +320,20 @@ class MediaStreamProxy {
 }
 
 class _MediaSource {
-  const _MediaSource(this.uri, this.headers);
+  _MediaSource(this.uri, this.headers);
+
   final Uri uri;
   final Map<String, String> headers;
+
+  int requests = 0;
+  int headRequests = 0;
+  int rangeRequests = 0;
+  int upstreamRequests = 0;
+  int bytesForwarded = 0;
+  int activeRequests = 0;
+  int failedRequests = 0;
+  int? lastHttpStatus;
+  String? lastError;
 }
 
 class MediaStreamException implements Exception {
