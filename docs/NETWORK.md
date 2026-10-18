@@ -17,6 +17,7 @@ in Lua plugins, not in the Flutter/Dart core.
 ## Datagram transport (UDP)
 
 - Open: `local h = addko.net.udp.open({family="ipv4", bind="any", port=0})`.
+- Query the local port: `addko.net.udp.info(h)` returns `{host, port}`.
 - Send: `addko.net.udp.send(h, "127.0.0.1", 9000, {1, 2, 3})`.
 - Receive: `addko.net.udp.receive(h, {timeout_ms=5000})` returns
   `{bytes, host, port, timed_out, closed}`.
