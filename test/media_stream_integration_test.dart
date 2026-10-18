@@ -31,7 +31,9 @@ class _RangeProbePlayer implements PluginPlayer {
       final target = Uri.parse(item);
       final head = await (await client.openUrl('HEAD', target)).close();
       headStatus = head.statusCode;
-      await head.drain<void>();
+      await head.fold<List<int>>(
+        <int>[], (bytes, chunk) => bytes..addAll(chunk),
+      );
 
       final request = await client.getUrl(target);
       request.headers.set(HttpHeaders.rangeHeader, 'bytes=2-5');
@@ -220,7 +222,9 @@ void main() {
       final request = await client.getUrl(Uri.parse(localUrl));
       final response = await request.close();
       expect(response.statusCode, HttpStatus.notFound);
-      await response.drain<void>();
+      await response.fold<List<int>>(
+        <int>[], (bytes, chunk) => bytes..addAll(chunk),
+      );
     } finally {
       client.close(force: true);
     }
