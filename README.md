@@ -32,7 +32,8 @@ Implemented in `main`:
 10. permission-gated HTTP/HTTPS;
 11. sandboxed per-plugin filesystem;
 12. loopback-only TCP server for background plugins;
-13. generic Flutter dialogs (`alert`, `confirm`, `input`, `select`);
+13. reusable outbound TCP/TLS client sockets for Lua plugins (bounded read/write);
+19. generic Flutter dialogs (`alert`, `confirm`, `input`, `select`);
 14. generic video player API and player surface;
 15. safe Android external-URI launcher through `system.open_uri`;
 16. plugin background sessions;
@@ -48,7 +49,7 @@ A plugin can use capabilities such as:
 ```text
 addko.http
 addko.fs
-addko.net.tcp
+addko.net.tcp       # outbound TCP/TLS + loopback server
 addko.ui
 addko.player
 addko.system
