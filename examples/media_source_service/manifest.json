@@ -1,0 +1,8 @@
+{
+  "id": "io.addko.example.media-source",
+  "name": "HTTP Media Source",
+  "version": "1.0.0",
+  "type": "service",
+  "entry": "main.lua",
+  "permissions": ["network"]
+}
