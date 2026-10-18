@@ -105,7 +105,8 @@ void main() {
 
     await gesture.up();
     await tester.pumpAndSettle();
-    // Releasing an old gesture may end it, but the preview cannot persist.
+    // The seek from the old video must not be applied to the new video.
+    expect(seeks, isEmpty);
     expect(tester.widget<Slider>(find.byType(Slider)).value, 0);
   });
 }
