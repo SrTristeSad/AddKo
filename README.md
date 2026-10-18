@@ -142,4 +142,4 @@ SHA-256:
 
 The source is downloaded during setup instead of being copied into this repository.
 
-See `docs/ARCHITECTURE.md`, `docs/PLUGIN_SPEC.md`, `docs/NETWORK.md`, `docs/STREAMING.md` and `docs/ROADMAP.md`.
+See `docs/ARCHITECTURE.md`, `docs/PLUGIN_SPEC.md`, `docs/NETWORK.md`, `docs/STREAMING.md`, `docs/ANDROID_STREAM_SMOKE.md` and `docs/ROADMAP.md`.
