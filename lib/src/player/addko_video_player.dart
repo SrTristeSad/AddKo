@@ -174,7 +174,15 @@ class AddKoVideoPlayer extends ChangeNotifier implements PluginPlayer {
   }
 
   void _onControllerChanged() {
-    if (!_closed) notifyListeners();
+    if (_closed) return;
+    // Decoder/network errors can also arrive *after* initialize().
+    // Never render errorDescription: it can include private media URLs.
+    if (_controller?.value.hasError == true && _errorMessage == null) {
+      _errorType = 'VideoPlayerError';
+      _errorMessage =
+          'Falha durante a reprodução. Verifique a conexão e o codec.';
+    }
+    notifyListeners();
   }
 
   Future<void> _disposeController() async {
@@ -229,7 +237,9 @@ class AddKoVideoSurface extends StatelessWidget {
       animation: player,
       builder: (context, _) {
         final controller = player.controller;
-        if (controller == null || !controller.value.isInitialized) {
+        if (controller == null ||
+            !controller.value.isInitialized ||
+            controller.value.hasError) {
           final error = player.errorMessage;
           return Card(
             clipBehavior: Clip.antiAlias,
