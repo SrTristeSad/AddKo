@@ -31,6 +31,21 @@ player. It does not depend on Elementum, torrent peers, or public sample sites.
 7. Open Media Bridge, then use the prefilled
    `http://127.0.0.1:8765/test.mp4` and tap **Reproduzir**.
 
+## Integrated host test
+
+With Flutter installed on the Windows machine, the batch script runs:
+
+`flutter test test/media_stream_integration_test.dart test/media_stream_proxy_test.dart test/media_plugin_host_test.dart`
+
+The first test uses real AddKo hosts and real local HTTP connections, but a
+**fake video decoder**. It verifies service registration, declared plugin
+dependencies, HTTP GET/HEAD and Range, transport statistics, permission
+boundaries, player UI invocation, seeking, and revocation.
+
+If Flutter is missing, the script prints that the Dart tests were skipped;
+it does not treat a skipped test as a pass. The Python HTTP tests are
+separate and run without Flutter.
+
 ## Acceptance criteria
 
 1. The player surface opens, initializes and displays the moving H.264
