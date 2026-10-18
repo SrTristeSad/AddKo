@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:addko/src/platform/system_external_launcher.dart';
 import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/runtime/plugin_host.dart';
+import 'package:addko/src/runtime/network_socket_services.dart';
 import 'package:path/path.dart' as p;
 
 typedef ExternalUriOpener = Future<bool> Function(Uri uri);
@@ -45,6 +46,7 @@ class BasicPluginHost extends PluginHost {
   final PluginUiHandler? uiHandler;
 
   final HttpClient _http = HttpClient();
+  final NetworkSocketServices _networkSockets = NetworkSocketServices();
   final Map<int, ServerSocket> _servers = <int, ServerSocket>{};
   final Map<int, _TcpClientConnection> _tcpClients = <int, _TcpClientConnection>{};
   final Set<Socket> _sockets = <Socket>{};
@@ -66,6 +68,9 @@ class BasicPluginHost extends PluginHost {
         'tcp_server': _network && _background,
         'tcp_client': _network,
         'tcp_tls_client': _network,
+        'dns_lookup': _network,
+        'udp': _network,
+        'websocket': _network,
         'process': false,
         'player': false,
         'ui': uiHandler != null,
@@ -143,6 +148,25 @@ class BasicPluginHost extends PluginHost {
         throw const PluginHostException(
           'Arquivos executáveis graváveis não são suportados pelo host Android.',
         );
+      case 'net.dns.lookup':
+      case 'net.udp.open':
+      case 'net.udp.info':
+      case 'net.udp.send':
+      case 'net.udp.receive':
+      case 'net.udp.close':
+      case 'net.websocket.connect':
+      case 'net.websocket.send':
+      case 'net.websocket.receive':
+      case 'net.websocket.close':
+        _require(_network, 'network');
+        // Binding a public UDP listener to a fixed port is a background
+        // capability; outbound ephemeral UDP works with network alone.
+        if (operation == 'net.udp.open' &&
+            (args['port'] ?? 0) != 0 &&
+            args['bind'] != 'loopback') {
+          _require(_background, 'background');
+        }
+        return _networkSockets.invoke(operation, args);
       case 'net.tcp.listen':
         _require(_network && _background, 'network + background');
         return _listen(args);
@@ -619,6 +643,8 @@ class BasicPluginHost extends PluginHost {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+
+    await _networkSockets.close();
 
     for (final client in _tcpClients.values.toList()) {
       await client.close();
