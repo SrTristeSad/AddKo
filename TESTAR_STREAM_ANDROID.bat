@@ -17,7 +17,7 @@ if not errorlevel 1 (
     set "PY=python"
 )
 
-echo [1/5] Verificando testes de integracao Dart...
+echo [1/6] Verificando testes de integracao Dart...
 where flutter >nul 2>nul
 if not errorlevel 1 (
     flutter test test\media_stream_integration_test.dart test\media_stream_proxy_test.dart test\media_plugin_host_test.dart
@@ -27,17 +27,26 @@ if not errorlevel 1 (
 )
 
 echo.
-echo [2/5] Testando servidor HTTP e suporte a Range...
+echo [2/6] Testando servidor HTTP e suporte a Range...
 %PY% tools\test_stream_smoke_server.py
 if errorlevel 1 goto :failed
 
 echo.
-echo [3/5] Criando os dois pacotes .addko...
+echo [3/6] Criando os dois pacotes .addko...
 %PY% tools\build_stream_smoke_examples.py
 if errorlevel 1 goto :failed
 
 echo.
-echo [4/5] Preparando ADB USB reverse...
+echo [4/6] Validando arquivo MP4 real via HTTP e SHA-256...
+if "%~1"=="" (
+    %PY% tools\verify_stream_smoke.py
+) else (
+    %PY% tools\verify_stream_smoke.py "%~1"
+)
+if errorlevel 1 goto :failed
+
+echo.
+echo [5/6] Preparando ADB USB reverse...
 where adb >nul 2>nul
 if errorlevel 1 goto :missing_adb
 
@@ -47,7 +56,7 @@ if errorlevel 1 goto :failed
 adb reverse --list
 
 echo.
-echo [5/5] Iniciando servidor local...
+echo [6/6] Iniciando servidor local...
 echo.
 echo Instale no AddKo do celular:
 echo    dist\MediaSource-1.0.0.addko
