@@ -1,0 +1,9 @@
+{
+  "id": "io.addko.example.media-player",
+  "name": "HTTP Media Player",
+  "version": "1.0.0",
+  "type": "app",
+  "entry": "main.lua",
+  "permissions": ["media"],
+  "dependencies": ["io.addko.example.media-source"]
+}
