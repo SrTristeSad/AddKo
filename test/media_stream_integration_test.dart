@@ -200,6 +200,9 @@ void main() {
     expect(await addon.invoke('player.is_playing', null), true);
     expect(await addon.invoke('player.times', null),
         containsPair('duration', 12.0));
+    final state = await addon.invoke('player.status', null) as Map;
+    expect(state['state'], 'playing');
+    expect(state['can_seek'], true);
     expect(await addon.invoke('player.seek',
         <String, Object?>{'seconds': 7.0}), true);
     expect(events, contains('player.seek:7.0'));
