@@ -46,6 +46,31 @@ If Flutter is missing, the script prints that the Dart tests were skipped;
 it does not treat a skipped test as a pass. The Python HTTP tests are
 separate and run without Flutter.
 
+## Verified local video preflight
+
+Before configuring ADB, the Windows batch script invokes
+`python tools/verify_stream_smoke.py` (or passes a user-supplied MP4
+path). This was exercised using an actual 18-second FFmpeg-generated
+H.264 test video. The preflight checks:
+
+- Actual MP4 is present, nonempty, and probeable by ffprobe if installed.
+- HTTP HEAD and full GET return status 200 and correct byte lengths.
+- Full-file SHA-256 matches what the test server transferred. Both
+  hashes are calculated in 64 KiB chunks, keeping memory bounded.
+- Prefix and suffix byte-range requests each return 206,
+  correct Content-Range, and byte-exact results.
+- Range outside the end of the file returns 416 with Content-Range.
+
+Run this without Android or Flutter:
+
+`python tools/verify_stream_smoke.py`
+
+To test a personal MP4:
+`python tools/verify_stream_smoke.py "C:\Videos\teste.mp4"`
+
+For native Android, the batch still requires an ADB-connected device.
+Passing local preflight does **not** prove the Android decoder works.
+
 ## Acceptance criteria
 
 1. The player surface opens, initializes and displays the moving H.264

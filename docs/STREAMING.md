@@ -89,6 +89,16 @@ diagnostic counters → revocation. It uses a fake video decoder that
 performs actual HTTP requests so the test does not depend on a phone.
 The remaining on-device acceptance test must still prove decoding.
 
+## Host-independent real MP4 transport check
+
+`python tools/verify_stream_smoke.py` starts the project's actual Python
+HTTP Range server on loopback and streams a generated H.264 MP4 through
+full GET and partial requests. It checks SHA-256 integrity without
+buffering the entire file in memory, prefix/suffix byte ranges and 416.
+It also accepts an existing MP4 path for the Windows smoke workflow.
+This validates the desktop test origin, not the Flutter/Dart proxy or
+Android decoding.
+
 ## Android playback smoke test
 
 Run `TESTAR_STREAM_ANDROID.bat` from the repository root on Windows.
