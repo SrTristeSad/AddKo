@@ -19,13 +19,16 @@ class _FakeElementumHost extends PluginHost {
   int? callbackId;
   String? played;
   bool closed = false;
+  int _nextStream = 0;
+  final Map<String, String> sourceUrls = <String, String>{};
+  final List<String> revokedStreams = <String>[];
   final List<String> calls = <String>[];
 
   @override
   Map<String, bool> get capabilities => <String, bool>{
     'http': true, 'tcp_server': true, 'player': true,
     'filesystem': true, 'sleep': true, 'ui': true, 'process': false,
-    'native_engines': false,
+    'native_engines': false, 'media_stream_proxy': true,
   };
 
   @override
@@ -65,6 +68,31 @@ class _FakeElementumHost extends PluginHost {
         }
         return <String, Object?>{'status': 200, 'body': '',
           'headers': <String, String>{}, 'url': url.toString()};
+      case 'stream.register':
+        final upstream = args['url'] as String;
+        expect(upstream, 'http://127.0.0.1:65220/files/legal-test.mp4');
+        final id = 'token-' + (++_nextStream).toString();
+        sourceUrls[id] = upstream;
+        return <String, Object?>{
+          'id': id,
+          'url': 'http://127.0.0.1:54321/media/' + id,
+        };
+      case 'stream.revoke':
+        final id = args['id'] as String;
+        sourceUrls.remove(id);
+        revokedStreams.add(id);
+        return true;
+      case 'stream.stats':
+        final id = args['id'] as String;
+        expect(sourceUrls.containsKey(id), true);
+        return <String, Object?>{
+          'requests': 3,
+          'head_requests': 1,
+          'range_requests': 2,
+          'bytes_forwarded': 8192,
+          'last_http_status': 206,
+          'failed_requests': 0,
+        };
       case 'player.play':
         played = args['item'] as String?;
         return true;
@@ -204,14 +232,26 @@ void main() {
       const magnet = 'magnet:?xt=urn:btih:0123456789abcdef';
       final stream = await session.call('service',
           <Object?>['stream', <String, Object?>{'uri': magnet}]);
-      expect(stream, 'http://127.0.0.1:65220/files/legal-test.mp4');
+      expect(stream, 'http://127.0.0.1:54321/media/token-1');
+      expect(fake.sourceUrls['token-1'],
+          'http://127.0.0.1:65220/files/legal-test.mp4');
 
       final played = await session.call('service',
           <Object?>['play', <String, Object?>{'uri': magnet}]);
       expect((played as Map)['started'], true);
-      expect(fake.played, stream);
+      expect(played['url'], 'http://127.0.0.1:54321/media/token-2');
+      expect(fake.played, played['url']);
+      expect(fake.revokedStreams, <String>['token-1']);
+
+      final stats = await session.call('service',
+          <Object?>['stream_stats', <String, Object?>{}]);
+      expect(stats, isA<Map>());
+      expect((stats as Map)['ready'], true);
+      expect(stats['range_requests'], 2);
+      expect(stats['bytes_forwarded'], 8192);
 
       final stopped = await session.stop();
+      expect(fake.revokedStreams, <String>['token-1', 'token-2']);
       expect((stopped as Map)['stopped'], true);
       expect(fake.stops, 1);
       expect(fake.calls, contains('net.tcp.close'));

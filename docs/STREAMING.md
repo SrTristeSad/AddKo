@@ -80,6 +80,15 @@ Package each directory below into a separate `.addko` ZIP with
 Install the service first, then the addon. Enter a legal HTTP(S) progressive
 video URL that supports byte ranges and select Reproduzir.
 
+## Service-to-player integration test
+
+`flutter test test/media_stream_integration_test.dart` exercises the
+full **host-level** chain: service plugin → declared dependency call →
+registered loopback source → player host → HTTP HEAD + byte-range GET →
+diagnostic counters → revocation. It uses a fake video decoder that
+performs actual HTTP requests so the test does not depend on a phone.
+The remaining on-device acceptance test must still prove decoding.
+
 ## Android playback smoke test
 
 Run `TESTAR_STREAM_ANDROID.bat` from the repository root on Windows.
