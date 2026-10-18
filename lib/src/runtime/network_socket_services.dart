@@ -32,6 +32,12 @@ class NetworkSocketServices {
         return _lookup(args);
       case 'net.udp.open':
         return _openUdp(args);
+      case 'net.udp.info':
+        final socket = _requireUdp(args['handle']);
+        return <String, Object?>{
+          'host': socket.socket.address.address,
+          'port': socket.socket.port,
+        };
       case 'net.udp.send':
         return _sendUdp(args);
       case 'net.udp.receive':
@@ -67,6 +73,9 @@ class NetworkSocketServices {
     }
     final port = _int(args['port'] ?? 0, min: 0, max: 65535);
     final family = _family(args['family']);
+    if (family == InternetAddressType.any) {
+      throw const NetworkSocketException('UDP requer família ipv4 ou ipv6.');
+    }
     final bind = args['bind'] ?? 'any';
     if (bind != 'any' && bind != 'loopback') {
       throw const NetworkSocketException('bind deve ser any ou loopback.');
