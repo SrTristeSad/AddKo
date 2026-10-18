@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:addko/src/plugins/plugin_manifest.dart';
@@ -86,6 +85,9 @@ void main() {
     final handle = await client.invoke('net.udp.open', <String, Object?>{
       'bind': 'loopback',
     }) as int;
+    final info = await client.invoke('net.udp.info',
+        <String, Object?>{'handle': handle}) as Map;
+    expect(info['port'], greaterThan(0));
     final sent = await client.invoke('net.udp.send', <String, Object?>{
       'handle': handle,
       'host': '127.0.0.1',
