@@ -4,6 +4,9 @@ The AddKo core provides generic transport primitives. Protocol-specific
 implementations (torrent, WebDAV, FTP, game protocols, cloud APIs) belong
 in Lua plugins, not in the Flutter/Dart core.
 
+For media sources exposed to the native player, see `STREAMING.md` for
+`addko.stream.register` and byte-range HTTP proxying.
+
 ## Available
 
 - `addko.http.request` and `addko.http.download` (HTTP/HTTPS).
