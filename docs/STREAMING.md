@@ -80,6 +80,19 @@ Package each directory below into a separate `.addko` ZIP with
 Install the service first, then the addon. Enter a legal HTTP(S) progressive
 video URL that supports byte ranges and select Reproduzir.
 
+## Native player status and seek
+
+A media-authorized Lua addon can call `addko.player.status()`, which
+returns `{state, can_seek, position, duration, error_type}`. The state
+is `idle`, `loading`, `playing`, `paused`, `error` or `closed`.
+`error_type` contains only a safe error category, never bearer URLs
+or upstream authentication tokens.
+
+`addko.player.seek(seconds)` now returns `false` before playback
+has initialized instead of silently ignoring the request while reporting
+success. Addons must inspect this boolean response, not just whether
+the Lua call threw an error.
+
 ## Service-to-player integration test
 
 `flutter test test/media_stream_integration_test.dart` exercises the
