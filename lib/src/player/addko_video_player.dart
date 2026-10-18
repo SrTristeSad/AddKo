@@ -1,4 +1,5 @@
 import 'package:addko/src/runtime/plugin_player.dart';
+import 'package:addko/src/player/addko_seek_slider.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
@@ -110,10 +111,14 @@ class AddKoVideoPlayer extends ChangeNotifier implements PluginPlayer {
       await next.play();
       return true;
     } on Object catch (error) {
-      _errorMessage = error.toString();
+      // Native player exceptions may embed the full media URL (including
+      // temporary bearer tokens). Return only a safe diagnostic category.
       _errorType = error.runtimeType.toString();
+      _errorMessage =
+          'Falha ao iniciar o vídeo ($_errorType). '
+          'Consulte o diagnóstico de conexão para verificar a origem.';
       await _disposeController();
-      rethrow;
+      throw StateError(_errorMessage);
     } finally {
       _loading = false;
       notifyListeners();
@@ -169,7 +174,15 @@ class AddKoVideoPlayer extends ChangeNotifier implements PluginPlayer {
   }
 
   void _onControllerChanged() {
-    if (!_closed) notifyListeners();
+    if (_closed) return;
+    // Decoder/network errors can also arrive *after* initialize().
+    // Never render errorDescription: it can include private media URLs.
+    if (_controller?.value.hasError == true && _errorMessage == null) {
+      _errorType = 'VideoPlayerError';
+      _errorMessage =
+          'Falha durante a reprodução. Verifique a conexão e o codec.';
+    }
+    notifyListeners();
   }
 
   Future<void> _disposeController() async {
@@ -224,7 +237,9 @@ class AddKoVideoSurface extends StatelessWidget {
       animation: player,
       builder: (context, _) {
         final controller = player.controller;
-        if (controller == null || !controller.value.isInitialized) {
+        if (controller == null ||
+            !controller.value.isInitialized ||
+            controller.value.hasError) {
           final error = player.errorMessage;
           return Card(
             clipBehavior: Clip.antiAlias,
@@ -275,11 +290,6 @@ class AddKoVideoSurface extends StatelessWidget {
           );
         }
 
-        final duration = controller.value.duration.inMilliseconds.toDouble();
-        final position = controller.value.position.inMilliseconds
-            .clamp(0, controller.value.duration.inMilliseconds)
-            .toDouble();
-
         return Card(
           clipBehavior: Clip.antiAlias,
           child: Column(
@@ -308,13 +318,11 @@ class AddKoVideoSurface extends StatelessWidget {
                       ),
                     ),
                     Expanded(
-                      child: Slider(
-                        min: 0,
-                        max: duration <= 0 ? 1 : duration,
-                        value: duration <= 0 ? 0 : position,
-                        onChanged: duration <= 0
-                            ? null
-                            : (value) => player.seek(value / 1000.0),
+                      child: AddKoSeekSlider(
+                        duration: controller.value.duration,
+                        position: controller.value.position,
+                        onSeek: (value) =>
+                            player.seek(value.inMilliseconds / 1000.0),
                       ),
                     ),
                     IconButton(

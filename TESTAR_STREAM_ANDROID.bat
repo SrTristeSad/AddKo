@@ -20,7 +20,7 @@ if not errorlevel 1 (
 echo [1/6] Verificando testes de integracao Dart...
 where flutter >nul 2>nul
 if not errorlevel 1 (
-    flutter test test\media_stream_integration_test.dart test\media_stream_proxy_test.dart test\media_plugin_host_test.dart
+    flutter test test\media_stream_integration_test.dart test\media_stream_proxy_test.dart test\media_plugin_host_test.dart test\addko_seek_slider_test.dart
     if errorlevel 1 goto :failed
 ) else (
     echo Flutter nao encontrado. Testes Dart pulados, sem validacao do player Android.
