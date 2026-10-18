@@ -80,6 +80,20 @@ Package each directory below into a separate `.addko` ZIP with
 Install the service first, then the addon. Enter a legal HTTP(S) progressive
 video URL that supports byte ranges and select Reproduzir.
 
+## Streaming-friendly timeline and safe errors
+
+The native seek slider now previews the position during a drag and issues
+**one** seek when the user releases it. This avoids a burst of overlapping
+HTTP Range requests on buffered, slow or torrent-backed streams. Unknown
+durations disable seeking. Run `flutter test test/addko_seek_slider_test.dart`
+to exercise slider drag, disabled mode and media-duration changes.
+
+Decoder initialization and later playback errors now surface a safe category,
+not the raw platform exception string. Native errors can contain a local
+bearer-token media URL, so they must not be shown or logged verbatim.
+Use `addko.player.status()` together with `addko.stream.stats(id)` to
+distinguish player, network and upstream failures.
+
 ## Native player status and seek
 
 A media-authorized Lua addon can call `addko.player.status()`, which
