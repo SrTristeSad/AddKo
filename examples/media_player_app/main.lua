@@ -1,8 +1,8 @@
 -- Example composition: service plugin + native player + visual Lua addon.
 local SOURCE_PLUGIN = "io.addko.example.media-source"
 local App = {}
-local url = ""
-local message = "Informe um arquivo de vídeo HTTP(S) com suporte a Range."
+local url = "http://127.0.0.1:8765/test.mp4"
+local message = "Teste Android: conecte o USB e execute TESTAR_STREAM_ANDROID.bat no Windows."
 
 local function page()
     return {
@@ -28,6 +28,18 @@ local function page()
                     submit_form = true,
                     variant = "primary",
                 },
+                {
+                    type = "button", label = "Consultar player",
+                    action = "player_status",
+                },
+                {
+                    type = "button", label = "Avançar 5 segundos",
+                    action = "seek_forward",
+                },
+                {
+                    type = "button", label = "Voltar 5 segundos",
+                    action = "seek_backward",
+                },
                 {type = "text", text = message},
             },
         },
@@ -51,11 +63,45 @@ function App.play(form)
         if type(source) ~= "table" or type(source.url) ~= "string" then
             error("Serviço não retornou um endereço reproduzível")
         end
-        return addko.player.play(source.url)
+        local started = addko.player.play(source.url)
+        if started ~= true then error("O player recusou a reprodução.") end
+        return true
     end)
     message = ok and "Reprodução solicitada ao player."
         or ("Falha: " .. tostring(result):sub(1, 240))
     return page()
+end
+
+function App.player_status()
+    local info = addko.player.times() or {}
+    local position = tonumber(info.position or 0) or 0
+    local duration = tonumber(info.duration or 0) or 0
+    local playing = addko.player.is_playing()
+    message = string.format(
+        "Player: %s | posição %.1fs / %.1fs",
+        playing and "reproduzindo" or "parado/pausado", position, duration
+    )
+    return page()
+end
+
+local function seek(offset)
+    local times = addko.player.times() or {}
+    local position = tonumber(times.position or 0) or 0
+    local duration = tonumber(times.duration or 0) or 0
+    local next_position = math.max(0, position + offset)
+    if duration > 0 then next_position = math.min(duration, next_position) end
+    local ok, err = pcall(addko.player.seek, next_position)
+    message = ok and string.format("Seek solicitado para %.1fs", next_position)
+        or ("Falha no seek: " .. tostring(err))
+    return page()
+end
+
+function App.seek_forward()
+    return seek(5)
+end
+
+function App.seek_backward()
+    return seek(-5)
 end
 
 return App
