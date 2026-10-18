@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -27,6 +28,8 @@ class BasicPluginHost extends PluginHost {
 
   static const int maxHttpResponseBytes = 8 * 1024 * 1024;
   static const int maxDownloadBytes = 64 * 1024 * 1024;
+  static const int maxTcpClients = 8;
+  static const int maxTcpTransferBytes = 64 * 1024;
   static const Set<String> _blockedExternalSchemes = <String>{
     'file',
     'content',
@@ -43,9 +46,10 @@ class BasicPluginHost extends PluginHost {
 
   final HttpClient _http = HttpClient();
   final Map<int, ServerSocket> _servers = <int, ServerSocket>{};
+  final Map<int, _TcpClientConnection> _tcpClients = <int, _TcpClientConnection>{};
   final Set<Socket> _sockets = <Socket>{};
   PluginEventDispatcher? _eventDispatcher;
-  int _nextServerId = 0;
+  int _nextNetworkHandle = 0;
   bool _closed = false;
 
   bool get _network => manifest.permissions.contains(PluginPermission.network);
@@ -60,6 +64,8 @@ class BasicPluginHost extends PluginHost {
         'filesystem': _storage,
         'sleep': true,
         'tcp_server': _network && _background,
+        'tcp_client': _network,
+        'tcp_tls_client': _network,
         'process': false,
         'player': false,
         'ui': uiHandler != null,
@@ -140,9 +146,26 @@ class BasicPluginHost extends PluginHost {
       case 'net.tcp.listen':
         _require(_network && _background, 'network + background');
         return _listen(args);
+      case 'net.tcp.connect':
+        _require(_network, 'network');
+        return _connectTcp(args);
+      case 'net.tcp.write':
+        _require(_network, 'network');
+        return _writeTcp(args);
+      case 'net.tcp.read':
+        _require(_network, 'network');
+        return _readTcp(args);
+      case 'net.tcp.disconnect':
+        _require(_network, 'network');
+        return _disconnectTcp(_int(args['handle'], min: 1));
       case 'net.tcp.close':
-        _require(_network && _background, 'network + background');
-        return _closeServer(_int(args['handle'], min: 1));
+        _require(_network, 'network');
+        final handle = _int(args['handle'], min: 1);
+        if (_tcpClients.containsKey(handle)) {
+          return _disconnectTcp(handle);
+        }
+        _require(_background, 'background');
+        return _closeServer(handle);
       case 'process.spawn':
       case 'process.stop':
         throw const PluginHostException(
@@ -348,6 +371,95 @@ class BasicPluginHost extends PluginHost {
     };
   }
 
+// Outbound connections are generic transport handles. Plugins implement
+  // their own protocols on top; the host never knows about torrent/SMB/etc.
+  Future<int> _connectTcp(Map<String, Object?> args) async {
+    if (_tcpClients.length >= maxTcpClients) {
+      throw const PluginHostException('Limite de 8 conexões TCP por plugin.');
+    }
+    final rawHost = args['host'];
+    if (rawHost is! String ||
+        rawHost.isEmpty ||
+        rawHost.length > 253 ||
+        rawHost.trim() != rawHost ||
+        rawHost.contains(RegExp(r'[\s/\\]'))) {
+      throw const PluginHostException('Host TCP inválido.');
+    }
+    final port = _int(args['port'], min: 1, max: 65535);
+    final timeout = Duration(
+      milliseconds: _int(args['timeout_ms'] ?? 10000, min: 1, max: 60000),
+    );
+    final tls = args['tls'] == true;
+    final Socket socket = tls
+        ? await SecureSocket.connect(rawHost, port, timeout: timeout)
+        : await Socket.connect(rawHost, port, timeout: timeout);
+    if (_closed) {
+      socket.destroy();
+      throw const PluginHostException('Host do plugin já foi encerrado.');
+    }
+    if (_tcpClients.length >= maxTcpClients) {
+      socket.destroy();
+      throw const PluginHostException('Limite de 8 conexões TCP por plugin.');
+    }
+    final handle = ++_nextNetworkHandle;
+    _tcpClients[handle] = _TcpClientConnection(socket);
+    return handle;
+  }
+
+  Future<int> _writeTcp(Map<String, Object?> args) async {
+    final handle = _int(args['handle'], min: 1);
+    final client = _tcpClients[handle];
+    if (client == null) {
+      throw const PluginHostException('Conexão TCP desconhecida.');
+    }
+    final raw = args['data'];
+    final List<int> bytes;
+    if (raw is String) {
+      bytes = utf8.encode(raw);
+    } else if (raw is List) {
+      if (raw.length > maxTcpTransferBytes) {
+        throw const PluginHostException('Escrita TCP excede 64 KiB.');
+      }
+      bytes = raw.map((value) => _int(value, min: 0, max: 255)).toList();
+    } else {
+      throw const PluginHostException(
+        'net.tcp.write exige texto ou uma lista de bytes.',
+      );
+    }
+    if (bytes.length > maxTcpTransferBytes) {
+      throw const PluginHostException('Escrita TCP excede 64 KiB.');
+    }
+    final timeout = Duration(
+      milliseconds: _int(args['timeout_ms'] ?? 10000, min: 1, max: 60000),
+    );
+    await client.write(bytes, timeout: timeout);
+    return bytes.length;
+  }
+
+  Future<Map<String, Object?>> _readTcp(Map<String, Object?> args) async {
+    final handle = _int(args['handle'], min: 1);
+    final client = _tcpClients[handle];
+    if (client == null) {
+      throw const PluginHostException('Conexão TCP desconhecida.');
+    }
+    final maxBytes = _int(
+      args['max_bytes'] ?? 8192,
+      min: 1,
+      max: maxTcpTransferBytes,
+    );
+    final timeout = Duration(
+      milliseconds: _int(args['timeout_ms'] ?? 5000, min: 1, max: 60000),
+    );
+    return client.read(maxBytes: maxBytes, timeout: timeout);
+  }
+
+  Future<bool> _disconnectTcp(int handle) async {
+    final client = _tcpClients.remove(handle);
+    if (client == null) return false;
+    await client.close();
+    return true;
+  }
+
   Future<int> _listen(Map<String, Object?> args) async {
     final host = args['host']?.toString() ?? '127.0.0.1';
     if (host != '127.0.0.1' && host != 'localhost' && host != '::1') {
@@ -367,7 +479,7 @@ class BasicPluginHost extends PluginHost {
         ? InternetAddress.loopbackIPv6
         : InternetAddress.loopbackIPv4;
     final server = await ServerSocket.bind(address, port, shared: false);
-    final id = ++_nextServerId;
+    final id = ++_nextNetworkHandle;
     _servers[id] = server;
 
     server.listen((socket) {
@@ -508,6 +620,11 @@ class BasicPluginHost extends PluginHost {
     if (_closed) return;
     _closed = true;
 
+    for (final client in _tcpClients.values.toList()) {
+      await client.close();
+    }
+    _tcpClients.clear();
+
     for (final socket in List<Socket>.of(_sockets)) {
       await socket.close();
     }
@@ -518,6 +635,122 @@ class BasicPluginHost extends PluginHost {
     }
     _servers.clear();
     _http.close(force: true);
+  }
+}
+
+/// Bounded receive queue; keeps network callbacks out of the Lua scheduler.
+/// Reads return raw bytes, EOF and timeout flags, never silently truncate data.
+class _TcpClientConnection {
+  _TcpClientConnection(this.socket) {
+    _subscription = socket.listen(
+      (chunk) {
+        if (_buffered + chunk.length > maxBufferedBytes) {
+          _error = const PluginHostException('Buffer TCP excede 256 KiB.');
+          socket.destroy();
+          _ended = true;
+          _wake();
+          return;
+        }
+        _chunks.add(List<int>.of(chunk));
+        _buffered += chunk.length;
+        _wake();
+      },
+      onError: (Object error) {
+        _error = error;
+        _ended = true;
+        _wake();
+      },
+      onDone: () {
+        _ended = true;
+        _wake();
+      },
+      cancelOnError: true,
+    );
+  }
+
+  static const int maxBufferedBytes = 256 * 1024;
+
+  final Socket socket;
+  late final StreamSubscription<List<int>> _subscription;
+  final Queue<List<int>> _chunks = Queue<List<int>>();
+  int _buffered = 0;
+  bool _ended = false;
+  bool _reading = false;
+  Object? _error;
+  Completer<void>? _waiter;
+
+  void _wake() {
+    final waiter = _waiter;
+    if (waiter != null && !waiter.isCompleted) {
+      waiter.complete();
+    }
+  }
+
+  Future<void> write(List<int> bytes, {required Duration timeout}) async {
+    if (_ended) {
+      throw const PluginHostException('Conexão TCP encerrada.');
+    }
+    socket.add(bytes);
+    await socket.flush().timeout(timeout);
+  }
+
+  Future<Map<String, Object?>> read({
+    required int maxBytes,
+    required Duration timeout,
+  }) async {
+    if (_reading) {
+      throw const PluginHostException('Leitura TCP concorrente não permitida.');
+    }
+    _reading = true;
+    try {
+      if (_chunks.isEmpty && !_ended && _error == null) {
+        final waiter = Completer<void>();
+        _waiter = waiter;
+        try {
+          await waiter.future.timeout(timeout);
+        } on TimeoutException {
+          return <String, Object?>{
+            'bytes': <int>[],
+            'eof': false,
+            'timed_out': true,
+          };
+        } finally {
+          if (identical(_waiter, waiter)) _waiter = null;
+        }
+      }
+      if (_error != null) {
+        throw PluginHostException('Erro na conexão TCP: ' + _error.toString());
+      }
+      final output = <int>[];
+      while (_chunks.isNotEmpty && output.length < maxBytes) {
+        final chunk = _chunks.removeFirst();
+        final count = maxBytes - output.length;
+        if (chunk.length <= count) {
+          output.addAll(chunk);
+          _buffered -= chunk.length;
+        } else {
+          output.addAll(chunk.take(count));
+          _chunks.addFirst(chunk.sublist(count));
+          _buffered -= count;
+        }
+      }
+      return <String, Object?>{
+        'bytes': output,
+        'eof': _ended && _chunks.isEmpty,
+        'timed_out': false,
+      };
+    } finally {
+      _reading = false;
+    }
+  }
+
+  Future<void> close() async {
+    _ended = true;
+    _wake();
+    socket.destroy();
+    await _subscription.cancel();
+    _chunks.clear();
+    _buffered = 0;
   }
 }
 

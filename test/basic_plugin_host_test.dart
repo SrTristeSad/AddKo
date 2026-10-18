@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:addko/src/plugins/plugin_manifest.dart';
@@ -101,6 +102,111 @@ void main() {
     expect(result['status'], 302);
     expect(result['body'], '');
     expect((result['headers'] as Map)['location'], '/files/demo.mp4');
+  });
+
+test('TCP client transports bytes over loopback and frees the handle', () async {
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close());
+    server.listen((socket) {
+      socket.listen((data) => socket.add(data));
+    });
+    final host = BasicPluginHost(
+      manifest: _manifest(<PluginPermission>{PluginPermission.network}),
+      pluginDirectory: pluginDirectory,
+      dataDirectory: dataDirectory,
+    );
+    addTearDown(host.close);
+
+    expect(host.capabilities['tcp_client'], isTrue);
+    final handle = await host.invoke('net.tcp.connect', <String, Object?>{
+      'host': '127.0.0.1',
+      'port': server.port,
+    }) as int;
+    expect(await host.invoke('net.tcp.write', <String, Object?>{
+      'handle': handle,
+      'data': 'hello',
+    }), 5);
+    final reply = await host.invoke('net.tcp.read', <String, Object?>{
+      'handle': handle,
+      'max_bytes': 5,
+    }) as Map;
+    expect(utf8.decode((reply['bytes'] as List).cast<int>()), 'hello');
+    expect(reply['timed_out'], false);
+    expect(await host.invoke('net.tcp.disconnect', <String, Object?>{
+      'handle': handle,
+    }), true);
+    await expectLater(
+      host.invoke('net.tcp.read', <String, Object?>{'handle': handle}),
+      throwsA(isA<PluginHostException>()),
+    );
+  });
+
+  test('TCP client times out without treating it as EOF', () async {
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close());
+    server.listen((socket) {});
+    final host = BasicPluginHost(
+      manifest: _manifest(<PluginPermission>{PluginPermission.network}),
+      pluginDirectory: pluginDirectory,
+      dataDirectory: dataDirectory,
+    );
+    addTearDown(host.close);
+
+    final handle = await host.invoke('net.tcp.connect', <String, Object?>{
+      'host': '127.0.0.1',
+      'port': server.port,
+    }) as int;
+    final reply = await host.invoke('net.tcp.read', <String, Object?>{
+      'handle': handle,
+      'timeout_ms': 20,
+    }) as Map;
+    expect(reply['bytes'], isEmpty);
+    expect(reply['timed_out'], true);
+    expect(reply['eof'], false);
+  });
+
+  test('TCP client permission and write limits are enforced', () async {
+    final restricted = BasicPluginHost(
+      manifest: _manifest(const <PluginPermission>{}),
+      pluginDirectory: pluginDirectory,
+      dataDirectory: dataDirectory,
+    );
+    addTearDown(restricted.close);
+    expect(restricted.capabilities['tcp_client'], false);
+    await expectLater(
+      restricted.invoke('net.tcp.connect', <String, Object?>{
+        'host': '127.0.0.1', 'port': 9000,
+      }),
+      throwsA(isA<PluginHostException>()),
+    );
+
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close());
+    server.listen((socket) {});
+    final allowed = BasicPluginHost(
+      manifest: _manifest(<PluginPermission>{PluginPermission.network}),
+      pluginDirectory: pluginDirectory,
+      dataDirectory: dataDirectory,
+    );
+    addTearDown(allowed.close);
+    final handle = await allowed.invoke('net.tcp.connect', <String, Object?>{
+      'host': '127.0.0.1',
+      'port': server.port,
+    }) as int;
+    await expectLater(
+      allowed.invoke('net.tcp.write', <String, Object?>{
+        'handle': handle,
+        'data': List<int>.filled(BasicPluginHost.maxTcpTransferBytes + 1, 1),
+      }),
+      throwsA(isA<PluginHostException>()),
+    );
+    await expectLater(
+      allowed.invoke('net.tcp.read', <String, Object?>{
+        'handle': handle,
+        'max_bytes': BasicPluginHost.maxTcpTransferBytes + 1,
+      }),
+      throwsA(isA<PluginHostException>()),
+    );
   });
 
   test('network operations require network permission', () async {

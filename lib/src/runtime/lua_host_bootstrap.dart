@@ -432,6 +432,30 @@ local function build_host(config)
     end
     addko.net.tcp.listen_lines = addko.net.tcp.listen
 
+    function addko.net.tcp.connect(options)
+        return host_request('net.tcp.connect', options or {})
+    end
+
+    function addko.net.tcp.write(handle, data, options)
+        options = options or {}
+        return host_request('net.tcp.write', {
+            handle = handle, data = data, timeout_ms = options.timeout_ms,
+        })
+    end
+
+    function addko.net.tcp.read(handle, options)
+        options = options or {}
+        return host_request('net.tcp.read', {
+            handle = handle,
+            max_bytes = options.max_bytes,
+            timeout_ms = options.timeout_ms,
+        })
+    end
+
+    function addko.net.tcp.disconnect(handle)
+        return host_request('net.tcp.disconnect', { handle = handle })
+    end
+
     function addko.net.tcp.close(handle)
         return host_request('net.tcp.close', { handle = handle })
     end
