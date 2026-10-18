@@ -111,10 +111,14 @@ class AddKoVideoPlayer extends ChangeNotifier implements PluginPlayer {
       await next.play();
       return true;
     } on Object catch (error) {
-      _errorMessage = error.toString();
+      // Native player exceptions may embed the full media URL (including
+      // temporary bearer tokens). Return only a safe diagnostic category.
       _errorType = error.runtimeType.toString();
+      _errorMessage =
+          'Falha ao iniciar o vídeo ($_errorType). '
+          'Consulte o diagnóstico de conexão para verificar a origem.';
       await _disposeController();
-      rethrow;
+      throw StateError(_errorMessage);
     } finally {
       _loading = false;
       notifyListeners();
