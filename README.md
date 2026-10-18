@@ -18,7 +18,7 @@ The old Kodi/Python architecture is no longer part of `main`. It is preserved in
 
 The runtime is now connected to a real persistent mini-app lifecycle and the first generic host APIs.
 
-Implemented in `main`:
+Implemented in `main` (with outbound TCP/TLS available in the network-core integration branch):
 
 1. fetch and SHA-256 verify the official Lua 5.5.1 source;
 2. compile Lua into `libaddko_lua.so` for Android ARM64;
@@ -33,12 +33,12 @@ Implemented in `main`:
 11. sandboxed per-plugin filesystem;
 12. loopback-only TCP server for background plugins;
 13. reusable outbound TCP/TLS client sockets for Lua plugins (bounded read/write);
-19. generic Flutter dialogs (`alert`, `confirm`, `input`, `select`);
-14. generic video player API and player surface;
-15. safe Android external-URI launcher through `system.open_uri`;
-16. plugin background sessions;
-17. platform, locale, JSON, paths and timing APIs;
-18. generic desktop native-process host for Windows/Linux/macOS, restricted to the plugin/data sandbox.
+14. generic Flutter dialogs (`alert`, `confirm`, `input`, `select`);
+15. generic video player API and player surface;
+16. safe Android external-URI launcher through `system.open_uri`;
+17. plugin background sessions;
+18. platform, locale, JSON, paths and timing APIs;
+19. generic desktop native-process host for Windows/Linux/macOS, restricted to the plugin/data sandbox.
 
 The sandbox still does **not** expose `io`, `os`, `package` or `debug`. `dofile`, `loadfile` and `collectgarbage` remain unavailable.
 
@@ -136,4 +136,4 @@ SHA-256:
 
 The source is downloaded during setup instead of being copied into this repository.
 
-See `docs/ARCHITECTURE.md`, `docs/PLUGIN_SPEC.md` and `docs/ROADMAP.md`.
+See `docs/ARCHITECTURE.md`, `docs/PLUGIN_SPEC.md`, `docs/NETWORK.md` and `docs/ROADMAP.md`.
