@@ -49,6 +49,22 @@ player. It does not depend on Elementum, torrent peers, or public sample sites.
 on the device. The pure-Python HTTP tests and Dart host tests cannot prove
 that Android's player decoder renders video.
 
+## Read the diagnostic buttons
+
+Both sample addons now expose transport diagnostics without sending media
+bytes through Lua. After a playback attempt:
+
+- Media Bridge: tap **Diagnosticar conexão** to see HTTP status, request
+  count, byte-range requests, forwarded bytes, active requests and failures.
+- VideoTorrent (version 0.1.4): tap **Diagnosticar streaming** to ask the
+  Luelement service for the same network measurements. Install a Luelement
+  revision that exposes the `stream_stats` service method.
+- If the source shows no requests, verify the local URL and permissions.
+  If requests arrive with HTTP 206 and nonzero bytes but the player is
+  black or fails, investigate codecs and the Android player backend.
+- This does **not** prove BitTorrent peers, trackers, buffering and native
+  engine startup; those require the separate Luelement smoke test.
+
 ## Troubleshooting
 
 - If `adb reverse` fails: use a real device with USB debugging enabled,
