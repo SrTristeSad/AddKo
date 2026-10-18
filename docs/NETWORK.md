@@ -14,6 +14,9 @@ in Lua plugins, not in the Flutter/Dart core.
 - `addko.net.tcp.listen({host, port, on_message})` provides a line-framed loopback server for background plugins.
 - `addko.net.tcp.close(handle)` closes a TCP client or an existing server.
 
+All TCP clients require the `network` permission; server listening also needs
+`background`. The host owns every socket and closes it when the Lua session ends.
+
 ## Datagram transport (UDP)
 
 - Open: `local h = addko.net.udp.open({family="ipv4", bind="any", port=0})`.
@@ -50,9 +53,6 @@ Oversized messages or overflowing queues terminate the connection.
 `addko.net.dns.lookup("example.com", {family="ipv4"})` resolves IP
 address strings (up to 16 results). `family` may be `ipv4`, `ipv6` or
 `any`. Resolution requires the `network` permission.
-
-All TCP clients require the `network` permission; server listening also needs
-`background`. The host owns every socket and closes it when the Lua session ends.
 
 ## Sample Lua service
 
