@@ -150,6 +150,7 @@ class BasicPluginHost extends PluginHost {
         );
       case 'net.dns.lookup':
       case 'net.udp.open':
+      case 'net.udp.info':
       case 'net.udp.send':
       case 'net.udp.receive':
       case 'net.udp.close':
