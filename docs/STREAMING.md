@@ -59,6 +59,19 @@ Package each directory below into a separate `.addko` ZIP with
 Install the service first, then the addon. Enter a legal HTTP(S) progressive
 video URL that supports byte ranges and select Reproduzir.
 
+## Android playback smoke test
+
+Run `TESTAR_STREAM_ANDROID.bat` from the repository root on Windows.
+It packages both service + addon, sets up `adb reverse`, and serves a
+generated (ffmpeg) or user-supplied MP4 with HTTP Range. The visual
+Media Bridge addon has a prefilled local URL, native playback, status,
+and seek buttons. See `ANDROID_STREAM_SMOKE.md` for prerequisites,
+expected HTTP 200/206 results, and physical-device acceptance criteria.
+
+The Python byte-range server can be regression-tested locally with
+`python tools/test_stream_smoke_server.py`. These tests do not replace
+checking an actual Android codec/player.
+
 ## Limits
 
 The bridge does not decode video, create torrent peers, add SMB/NFS support,
