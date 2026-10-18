@@ -7,6 +7,7 @@ import 'package:addko/src/platform/system_external_launcher.dart';
 import 'package:addko/src/plugins/plugin_manifest.dart';
 import 'package:addko/src/runtime/plugin_host.dart';
 import 'package:addko/src/runtime/network_socket_services.dart';
+import 'package:addko/src/runtime/media_stream_proxy.dart';
 import 'package:path/path.dart' as p;
 
 typedef ExternalUriOpener = Future<bool> Function(Uri uri);
@@ -47,6 +48,7 @@ class BasicPluginHost extends PluginHost {
 
   final HttpClient _http = HttpClient();
   final NetworkSocketServices _networkSockets = NetworkSocketServices();
+  final MediaStreamProxy _mediaStreams = MediaStreamProxy();
   final Map<int, ServerSocket> _servers = <int, ServerSocket>{};
   final Map<int, _TcpClientConnection> _tcpClients = <int, _TcpClientConnection>{};
   final Set<Socket> _sockets = <Socket>{};
@@ -71,6 +73,7 @@ class BasicPluginHost extends PluginHost {
         'dns_lookup': _network,
         'udp': _network,
         'websocket': _network,
+        'media_stream_proxy': _network,
         'process': false,
         'player': false,
         'ui': uiHandler != null,
@@ -148,6 +151,12 @@ class BasicPluginHost extends PluginHost {
         throw const PluginHostException(
           'Arquivos executáveis graváveis não são suportados pelo host Android.',
         );
+      case 'stream.register':
+        _require(_network, 'network');
+        return _mediaStreams.register(args);
+      case 'stream.revoke':
+        _require(_network, 'network');
+        return _mediaStreams.revoke(args['id']);
       case 'net.dns.lookup':
       case 'net.udp.open':
       case 'net.udp.info':
@@ -644,6 +653,7 @@ class BasicPluginHost extends PluginHost {
     if (_closed) return;
     _closed = true;
 
+    await _mediaStreams.close();
     await _networkSockets.close();
 
     for (final client in _tcpClients.values.toList()) {

@@ -348,6 +348,7 @@ local function build_host(config)
         paths = {},
         fs = {},
         http = {},
+        stream = {},
         process = {},
         net = { tcp = {}, udp = {}, websocket = {}, dns = {} },
         ui = {},
@@ -410,6 +411,14 @@ local function build_host(config)
 
     function addko.http.download(request)
         return host_request('http.download', request)
+    end
+
+    function addko.stream.register(options)
+        return host_request('stream.register', options or {})
+    end
+
+    function addko.stream.revoke(id)
+        return host_request('stream.revoke', { id = id })
     end
 
     function addko.process.spawn(options)

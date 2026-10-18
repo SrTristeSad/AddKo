@@ -90,6 +90,27 @@ The broker:
 
 This is deliberately generic. The AddKo core does not know whether the target service is torrent, metadata, radio, manga, an emulator helper or something else.
 
+## Media sources and native player
+
+A service plugin with the `network` permission can publish an HTTP media
+source to the AddKo player without buffering the full file in Lua:
+
+```lua
+local source = addko.stream.register({
+    url = "https://example.org/video.mp4",
+    headers = { Authorization = "Bearer token" },
+})
+-- Return source.url to a declared dependent addon.
+-- That addon may call addko.player.play(source.url), with media permission.
+addko.stream.revoke(source.id)
+```
+
+The stream URL is an ephemeral loopback bearer token scoped to the service
+session. The Dart core forwards GET/HEAD, byte ranges and selected media
+headers, without sending video bytes over the Lua RPC bridge. A dependency
+must keep its service alive while the player uses the stream. More details
+and a runnable service + addon pair are in `docs/STREAMING.md`.
+
 ## Installation rules implemented now
 
 Before extraction AddKo rejects:
