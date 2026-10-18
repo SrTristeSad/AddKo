@@ -143,13 +143,14 @@ def main() -> int:
         Path("dist") / "addko-stream-test.mp4"
     )
     try:
-        video = (
-            source.resolve()
-            if args.video is not None and source.is_file()
-            else make_test_video(source.resolve())
-        )
-        if not video.is_file():
-            raise FileNotFoundError(str(video))
+        if args.video is not None:
+            video = source.resolve()
+            if not video.is_file() or video.stat().st_size < 1024:
+                raise FileNotFoundError(
+                    "MP4 inexistente ou vazio: " + str(video)
+                )
+        else:
+            video = make_test_video(source.resolve())
     except (RuntimeError, OSError, subprocess.CalledProcessError) as error:
         print("ERRO:", error, file=sys.stderr)
         return 1
