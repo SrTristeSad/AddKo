@@ -122,6 +122,7 @@ local function render()
         },
         button("Reproduzir", "play", { submit_form = true, variant = "primary" }),
         button("Torrents no Luelement", "list_torrents"),
+        button("Diagnosticar streaming", "stream_diagnostics"),
         text("Utilize somente torrents de vídeos que você tem direito de acessar.", "caption"),
     }
 
@@ -199,6 +200,27 @@ function Plugin.play(form)
         status_message = "Reprodução iniciada no player do AddKo."
     else
         status_message = "O Luelement não confirmou o início da reprodução."
+    end
+    return render()
+end
+
+function Plugin.stream_diagnostics()
+    local ok, stats = pcall(service, "stream_stats", {})
+    if not ok then
+        status_message = "Erro ao consultar a ponte de mídia: " .. truncate(stats, 240)
+    elseif type(stats) ~= "table" or stats.ready ~= true then
+        status_message = "Sem streaming ativo na ponte AddKo. Inicie um vídeo primeiro. Em versões antigas, o Luelement pode usar a URL direta."
+    else
+        status_message = string.format(
+            "Ponte AddKo: HTTP %s | pedidos %d | Range %d | bytes %d | ativos %d | falhas %d%s",
+            tostring(stats.last_http_status or "?"),
+            tonumber(stats.requests or 0) or 0,
+            tonumber(stats.range_requests or 0) or 0,
+            tonumber(stats.bytes_forwarded or 0) or 0,
+            tonumber(stats.active_requests or 0) or 0,
+            tonumber(stats.failed_requests or 0) or 0,
+            stats.last_error and (" | erro " .. tostring(stats.last_error)) or ""
+        )
     end
     return render()
 end
