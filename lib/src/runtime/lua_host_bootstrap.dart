@@ -594,6 +594,10 @@ local function build_host(config)
         return host_request('player.times', {})
     end
 
+    function addko.player.status()
+        return host_request('player.status', {})
+    end
+
     function addko.player.seek(seconds)
         return host_request('player.seek', { seconds = seconds })
     end

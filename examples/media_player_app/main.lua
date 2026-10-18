@@ -101,26 +101,41 @@ function App.stream_diagnostics()
 end
 
 function App.player_status()
-    local info = addko.player.times() or {}
+    local ok, info = pcall(addko.player.status)
+    if not ok or type(info) ~= "table" then
+        message = "Falha ao consultar o estado do player."
+        return page()
+    end
+    local labels = {
+        idle = "sem vídeo", loading = "carregando",
+        playing = "reproduzindo", paused = "pausado",
+        error = "erro", closed = "encerrado",
+    }
+    local state = tostring(info.state or "idle")
     local position = tonumber(info.position or 0) or 0
     local duration = tonumber(info.duration or 0) or 0
-    local playing = addko.player.is_playing()
     message = string.format(
-        "Player: %s | posição %.1fs / %.1fs",
-        playing and "reproduzindo" or "parado/pausado", position, duration
+        "Player: %s | posição %.1fs / %.1fs%s",
+        labels[state] or state, position, duration,
+        info.error_type and (" | erro: " .. tostring(info.error_type)) or ""
     )
     return page()
 end
 
 local function seek(offset)
-    local times = addko.player.times() or {}
+    local ok_status, times = pcall(addko.player.status)
+    if not ok_status or type(times) ~= "table" or times.can_seek ~= true then
+        message = "O vídeo ainda não está pronto para avançar ou voltar."
+        return page()
+    end
     local position = tonumber(times.position or 0) or 0
     local duration = tonumber(times.duration or 0) or 0
     local next_position = math.max(0, position + offset)
     if duration > 0 then next_position = math.min(duration, next_position) end
-    local ok, err = pcall(addko.player.seek, next_position)
-    message = ok and string.format("Seek solicitado para %.1fs", next_position)
-        or ("Falha no seek: " .. tostring(err))
+    local ok, changed = pcall(addko.player.seek, next_position)
+    message = ok and changed == true
+        and string.format("Seek solicitado para %.1fs", next_position)
+        or "Não foi possível alterar a posição do vídeo."
     return page()
 end
 

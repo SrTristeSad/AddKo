@@ -58,8 +58,11 @@ class MediaPluginHost extends BasicPluginHost {
         return player.isPaused;
       case 'player.times':
         return player.times;
+      case 'player.status':
+        return player.status;
       case 'player.seek':
         final seconds = _double(args['seconds']);
+        if (!player.canSeek) return false;
         await player.seek(seconds);
         return true;
       case 'player.subtitles':

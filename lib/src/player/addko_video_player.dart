@@ -8,6 +8,7 @@ class AddKoVideoPlayer extends ChangeNotifier implements PluginPlayer {
   bool _closed = false;
   bool _loading = false;
   String? _errorMessage;
+  String? _errorType;
 
   VideoPlayerController? get controller => _controller;
   bool get isLoading => _loading;
@@ -46,6 +47,33 @@ class AddKoVideoPlayer extends ChangeNotifier implements PluginPlayer {
   }
 
   @override
+  bool get canSeek =>
+      hasVideo && _controller?.value.hasError != true;
+
+  @override
+  Map<String, Object?> get status {
+    final state = _closed
+        ? 'closed'
+        : _loading
+            ? 'loading'
+            : (_errorMessage != null || _controller?.value.hasError == true)
+                ? 'error'
+                : isPlaying
+                    ? 'playing'
+                    : isPaused
+                        ? 'paused'
+                        : 'idle';
+    return <String, Object?>{
+      'state': state,
+      'can_seek': canSeek,
+      ...times,
+      // Decoder errors can contain private URLs; only return their category.
+      'error_type': _errorType ??
+          (_controller?.value.hasError == true ? 'VideoPlayerError' : null),
+    };
+  }
+
+  @override
   List<String> get subtitles => const <String>[];
 
   @override
@@ -66,6 +94,7 @@ class AddKoVideoPlayer extends ChangeNotifier implements PluginPlayer {
 
     _loading = true;
     _errorMessage = null;
+    _errorType = null;
     notifyListeners();
 
     try {
@@ -82,6 +111,7 @@ class AddKoVideoPlayer extends ChangeNotifier implements PluginPlayer {
       return true;
     } on Object catch (error) {
       _errorMessage = error.toString();
+      _errorType = error.runtimeType.toString();
       await _disposeController();
       rethrow;
     } finally {
@@ -134,6 +164,7 @@ class AddKoVideoPlayer extends ChangeNotifier implements PluginPlayer {
     await _disposeController();
     _loading = false;
     _errorMessage = null;
+    _errorType = null;
     notifyListeners();
   }
 
